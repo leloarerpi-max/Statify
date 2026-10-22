@@ -30,7 +30,11 @@
   button.sec:hover{border-color:var(--acc)}
   button.danger{background:transparent;color:var(--bad);border-color:var(--line);padding:4px 8px}
   button.star{background:transparent;border:none;color:var(--warn);padding:0 4px;font-size:16px;line-height:1}
-  #msg{margin-top:10px;min-height:20px}
+  #msg,#fmsg{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);width:max-content;max-width:min(560px,92vw);z-index:9500;margin:0!important;padding:10px 14px;border-radius:12px;background:var(--card);border:1px solid var(--line);box-shadow:0 8px 30px rgba(0,0,0,.35);font-size:14px;cursor:pointer}
+  #msg.ok,#fmsg.ok{border-color:var(--ok)}#msg.err,#fmsg.err{border-color:var(--bad,#e04030)}#msg.warn,#fmsg.warn{border-color:var(--warn)}
+  #pageFoot{margin-top:28px;padding-top:14px;border-top:1px solid var(--line)}
+  #ftInfo{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:12px;color:var(--mut);margin-bottom:12px}
+  #pageFoot .card{opacity:.92}
   .ok{color:var(--ok)}.err{color:var(--bad)}.warn{color:var(--warn)}.mut{color:var(--mut)}
   nav{display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px}
   nav button{background:transparent;color:var(--mut);border-color:var(--line);white-space:nowrap}
@@ -91,7 +95,7 @@
   #welcome .wbox{position:relative;z-index:2;background:var(--card);border:2px solid var(--warn);border-radius:16px;padding:22px;max-width:640px;width:100%;max-height:85vh;overflow:auto;box-shadow:0 0 40px rgba(255,184,77,.35);animation:pop .4s}
   #welcome .alert{padding:8px 0;border-bottom:1px solid var(--line)}
   .livecard{border-left:4px solid var(--bad,#e04030)}
-  .livecard h2{display:flex;align-items:center;gap:8px;margin:0 0 8px}
+  .livecard h2{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:0 0 8px}.livecard h2 .lhn{white-space:nowrap}.livecard h2 label{flex-basis:100%;margin-left:0!important}
   .livedot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#e04030;animation:livepulse 1.2s infinite}
   @keyframes livepulse{0%{box-shadow:0 0 0 0 rgba(224,64,48,.7)}100%{box-shadow:0 0 0 9px rgba(224,64,48,0)}}
   .liverow{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;padding:7px 4px;border-top:1px solid var(--line,#2a3550)}
@@ -100,6 +104,12 @@
   .liverow .ls{text-align:center;font-weight:800;font-size:20px;white-space:nowrap}
   .liverow .lm{display:block;font-size:12px;font-weight:600;color:#e04030}
   .liverow .lc{grid-column:1/-1;text-align:center;font-size:11px}
+  .liverow .lbar{grid-column:1/-1;position:relative;height:6px;background:var(--line);border-radius:3px;margin:8px 6px 4px}
+  .lbar b{position:absolute;left:0;top:0;bottom:0;background:rgba(240,176,16,.55);border-radius:3px}
+  .lbar u{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--mut);opacity:.5}
+  .lbar i{position:absolute;width:11px;height:11px;margin-left:-5px;border-radius:50%;border:2px solid var(--card)}
+  .lbar i.h{top:-9px}.lbar i.a{top:4px}
+  .liverow .lev{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;color:var(--mut)}
   .liverow.flash{animation:liveflash 2s ease-out 3}
   @keyframes liveflash{0%{background:rgba(240,176,16,.45)}100%{background:transparent}}
   @keyframes pop{from{transform:scale(.8);opacity:0}to{transform:none;opacity:1}}
@@ -111,7 +121,7 @@
   .fmatch td{padding:5px 6px}
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}.seg button{border:none;border-radius:0;background:transparent;color:var(--txt);font-weight:600;padding:6px 14px}.seg button.on{background:var(--acc);color:var(--onacc)}
   #msg:empty{display:none}
-  body.sport-foot .nbaonly,body.sport-foot #leaders,body.sport-foot #btnTv,body.sport-foot #btnXlsx,body.sport-foot #btnLead,body.sport-foot #btnRefresh{display:none!important}
+  body.sport-foot .nbaonly,body.sport-foot #leaders,body.sport-foot #btnTv,body.sport-foot #btnXlsx,body.sport-foot #btnLead{display:none!important}
   body.sport-foot.lead header::after{display:none}
   tr.favrow td:first-child{box-shadow:inset 3px 0 var(--warn)}
   .chip .x{background:none;border:0;padding:0 0 0 5px;color:var(--mut);cursor:pointer;font-size:11px}.chip i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
@@ -129,11 +139,11 @@
     body.print-one #view{display:none!important}
     body.print-one #modal{position:static;display:block;background:none;padding:0;overflow:visible}
     :root[data-theme]{--bg:#fff!important;--card:#fff!important;--field:#f4f4f4!important;--hover:#fff!important;--line:#ccc!important;--txt:#000!important;--mut:#555!important}
-    header,#tabs,main>section{display:none!important}
+    header,#tabs,main>section,#pageFoot{display:none!important}
     body.print-one #view>:not(.print-target){display:none!important}
     .card{border:none!important}.card button{display:none!important}
   }
-  @media(max-width:700px){.home{grid-template-columns:1fr}main{padding:10px}header{padding:10px 12px}th,td{padding:6px 5px}.hide-m{display:none}.card{padding:10px}.cmp{grid-template-columns:48px 1fr 54px 1fr 48px}}
+  @media(max-width:700px){.home{grid-template-columns:1fr}header .row{gap:6px}header .row .sec{padding:8px 10px;font-size:14px}main{padding:10px}header{padding:10px 12px}th,td{padding:6px 5px}.hide-m{display:none}.card{padding:10px}.cmp{grid-template-columns:48px 1fr 54px 1fr 48px}}
 </style>
 </head>
 <body>
@@ -142,10 +152,11 @@
   <div class="seg" id="sportSeg"><button data-sport="nba">🏀 NBA</button><button data-sport="foot">⚽ Foot</button></div>
   <div id="leaders"></div>
   <div class="row">
+    <button class="sec" id="btnRefresh" title="Actualiser les scores">🔄<span class="hide-m"> Actualiser</span></button>
     <button class="sec" id="btnXlsx">Excel</button>
     <button class="sec" id="btnExport">Sauvegarde</button>
     <button class="sec" id="btnImport">Importer</button>
-    <button class="sec" id="btnTv" title="Mode grand écran">📺</button>
+    <button class="sec hide-m" id="btnTv" title="Mode grand écran">📺</button>
     <button class="sec" id="btnLead" title="Couleurs des équipes en tête (Est / Ouest)">🎨</button>
     <button class="sec" id="btnTheme" title="Thème clair / sombre">🌓</button>
     <input type="file" id="fileImport" accept=".json" hidden>
@@ -156,6 +167,12 @@
   <div id="backupBar"></div>
   <div id="syncBar"></div>
   <div id="msg" class="mut nbaonly"></div>
+
+  <nav id="tabs"></nav>
+  <div id="fmsg" class="mut" style="display:none;margin:8px 0"></div>
+  <div id="liveBox"></div>
+  <div id="view"></div>
+  <footer id="pageFoot"><div id="ftInfo"></div>
   <section class="card nbaonly">
     <details id="manualBox">
       <summary><b>Ajout manuel</b> <span class="mut">(secours si « Actualiser la NBA » ne marche pas)</span></summary>
@@ -181,11 +198,7 @@
       </details>
     </details>
   </section>
-
-  <nav id="tabs"></nav>
-  <div id="fmsg" class="mut" style="display:none;margin:8px 0"></div>
-  <div id="liveBox"></div>
-  <div id="view"></div>
+  </footer>
   <div id="welcome"></div>
   <div id="modal"><div class="mbox"></div></div>
 </main>
@@ -273,7 +286,8 @@ const ui = {tab:'home', openGame:null, openPlayer:null, openTeam:null, gTeam:'',
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function say(t, cls='mut'){ const m=$('#msg'); m.className=cls; m.innerHTML=t; const f=document.getElementById('fmsg'); if(f){ f.className=cls; f.innerHTML=t; f.style.display=ui.sport==='foot'&&t?'block':'none'; } }
+let sayT=null, sayMute=false;
+function say(t, cls='mut'){ if(sayMute) return; const m=$('#msg'); m.className='nbaonly '+cls; m.innerHTML=t; clearTimeout(sayT); if(t) sayT=setTimeout(()=>{ m.innerHTML=''; const f=document.getElementById('fmsg'); if(f){ f.innerHTML=''; f.style.display='none'; } },/err|warn/.test(cls)?20000:7000); const f=document.getElementById('fmsg'); if(f){ f.className=cls; f.innerHTML=t; f.style.display=ui.sport==='foot'&&t?'block':'none'; } }
 const f1 = x => Number.isFinite(x) ? x.toFixed(1) : '–';
 const pc = (a,b) => b>0 ? (100*a/b).toFixed(1)+'%' : '–';
 const pcn = (a,b) => b>0 ? 100*a/b : -1;
@@ -598,25 +612,27 @@ function h2h(S,a,b){
 /* ---- Rappel de sauvegarde ---- */
 function renderBackup(){
   const el=document.getElementById('backupBar'); if(!el) return;
-  if(!Object.keys(games).length){ el.innerHTML=''; return; }
+  if(!Object.keys(games).length){ el.innerHTML=''; window._ftBk=''; ftRender(); return; }
   const age=backup.last?(Date.now()-backup.last)/86400e3:Infinity;
   const due=age>=7&&Date.now()>(backup.snooze||0);
   const when=backup.last?`${new Date(backup.last).toLocaleDateString('fr-FR',{day:'numeric',month:'long'})} (${age<1?'aujourd\'hui':'il y a '+Math.floor(age)+' j'})`:'jamais';
   el.innerHTML=due
     ?`<div class="card" style="border-color:var(--warn)"><div class="row between"><div>💾 <b>Pense à sauvegarder tes données.</b> Dernière sauvegarde : ${when}. Elles ne sont gardées que dans ce navigateur.</div><div class="row"><button data-bk="now">Sauvegarder maintenant</button><button class="sec" data-bk="later">Plus tard</button></div></div></div>`
-    :`<div class="mut" style="margin:-6px 0 10px;font-size:12px">💾 Dernière sauvegarde : ${when}</div>`;
+    :'';
+  window._ftBk=`💾 Dernière sauvegarde : ${when}`; ftRender();
 }
 
 function renderSync(){
   const el=document.getElementById('syncBar'); if(!el) return;
-  if(ui.sport==='foot'){ el.innerHTML=''; return; }
+  if(ui.sport==='foot'){ el.innerHTML=''; window._ftSy=''; ftRender(); return; }
   const times=Object.values(games).filter(g=>g.status===3).map(tms).filter(Boolean);
   const btn='<button data-act="nbarefresh" style="margin-right:8px">🔄 Actualiser la NBA</button>';
-  if(!times.length){ el.innerHTML='<div class="mut" style="margin:-6px 0 10px;font-size:12px">'+btn+'Clique pour récupérer les matchs terminés.</div>'; return; }
+  if(!times.length){ el.innerHTML='<div class="mut" style="margin:-6px 0 10px;font-size:12px">'+btn+'Clique pour récupérer les matchs terminés.</div>'; window._ftSy=''; ftRender(); return; }
   const last=Math.max(...times), diff=(Date.now()-last)/86400e3, n=Math.min(14,Math.ceil(diff)+1);
   const when=new Date(last).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
-  el.innerHTML=`<div class="mut" style="margin:-6px 0 10px;font-size:12px">${btn}📅 Dernier match terminé dans ta base : ${when}.</div>`;
+  el.innerHTML=''; window._ftSy=`📅 Dernier match NBA en base : ${when}`; ftRender();
 }
+function ftRender(){ const e=document.getElementById('ftInfo'); if(e) e.innerHTML=[window._ftBk,window._ftSy].filter(Boolean).map(x=>'<span>'+x+'</span>').join(''); }
 
 /* ---- Équipe de la semaine ---- */
 function weekCard(S){
@@ -1215,14 +1231,14 @@ function confetti(box,cols){
 }
 function closeWelcome(){ $('#welcome').classList.remove('on'); $('#welcome').innerHTML=''; }
 function showWelcome(force){
-  try{ const S=buildStats(); S.prev=prevStats(); const al=alerts(S).concat(footAlerts());
+  try{ const S=buildStats(); S.prev=prevStats(); const FT=ui.sport==='foot', al=FT?footAlerts():alerts(S);
     if(!al.length){ if(force) say('Aucune alerte pour le moment.','warn'); return; }
-    const times=S.fin.map(g=>Date.parse(g.time)||0), sig=S.fin.length+'|'+Math.max(0,...times)+'|f'+footIdx().done.length;
-    if(!force){ if(localStorage.getItem('suivi-nba-welcome')===sig) return; localStorage.setItem('suivi-nba-welcome',sig); }
+    const times=S.fin.map(g=>Date.parse(g.time)||0), sig=FT?'f'+footIdx().done.length:S.fin.length+'|'+Math.max(0,...times), wk=FT?'suivi-foot-welcome':'suivi-nba-welcome';
+    if(!force){ if(localStorage.getItem(wk)===sig) return; localStorage.setItem(wk,sig); }
     const W=$('#welcome'), party=al.some(x=>/🏅|triple-double|🎩/.test(x));
     W.innerHTML=`<div class="wbox"><h2>${party?'🎉':'🔔'} Du nouveau sur tes favoris !</h2>${al.map(x=>`<div class="alert">${x}</div>`).join('')}<div style="margin-top:14px;text-align:right"><button data-act="closewelcome">Super, merci</button></div></div>`;
     W.classList.add('on');
-    if(party){ const [a,b]=['E','W'].map(c=>{ const r=raceData(S,c)[0]; return r&&r.g?tcolor(r.tri):null; }); confetti(W,['#34b64f','#f0b010','#f07020','#e04030','#3cc15a','#ffffff',a||'#ff8a4f',b||'#8a4fd0']); }
+    if(party){ const [a,b]=FT?[null,null]:['E','W'].map(c=>{ const r=raceData(S,c)[0]; return r&&r.g?tcolor(r.tri):null; }); confetti(W,['#34b64f','#f0b010','#f07020','#e04030','#3cc15a','#ffffff',a||'#ff8a4f',b||'#8a4fd0']); }
   }catch(e){}
 }
 function renderLeaders(S){
@@ -1280,7 +1296,7 @@ function viewCal(S){
 
 /* ================= Foot (ESPN) : données ================= */
 function closeModals(){ ui.openPlayer=ui.openTeam=ui.fMatch=ui.fPlayer=ui.fTeam=null; }
-function setSport(x){ ui.sport=x; try{ localStorage.setItem('suivi-sport',x); }catch(e){} }
+function setSport(x){ const ch=ui.sport!==x; ui.sport=x; try{ localStorage.setItem('suivi-sport',x); }catch(e){} if(ch) setTimeout(()=>{ try{ showWelcome(false); liveRender(); }catch(e){} },400); }
 const KEYFO='suivi-foot-v1', KEYFF='suivi-foot-fav', KEYFP='suivi-foot-favp', KEYSP='suivi-sport';
 const FLG=[['fra.1','Ligue 1'],['eng.1','Premier League'],['esp.1','Liga'],['ita.1','Serie A'],['ger.1','Bundesliga'],['uefa.champions','Ligue des champions'],['uefa.europa','Europa League'],['uefa.europa.conf','Conférence League']];
 const isEU=lg=>/^uefa\./.test(lg||'');
@@ -1342,7 +1358,7 @@ function footIngest(o){
           aid:String(a.team.id),an:a.team.shortDisplayName||a.team.displayName,aa:a.team.abbreviation,al:a.team.logo||'',ac:a.team.color||'',as:+a.score||0,asc:sc(a)}; n++; }
       L.upd=Date.now(); return n?1:0;
     }
-    if(o.__foot==='summary'){ const M=L.matches[o.id]; if(!M) return 0; footCompact(d,M); L.upd=Date.now(); return 1; }
+    if(o.__foot==='summary'){ const M=L.matches[o.id]; if(!M) return 0; footCompact(d,M); if(M.st==='in') M.lv=1; else delete M.lv; L.upd=Date.now(); return 1; }
   }catch(e){}
   return 0;
 }
@@ -1371,7 +1387,7 @@ async function footRefresh(){
     for(let i=0;i<urls.length;i+=6){ if(i%30===0) say(`⏳ ESPN : classements et calendrier ${i}/${urls.length}…`,'warn'); await Promise.all(urls.slice(i,i+6).map(async x=>{ try{ ok+=footIngest({__foot:x.k,league:x.lg,data:await footGet(x.u)}); }catch(e){ ko++; last=e.message||String(e); } })); }
     if(ko>ok){ saveJ(KEYFO,foot); render(); say(`⚠️ ESPN a répondu à ${ok} requête(s) sur ${urls.length} (erreur : ${esc(last)}). Le navigateur bloque la lecture directe depuis ce fichier : utilise le <b>favori foot</b> sur espn.com/soccer, puis Ctrl+V ici.`,'err'); return; }
     if(!ok){ say('ESPN refuse la lecture directe depuis cette page ('+esc(last)+'). Utilise le favori foot sur espn.com/soccer, puis Ctrl+V ici.','err'); return; }
-    const todo=Object.entries(foot.leagues).flatMap(([lg,L])=>Object.values(L.matches).filter(m=>m.done&&!m.x&&!m.nx).map(m=>({lg,m}))).sort((a,b)=>Date.parse(b.m.d)-Date.parse(a.m.d)).slice(0,400);
+    const todo=Object.entries(foot.leagues).flatMap(([lg,L])=>Object.values(L.matches).filter(m=>m.done&&((!m.x&&!m.nx)||m.lv)).map(m=>({lg,m}))).sort((a,b)=>Date.parse(b.m.d)-Date.parse(a.m.d)).slice(0,400);
     for(let i=0;i<todo.length;i+=3){ say(`⏳ Détails des matchs : ${i}/${todo.length}…`,'warn');
       await Promise.all(todo.slice(i,i+3).map(async t=>{ try{ footIngest({__foot:'summary',league:t.lg,id:t.m.id,data:await footGet(`https://site.api.espn.com/apis/site/v2/sports/soccer/${t.lg}/summary?event=${t.m.id}`)}); n++; }catch(e){ ko++; last=e.message||String(e); } })); }
     const saved=footSave(); render();
@@ -1682,7 +1698,7 @@ function footMatchModal(m){
   return `<div class="card print-target" style="border-left:4px solid ${ca}">
   <div class="row between"><span class="mut">${esc(footLgName(m.lg))} · ${esc(fmtDT(m.d))}${m.ven||(m.x&&m.x.ven)?' · '+esc(m.ven||m.x.ven):''}${m.x&&m.x.att?' · '+m.x.att.toLocaleString('fr-FR')+' spectateurs':''}</span><div class="row"><button class="sec" data-act="print">Imprimer / PDF</button><button class="sec" data-act="fclose">Fermer</button></div></div>
   <div class="row between" style="margin:14px 0"><div class="row" style="font-size:20px">${footLogo(m.hl,44)}<b>${tlink(m.hid,m.hn)}</b></div><div style="font-size:34px;font-weight:800">${pre?'–':`${m.hs} - ${m.as}`}<div class="mut" style="font-size:12px;text-align:center;font-weight:400">${live?'🔴 '+esc(fLbl(m.sn,m.clk,m.per,m.det)||'En cours'):pre?'À venir':esc(m.det||'Terminé')}</div></div><div class="row" style="font-size:20px"><b>${tlink(m.aid,m.an)}</b>${footLogo(m.al,44)}</div></div>
-  ${footRecapHtml(m)}
+  ${live?'<div class="mut" style="font-size:12px;margin-bottom:6px">🔴 Match en cours : score, buts, stats et compositions se mettent à jour automatiquement.</div>':''}${footRecapHtml(m)}
    ${m.x?'':(m.done?`<p class="mut">${m.nx?'ESPN n\'a pas fourni de détails pour ce match.':'Détails non chargés : clique sur « 🔄 Actualiser le foot ».'}</p>`:'')}
   ${footFrise(m)}${footTimeline(m)}${footStatBars(m)}
   ${m.x?`<div class="grid2">${footLineup(m,'h')}${footLineup(m,'a')}</div>`:''}
@@ -2101,6 +2117,8 @@ $('#fileImport').onchange=async e=>{
     save(); saveFav(); saveJ(KEYS,sched); saveJ(KEYN,notes); render(); say('✓ Sauvegarde importée.','ok');
   }catch(err){ say('Fichier invalide.','err'); }
 };
+$('#btnRefresh').onclick=()=>{ if(ui.sport==='foot') footRefresh(); else nbaRefresh(); };
+['#msg','#fmsg'].forEach(q=>{ const n=$(q); if(n) n.addEventListener('click',()=>{ n.innerHTML=''; n.style.display='none'; }); });
 window.addEventListener('afterprint',()=>document.body.classList.remove('print-one'));
 setTimeout(notifyBig,1200);
 setTimeout(()=>showWelcome(false),700);
@@ -2142,6 +2160,8 @@ function nLbl(sn,clk,per,det){
   if(/IN_PROGRESS/.test(sn)) return q+' · '+(clk||'');
   return det||'';
 }
+function liveFavOnly(){ try{ return localStorage.getItem('suivi-live-fav')!=='0'; }catch(e){ return true; } }
+function liveAlertOk(it){ if(!liveFavOnly()||!ffav.length) return true; return ffav.includes(it.h.id)||ffav.includes(it.a.id); }
 let liveData={items:[],t:0,err:'',busy:false}, liveMem={}, liveLast=0, liveSeen=new Set();
 const liveF=t=>new Date(t).toISOString().slice(0,10).replace(/-/g,'');
 function liveItem(kind,lg,e){
@@ -2150,6 +2170,9 @@ function liveItem(kind,lg,e){
   const st=(e.status&&e.status.type)||{}, sn=st.name||'', clk=(e.status&&e.status.displayClock)||'', per=(e.status&&e.status.period)||0;
   const side=x=>kind==='n'?{id:etri(x.team.abbreviation),n:tname(etri(x.team.abbreviation)),s:+x.score||0}:{id:String(x.team.id),n:x.team.shortDisplayName||x.team.displayName,l:x.team.logo||'',s:+x.score||0};
   const it={k:kind,lg,id:String(e.id),st:st.state||'pre',done:!!st.completed,sn,per,h:side(h),a:side(a),t:Date.now(),d:e.date,lab:kind==='n'?nLbl(sn,clk,per,st.shortDetail):fLbl(sn,clk,per,st.shortDetail)};
+  if(kind==='f'){ it.ev=(c.details||[]).filter(x=>(x.scoringPlay||x.redCard)&&!x.shootout).map(x=>{ const ai=(x.athletesInvolved||[])[0]||{}, tid=String((x.team||{}).id||'');
+      return {g:!!x.scoringPlay,rc:!!x.redCard&&!x.scoringPlay,og:!!x.ownGoal,pg:!!x.penaltyKick,m:(x.clock&&x.clock.displayValue)||'',p:ai.shortName||ai.displayName||'',s:tid===it.h.id?'h':tid===it.a.id?'a':''}; }); }
+  else { const tp=x=>{ const l=(x.leaders||[]).find(y=>y.name==='points'), t=l&&l.leaders&&l.leaders[0]; return t&&t.athlete?(t.athlete.shortName||t.athlete.displayName)+' '+(t.displayValue||'')+' pts':''; }; it.h.top=tp(h); it.a.top=tp(a); }
   if(kind==='f'){ const m=/(\d+)'?(?:\s*\+\s*(\d+))?/.exec(clk); it.run=/FIRST_HALF|SECOND_HALF|EXTRA/.test(sn)&&!!m; if(m){ it.m=+m[1]; it.p=m[2]!=null?+m[2]:null; } }
   return it;
 }
@@ -2164,15 +2187,22 @@ function liveText(it){
 }
 function liveRender(){
   const box=document.getElementById('liveBox'); if(!box) return;
-  const L=(liveData.items||[]).filter(x=>x.st==='in'); if(!L.length){ box.innerHTML=''; return; }
+  const want=ui.sport==='foot'?'f':'n', L=(liveData.items||[]).filter(x=>x.st==='in'&&x.k===want); if(!L.length){ box.innerHTML=''; return; }
   const mine=x=>x.k==='n'?(fav.teams.includes(x.h.id)||fav.teams.includes(x.a.id)):(ffav.includes(x.h.id)||ffav.includes(x.a.id));
   L.sort((x,y)=>mine(y)-mine(x));
   const ago=Math.max(0,Math.round((Date.now()-liveData.t)/1000));
+  const bar=x=>{ if(x.k!=='f') return ''; const tot=/EXTRA/.test(x.sn)?120:90, pc=v=>Math.min(100,Math.max(0,v/tot*100));
+    const cur=/HALFTIME/.test(x.sn)?45:(x.run&&x.m!=null?x.m+Math.floor((Date.now()-x.t)/60000):(x.m||0));
+    const mk=(x.ev||[]).filter(e=>e.s).map(e=>`<i class="${e.s}" style="left:${pc(parseInt(e.m)||0)}%;background:${e.rc?'#e04030':e.s==='h'?'var(--acc,#34b64f)':'#f07020'}" title="${esc((e.p||'')+' '+e.m)}"></i>`).join('');
+    return `<div class="lbar"><b style="width:${pc(cur)}%"></b><u></u>${mk}</div>`; };
+  const evl=(x,sd)=>(x.ev||[]).filter(e=>e.s===sd).map(e=>`<div>${e.rc?'🟥':'⚽'} ${esc(e.p||'?')} ${esc(e.m)}${e.og?' (csc)':e.pg?' (pen.)':''}</div>`).join('');
+  const evs=x=>{ if(x.k==='n'){ return (x.h.top||x.a.top)?`<div class="lev"><div>${esc(x.h.top||'')}</div><div style="text-align:right">${esc(x.a.top||'')}</div></div>`:''; }
+    return (x.ev&&x.ev.length)?`<div class="lev"><div>${evl(x,'h')}</div><div style="text-align:right">${evl(x,'a')}</div></div>`:''; };
   const row=x=>{ const key=x.k+x.id, fl=(liveMem[key]&&Date.now()-liveMem[key].chg<30000)?' flash':'';
     const lg=x.k==='n'?'NBA':footLgName(x.lg), lo=(s,k)=>x.k==='n'?teamLogo(s.id,22):footLogo(s.l,22);
-    const go=(x.k==='f'&&ui.sport==='foot'&&Object.values(foot.leagues).some(L=>L.matches[x.id]))?` data-act="fmatch" data-id="${esc(x.id)}" style="cursor:pointer"`:'';
-    return `<div class="liverow${fl}"${go}><div class="lt">${lo(x.h)}<b>${esc(x.h.n)}</b></div><div class="ls">${x.h.s} - ${x.a.s}<span class="lm">${esc(liveText(x))}</span></div><div class="lt r"><b>${esc(x.a.n)}</b>${lo(x.a)}</div><div class="lc mut">${mine(x)?'⭐ ':''}${esc(lg)}</div></div>`; };
-  box.innerHTML=`<div class="card livecard"><h2><span class="livedot"></span>En direct <span class="mut" style="font-size:12px;font-weight:400">· mis à jour il y a ${ago} s · <span class="link" data-act="liverefresh">actualiser</span></span></h2>${L.map(row).join('')}</div>`;
+    const go=(x.k==='f'&&Object.values(foot.leagues).some(L=>L.matches[x.id]))?` data-act="fmatch" data-id="${esc(x.id)}" style="cursor:pointer"`:'';
+    return `<div class="liverow${fl}"${go}><div class="lt">${lo(x.h)}<b>${esc(x.h.n)}</b></div><div class="ls">${x.h.s} - ${x.a.s}<span class="lm">${esc(liveText(x))}</span></div><div class="lt r"><b>${esc(x.a.n)}</b>${lo(x.a)}</div>${bar(x)}${evs(x)}<div class="lc mut">${mine(x)?'⭐ ':''}${esc(lg)}</div></div>`; };
+  box.innerHTML=`<div class="card livecard"><h2><span class="livedot"></span><span class="lhn">En direct</span> <span class="mut" style="font-size:12px;font-weight:400">· mis à jour il y a ${ago} s · <span class="link" data-act="liverefresh">actualiser</span></span>${want==='f'?`<label class="mut" style="font-size:12px;margin-left:auto;font-weight:400"><input type="checkbox" data-act="livefav" ${liveFavOnly()?'checked':''}> Alertes buts : mes clubs</label>`:''}</h2>${L.map(row).join('')}</div>`;
 }
 async function liveFetch(manual){
   if(liveData.busy) return; liveData.busy=true;
@@ -2190,19 +2220,25 @@ async function liveFetch(manual){
     // changements de score
     const cur=new Set(); let changed=false;
     for(const it of items){ if(it.st!=='in') continue; const key=it.k+it.id; cur.add(it.k+':'+it.lg+':'+it.id); const sc=it.h.s+'-'+it.a.s, o=liveMem[key];
-      if(!o||o.sc!==sc){ liveMem[key]={sc,chg:o?Date.now():0}; if(o) changed=true; } }
+      if(!o||o.sc!==sc){ liveMem[key]={sc,chg:o?Date.now():0}; if(o){ changed=true; if(it.k==='f'&&ui.sport==='foot'&&liveAlertOk(it)){ const lg=(it.ev||[]).filter(e=>e.g).pop(); say(`⚽ <b>BUT !</b> ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}${lg&&lg.p?' · '+esc(lg.p)+' '+esc(lg.m):''}`,'ok'); } } } }
     const ended=[...liveSeen].filter(k=>!cur.has(k)); liveSeen=cur;
     liveData.items=items;
     for(const g of ing){ try{ footIngest({__foot:'scores',league:g.lg,data:g.d}); changed=true; }catch(e){} }
     if(ing.length) footSave();
     liveRender(); if(changed&&!document.querySelector('input:focus')) render();
+    if(ui.fMatch) await liveDetail(ui.fMatch);
     // fins de match : on complète les détails
     for(const k of ended){ const [kind,lg,id]=k.split(':'); const it=items.find(x=>x.k===kind&&x.id===id&&x.lg===lg);
       if(!it||!it.done) continue;
-      say(`🏁 Terminé : ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}`,'ok');
+      if((kind==='f')===(ui.sport==='foot')) say(`🏁 Terminé : ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}`,'ok');
       if(kind==='f'){ try{ footIngest({__foot:'summary',league:lg,id,data:await footGet(`https://site.api.espn.com/apis/site/v2/sports/soccer/${lg}/summary?event=${id}`)}); footSave(); render(); }catch(e){} }
-      else { try{ await nbaEspnRefresh(); }catch(e){} } }
+      else { sayMute=ui.sport==='foot'; try{ await nbaEspnRefresh(); }catch(e){} finally{ sayMute=false; } } }
   }finally{ liveData.busy=false; }
+}
+async function liveDetail(id){
+  const it=(liveData.items||[]).find(x=>x.k==='f'&&x.id===String(id)&&x.st==='in'); if(!it) return;
+  try{ footIngest({__foot:'summary',league:it.lg,id:it.id,data:await footGet(`https://site.api.espn.com/apis/site/v2/sports/soccer/${it.lg}/summary?event=${it.id}`)}); footSave();
+    if(ui.fMatch===it.id&&!document.querySelector('#modal input:focus,#modal textarea:focus')) render(); }catch(e){}
 }
 function liveNeed(){
   const now=Date.now(), w=t=>{ t=Date.parse(t); return t&&t<now+15*6e4&&t>now-3.5*36e5; };
@@ -2217,6 +2253,8 @@ function liveTick(){
 setInterval(liveTick,15000);
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&Date.now()-liveLast>6e4) liveFetch(false); });
 setTimeout(()=>liveFetch(false),2500);
+document.addEventListener('click',e=>{ const r=e.target.closest('#liveBox [data-act=fmatch]'); if(r) setTimeout(()=>liveDetail(r.dataset.id),80); },false);
+document.addEventListener('change',e=>{ if(e.target.matches&&e.target.matches('[data-act=livefav]')){ try{ localStorage.setItem('suivi-live-fav',e.target.checked?'1':'0'); }catch(x){} } });
 document.addEventListener('click',e=>{ if(e.target.closest('[data-act=liverefresh]')){ e.stopPropagation(); liveFetch(true); } },true);
 </script>
 </body>
