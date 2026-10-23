@@ -22,6 +22,7 @@ jobs:
         run: node notify.mjs
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          GH_TOKEN: ${{ github.token }}
       - name: Garder la mémoire des alertes déjà envoyées
         if: always()
         run: |
