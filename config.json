@@ -1,10 +1,35 @@
 {
   "ntfyTopic": "REMPLACE-PAR-UN-NOM-SECRET-ex-statify-leloarer-4829",
-  "nba": ["LAL", "GSW"],
+  "nba": [
+    "LAL",
+    "GSW"
+  ],
   "foot": {
-    "teams": ["Paris Saint-Germain", "Marseille"],
-    "leagues": ["fra.1", "uefa.champions", "eng.1", "esp.1"]
+    "teams": [
+      "Paris Saint-Germain",
+      "Marseille"
+    ],
+    "leagues": [
+      "fra.1",
+      "uefa.champions",
+      "eng.1",
+      "esp.1"
+    ]
   },
-  "multiplex": { "enabled": true, "leagues": ["fra.1", "uefa.champions"] },
-  "alerts": { "kickoff": true, "score": true, "final": true }
+  "multiplex": {
+    "enabled": true,
+    "leagues": [
+      "fra.1",
+      "uefa.champions"
+    ]
+  },
+  "alerts": {
+    "kickoff": true,
+    "score": true,
+    "final": true
+  },
+  "live": {
+    "everySeconds": 15,
+    "runMinutes": 9
+  }
 }
