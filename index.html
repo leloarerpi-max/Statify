@@ -264,7 +264,7 @@
   <div id="modal"><div class="mbox"></div></div>
   <div id="cloud"><div class="gsbox" id="cloudbody"></div></div>
   <div id="offPill">📴 Hors ligne : dernières données enregistrées</div>
-  <div id="gs"><div class="gsbox"><div class="row" style="flex-wrap:nowrap"><input id="gsq" type="search" placeholder="Joueur, équipe ou match…" autocomplete="off" style="flex:1;min-width:0"><button class="sec" id="gsx">✕</button></div><div id="gsres"></div></div></div>
+  <div id="gs"><div class="gsbox"><div class="row" style="flex-wrap:nowrap"><input id="gsq" type="text" enterkeyhint="search" placeholder="Joueur, équipe ou match…" autocomplete="off" style="flex:1;min-width:0"><button class="sec" id="gsx">✕</button></div><div id="gsres"></div></div></div>
 </main>
 
 <script type="text/plain" id="bmcode">
@@ -1408,12 +1408,12 @@ function tonightFoot(){
   let big=new Set(); try{ footBig(40).forEach(i=>big.add(i.m.id)); }catch(e){}
   const mine=m=>ffav.includes(m.hid)||ffav.includes(m.aid);
   const rows=[...L].sort((a,b)=>mine(b)-mine(a)||Date.parse(a.d)-Date.parse(b.d)).slice(0,14).map(m=>`<div class="liverow" style="grid-template-columns:auto 1fr auto"><div><b>${esc(parisT(m.d))}</b>${m.st==='in'?' <span class="err">🔴</span>':''}</div><div class="lt" data-act="fmatch" data-id="${esc(m.id)}" style="cursor:pointer">${footLogo(m.hl,20)}${esc(m.hn)} <span class="mut">-</span> ${footLogo(m.al,20)}${esc(m.an)}${mine(m)?' ⭐':''}${big.has(m.id)?' 🔥':''}<span class="mut" style="font-size:12px"> · ${esc(footLgName(m.lg))}</span></div><div><span class="link" data-act="cmpgo" data-sp="foot" data-a="${esc(m.hid)}" data-b="${esc(m.aid)}" data-lg="${esc(m.lg)}" title="Comparer ces deux clubs">⚖️</span></div></div>`).join('');
-  return `<div class="card"><h2 style="margin:0 0 6px">🌙 Ce soir <span class="mut" style="font-weight:400;font-size:13px">(heure de Paris)</span></h2>${rows||'<p class="mut" style="margin:8px 0 0">Aucun match prévu dans les prochaines 30 heures.</p>'}</div>`;
+  return rows?`<div class="card"><h2 style="margin:0 0 6px">🌙 Ce soir <span class="mut" style="font-weight:400;font-size:13px">(heure de Paris)</span></h2>${rows}</div>`:'';
 }
 
 /* --- Fiche équipe NBA enrichie --- */
 function teamExtraNba(S,t){
-  const roster=Object.values(S.P).filter(p=>p.tri===t.tri&&p.gp>0), best=k=>[...roster].sort((a,b)=>b[k]/b.gp-a[k]/a.gp)[0];
+  const r0=Object.values(S.P).filter(p=>p.tri===t.tri&&p.gp>0), mg=Math.max(0,...r0.map(p=>p.gp)), roster=r0.filter(p=>p.gp>=Math.ceil(mg/3)), best=k=>[...roster].sort((a,b)=>b[k]/b.gp-a[k]/a.gp)[0];
   const kp=(l,k)=>{ const p=best(k); return `<div class="kpi"><span class="mut">${l}</span><b style="font-size:16px">${p?playerLink(p.id,p.name):'–'}</b>${p?`<span class="mut">${f1(p[k]/p.gp)} / match</span>`:''}</div>`; };
   const nx=upcoming().filter(x=>x.h===t.tri||x.a===t.tri).slice(0,5);
   return `<h3>Forme et prochains matchs</h3><div class="grid"><div class="kpi"><span class="mut">Forme (5 derniers)</span><div style="margin-top:4px">${formDots(t.log)}</div></div>${kp('Meilleur marqueur','pts')}${kp('Meilleur rebondeur','reb')}${kp('Meilleur passeur','ast')}</div>
@@ -1424,13 +1424,13 @@ function teamExtraNba(S,t){
 /* --- Face-à-face : forme, joueurs clés, prochaine rencontre --- */
 function cmpExtraNba(S,a,b){
   const key=t=>[...Object.values(S.P)].filter(p=>p.tri===t.tri&&p.gp>0).sort((x,y)=>y.pts/y.gp-x.pts/x.gp).slice(0,3);
-  const col=t=>`<div><h3 style="margin-top:0">${teamLogo(t.tri,20)} ${esc(t.name)}</h3><div style="margin-bottom:6px">Forme : ${formDots(t.log)} <span class="mut">· série ${streak(t.log)}</span></div>${key(t).map(p=>`<div>${playerLink(p.id,p.name)} <span class="mut">${f1(p.pts/p.gp)} pts · ${f1(p.reb/p.gp)} reb · ${f1(p.ast/p.gp)} pas</span></div>`).join('')||'<span class="mut">–</span>'}</div>`;
+  const col=t=>`<div><h3 style="margin-top:0">${teamLogo(t.tri,20)} ${esc(t.name)}</h3><div style="margin-bottom:6px">Forme : ${formDots(t.log)} <span class="mut">· série ${streak(t.log)}</span></div>${key(t).map(p=>`<div>${playerLink(p.id,p.name)} <span class="mut">${f1(p.pts/p.gp)} pts · ${f1(p.reb/p.gp)} reb · ${f1(p.ast/p.gp)} pd</span></div>`).join('')||'<span class="mut">–</span>'}</div>`;
   const nx=upcoming().find(x=>(x.h===a.tri&&x.a===b.tri)||(x.h===b.tri&&x.a===a.tri));
   return `<h3>Avant le match : forme et joueurs clés</h3><div class="grid2">${col(a)}${col(b)}</div>${nx?`<p class="mut">Prochaine rencontre : ${esc(parisD(nx.t))} à ${esc(parisT(nx.t))} (heure de Paris) — ${esc(tname(nx.a))} @ ${esc(tname(nx.h))}.</p>`:''}`;
 }
 function cmpExtraFoot(a,b){
   const {P,mt}=footIdx(), key=t=>Object.values(P).filter(p=>p.tid===t.id).sort((x,y)=>(y.g+y.a)-(x.g+x.a)||y.gp-x.gp).slice(0,3);
-  const col=t=>`<div><h3 style="margin-top:0">${footLogo(t.lo,20)}${esc(t.n)}</h3><div style="margin-bottom:6px">Forme : ${fdots(t.id,5)}</div>${key(t).map(p=>`<div>${plink(p.id,p.n)} <span class="mut">${p.g} but(s) · ${p.a} PD · ${p.gp} MJ</span></div>`).join('')||'<span class="mut">Pas encore de stats joueurs.</span>'}</div>`;
+  const col=t=>`<div><h3 style="margin-top:0">${footLogo(t.lo,20)}${esc(t.n)}</h3><div style="margin-bottom:6px">Forme : ${fdots(t.id,5)}</div>${key(t).map(p=>`<div>${plink(p.id,p.n)} <span class="mut">${p.g} but${p.g>1?'s':''} · ${p.a} PD · ${p.gp} MJ</span></div>`).join('')||'<span class="mut">Pas encore de stats joueurs.</span>'}</div>`;
   const nx=mt.filter(m=>!m.done&&((m.hid===a.id&&m.aid===b.id)||(m.hid===b.id&&m.aid===a.id))).sort((x,y)=>Date.parse(x.d)-Date.parse(y.d))[0];
   return `<h3>Avant le match : forme et joueurs clés</h3><div class="grid2">${col(a)}${col(b)}</div>${nx?`<p class="mut">Prochaine rencontre : ${esc(parisD(nx.d))} à ${esc(parisT(nx.d))} (heure de Paris) — ${esc(nx.hn)} - ${esc(nx.an)}.</p>`:''}`;
 }
@@ -1442,14 +1442,13 @@ function footPlayerMinHtml(p){
   if(!n) return '';
   const mx=Math.max(...b), lab=['0-15','16-30','31-45','46-60','61-75','76-90+'], W=300, H=120, bw=36;
   const bars=b.map((v,i)=>{ const h=mx?v/mx*70:0, x=14+i*47; return `<rect x="${x}" y="${96-h}" width="${bw}" height="${Math.max(h,1)}" rx="3" style="fill:var(--acc)"/><text x="${x+bw/2}" y="${90-h}" text-anchor="middle">${v}</text><text x="${x+bw/2}" y="112" text-anchor="middle" style="fill:var(--mut)">${lab[i]}</text>`; }).join('');
-  const per=p.g&&p.gp?(p.gp/p.g):0;
-  return `<h3>Quand marque-t-il ?</h3><svg viewBox="0 0 ${W} ${H}" style="max-width:420px;width:100%" font-size="10">${bars}</svg><p class="mut" style="margin:4px 0 0">${n} but(s) avec minute connue${per?` · un but tous les ${per.toFixed(1).replace('.',',')} match(s)`:''}.</p>`;
+  return `<h3>Quand marque-t-il ?</h3><svg viewBox="0 0 ${W} ${H}" style="max-width:420px;width:100%" font-size="10">${bars}</svg><p class="mut" style="margin:4px 0 0">${p.gp?`${(p.g/p.gp).toFixed(2).replace('.',',')} but${p.g/p.gp>=2?'s':''} par match en moyenne · `:''}minute connue pour ${n} but${n>1?'s':''} sur ${p.g}.</p>`;
 }
 
 
 function footTeamExtra(t,plist){
   const bs=[...plist].sort((x,y)=>y.g-x.g)[0], ba=[...plist].sort((x,y)=>y.a-x.a)[0];
-  return `<h3>Hommes clés</h3><div class="grid"><div class="kpi"><span class="mut">Meilleur buteur</span><b style="font-size:16px">${bs&&bs.g?plink(bs.id,bs.n):'–'}</b>${bs&&bs.g?`<span class="mut">${bs.g} but(s) en ${bs.gp} MJ</span>`:''}</div><div class="kpi"><span class="mut">Meilleur passeur</span><b style="font-size:16px">${ba&&ba.a?plink(ba.id,ba.n):'–'}</b>${ba&&ba.a?`<span class="mut">${ba.a} PD en ${ba.gp} MJ</span>`:''}</div></div>${legendsHtml('foot',t.id,t.n)}`;
+  return `<h3>Hommes clés</h3><div class="grid"><div class="kpi"><span class="mut">Meilleur buteur</span><b style="font-size:16px">${bs&&bs.g?plink(bs.id,bs.n):'–'}</b>${bs&&bs.g?`<span class="mut">${bs.g} but${bs.g>1?'s':''} en ${bs.gp} MJ</span>`:''}</div><div class="kpi"><span class="mut">Meilleur passeur</span><b style="font-size:16px">${ba&&ba.a?plink(ba.id,ba.n):'–'}</b>${ba&&ba.a?`<span class="mut">${ba.a} PD en ${ba.gp} MJ</span>`:''}</div></div>${legendsHtml('foot',t.id,t.n)}`;
 }
 function confetti(box,cols){
   const n=110; let h='';
@@ -1527,6 +1526,7 @@ function setSport(x){ const ch=ui.sport!==x; ui.sport=x; try{ localStorage.setIt
 const KEYFO='suivi-foot-v1', KEYFF='suivi-foot-fav', KEYFP='suivi-foot-favp', KEYSP='suivi-sport';
 const FLG=[['fra.1','Ligue 1'],['eng.1','Premier League'],['esp.1','Liga'],['ita.1','Serie A'],['ger.1','Bundesliga'],['uefa.champions','Ligue des champions'],['uefa.europa','Europa League'],['uefa.europa.conf','Conférence League']];
 const isEU=lg=>/^uefa\./.test(lg||'');
+const zoneFr=d=>{ const x=String(d||''); const t=[[/champions league.*(qualif|play)/i,'Qualif. Ligue des champions'],[/champions league/i,'Ligue des champions'],[/europa league.*(qualif|play)/i,'Qualif. Europa League'],[/europa league/i,'Europa League'],[/conference league.*(qualif|play)/i,'Qualif. Conférence League'],[/conference league/i,'Conférence League'],[/relegation.*(play|round)/i,'Barrage de relégation'],[/relegation/i,'Relégation'],[/promotion.*(play|round)/i,'Barrage de promotion'],[/promotion/i,'Promotion'],[/round of 16|8th/i,'Qualifié pour les 8es de finale'],[/knockout/i,'Phase à élimination directe'],[/play-?off/i,'Barrages'],[/eliminat/i,'Éliminé']]; for(const [r,f] of t) if(r.test(x)) return f; return x; };
 const inLg=(o,lg)=>!lg||lg==='mine'||o.lg===lg||!!(o.comps&&o.comps[lg]);
 const FTABS=[['home','Accueil'],['multi','🔥 Multiplex'],['matches','Matchs'],['table','Classement'],['teams','Équipes'],['players','Joueurs'],['records','Records'],['compare','Comparer'],['cal','Calendrier']];
 let foot=loadJ(KEYFO,{leagues:{}}), ffav=loadJ(KEYFF,[]), ffavP=loadJ(KEYFP,[]);
@@ -1713,7 +1713,7 @@ function footAlerts(){
   for(const m of done){ if(Date.parse(m.d)<lim) continue;
     const sc=mlink(m,`${m.hs}-${m.as}`);
     for(const s of ['h','a']){ const tid=s==='h'?m.hid:m.aid, mine=ffav.includes(tid), gf=s==='h'?m.hs:m.as, ga=s==='h'?m.as:m.hs, me=s==='h'?m.hn:m.an, op=s==='h'?m.an:m.hn;
-      if(mine){ if(gf-ga>=3) out.push(`💥 ${tlink(tid,me)} a <b>écrasé</b> ${esc(op)} (${sc}).`); if(m.x&&m.x.ts[s].rc>0) out.push(`🟥 ${tlink(tid,me)} : <b>${m.x.ts[s].rc} carton(s) rouge(s)</b> contre ${esc(op)} (${sc}).`); }
+      if(mine){ if(gf-ga>=3) out.push(`💥 ${tlink(tid,me)} a <b>écrasé</b> ${esc(op)} (${sc}).`); if(m.x&&m.x.ts[s].rc>0) out.push(`🟥 ${tlink(tid,me)} : <b>${m.x.ts[s].rc>1?m.x.ts[s].rc+' cartons rouges':'un carton rouge'}</b> contre ${esc(op)} (${sc}).`); }
       if(m.x) for(const p of m.x.pl[s]){ const fav=ffavP.includes(p.id);
         if(p.g>=3&&(mine||fav)) out.push(`🎩 ${plink(p.id,p.n)} (${esc(me)}) a signé un <b>triplé</b> contre ${esc(op)} !`);
         else if(p.g>0&&fav) out.push(`⚽ ${plink(p.id,p.n)} (${esc(me)}) a marqué ${p.g>1?'<b>'+p.g+' buts</b>':'un but'} contre ${esc(op)} (${sc}).`);
@@ -1765,13 +1765,13 @@ function footFavCards(){
 }
 function footScorersTable(pl,key,lab,n=8){
   const top=pl.filter(p=>p[key]>0).sort((a,b)=>b[key]-a[key]||b.gp-a.gp).slice(0,n);
-  return top.length?`<table><tbody>${top.map((p,i)=>`<tr><td class="l">${i+1}. ${footAv(p.id,p.n,p.tco,22)}${plink(p.id,p.n)} <span class="mut">${esc(p.tn)}</span></td><td><b>${p[key]}</b> <span class="mut">${lab}</span></td></tr>`).join('')}</tbody></table>`:'<p class="mut">–</p>';
+  return top.length?`<table><tbody>${top.map((p,i)=>`<tr><td class="l">${i+1}. ${footAv(p.id,p.n,p.tco,22)}${plink(p.id,p.n)} <span class="mut">${esc(p.tn)}</span></td><td><b>${p[key]}</b> <span class="mut">${p[key]>1?lab:lab.replace(/s$/,'')}</span></td></tr>`).join('')}</tbody></table>`:'<p class="mut">–</p>';
 }
 function footLeadersFallback(lg){
   const L=foot.leagues[lg]; if(!L) return '';
   const best={}; Object.values(L.matches).sort((a,b)=>Date.parse(a.d)-Date.parse(b.d)).forEach(m=>{ if(m.hsc) best[m.hid]={...m.hsc,tn:m.hn}; if(m.asc) best[m.aid]={...m.asc,tn:m.an}; });
   const top=Object.values(best).filter(x=>x.v>0).sort((a,b)=>b.v-a.v).slice(0,8);
-  return top.length?`<table><tbody>${top.map((x,i)=>`<tr><td class="l">${i+1}. ${esc(x.n)} <span class="mut">${esc(x.tn)}</span></td><td><b>${x.v}</b> <span class="mut">buts</span></td></tr>`).join('')}</tbody></table>`:'';
+  return top.length?`<table><tbody>${top.map((x,i)=>`<tr><td class="l">${i+1}. ${esc(x.n)} <span class="mut">${esc(x.tn)}</span></td><td><b>${x.v}</b> <span class="mut">but${x.v>1?'s':''}</span></td></tr>`).join('')}</tbody></table>`:'';
 }
 
 /* ---------- Accueil ---------- */
@@ -1996,7 +1996,7 @@ function footTableView(){
   if(mode==='G'){
     if(!L||!L.standings.length) body='<p class="mut">Pas encore de classement : clique sur « Actualiser le foot ».</p>';
     else { const zl=[...new Map(L.standings.filter(r=>r.zone&&r.zone.d).map(r=>[r.zone.d,r.zone.c])).entries()];
-      body=`<div class="row" style="margin-bottom:8px">${zl.map(([d,c])=>`<span class="zl"><i style="background:${esc(c)}"></i>${esc(d)}</span>`).join('')}</div><div class="scroll"><table class="st"><thead><tr><th>#</th><th class="l">Club</th><th>MJ</th><th>V</th><th>N</th><th>D</th><th>BP</th><th>BC</th><th>Diff.</th><th>Pts</th><th>Forme</th></tr></thead><tbody>${L.standings.map(r=>`<tr><td style="box-shadow:inset 4px 0 ${esc(r.zone?r.zone.c:'transparent')}">${r.rank}</td><td class="l">${fstar(r.id)}${footLogo(r.logo)}${tlink(r.id,r.name)}</td><td>${r.gp}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gf}</td><td>${r.ga}</td><td class="${r.gd>=0?'ok':'err'}">${r.gd>0?'+':''}${r.gd}</td><td><b>${r.pts}</b></td><td>${fdots(r.id)}</td></tr>`).join('')}</tbody></table></div><p class="mut" style="margin:8px 0 0">${esc(L.season||'')} · mis à jour ${L.upd?esc(fmtDT(new Date(L.upd).toISOString())):'–'} · la forme est calculée sur les matchs en mémoire.</p>`; }
+      body=`<div class="row" style="margin-bottom:8px">${zl.map(([d,c])=>`<span class="zl"><i style="background:${esc(c)}"></i>${esc(zoneFr(d))}</span>`).join('')}</div><div class="scroll"><table class="st"><thead><tr><th>#</th><th class="l">Club</th><th>MJ</th><th>V</th><th>N</th><th>D</th><th>BP</th><th>BC</th><th>Diff.</th><th>Pts</th><th>Forme</th></tr></thead><tbody>${L.standings.map(r=>`<tr><td style="box-shadow:inset 4px 0 ${esc(r.zone?r.zone.c:'transparent')}">${r.rank}</td><td class="l">${fstar(r.id)}${footLogo(r.logo)}${tlink(r.id,r.name)}</td><td>${r.gp}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gf}</td><td>${r.ga}</td><td class="${r.gd>=0?'ok':'err'}">${r.gd>0?'+':''}${r.gd}</td><td><b>${r.pts}</b></td><td>${fdots(r.id)}</td></tr>`).join('')}</tbody></table></div><p class="mut" style="margin:8px 0 0">${esc(L.season||'')} · mis à jour ${L.upd?esc(fmtDT(new Date(L.upd).toISOString())):'–'} · la forme est calculée sur les matchs en mémoire.</p>`; }
   } else { const rows=footCalcTable(lg,mode);
     body=rows.length?`<div class="scroll"><table class="st"><thead><tr><th>#</th><th class="l">Club</th><th>MJ</th><th>V</th><th>N</th><th>D</th><th>BP</th><th>BC</th><th>Diff.</th><th>Pts</th></tr></thead><tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td class="l">${fstar(r.id)}${footLogo(r.lo)}${tlink(r.id,r.n)}</td><td>${r.g}</td><td>${r.w}</td><td>${r.d}</td><td>${r.ls}</td><td>${r.gf}</td><td>${r.ga}</td><td class="${r.gd>=0?'ok':'err'}">${r.gd>0?'+':''}${r.gd}</td><td><b>${r.pts}</b></td></tr>`).join('')}</tbody></table></div><p class="mut" style="margin:8px 0 0">Calculé sur les matchs en mémoire : charge « Depuis le début de saison » pour un classement complet.</p>`:'<p class="mut">Pas assez de matchs en mémoire.</p>'; }
   return footControls()+`<div class="card">${tabs}${body}</div>`+footCurveCard(lg);
@@ -2075,7 +2075,7 @@ ${logo?`<image onerror="this.style.display='none'" href="${esc(logo)}" x="34" y=
 <circle cx="170" cy="130" r="58" fill="#fff" opacity=".12"/><text x="170" y="146" text-anchor="middle" font-size="44" font-weight="800" fill="#f5e6a8">${esc(initials(p.n))}</text>${photo?`<image onerror="footImgFix(this)" data-pid="${esc(p.id)}" href="${esc(photo)}" x="86" y="40" width="170" height="170" preserveAspectRatio="xMidYMax meet"/>`:''}
 <text x="150" y="238" text-anchor="middle" font-size="${fs}" font-weight="900" fill="#fff" letter-spacing=".5">${esc(disp)}</text>
 <line x1="52" x2="248" y1="248" y2="248" stroke="url(#${uid}b)" stroke-width="1.5"/>
-<text x="150" y="264" text-anchor="middle" font-size="10" fill="#fff" opacity=".85">${esc((p.tn||'').slice(0,16))} · ${p.g} B · ${p.a} PD · ${p.gp} MJ</text>
+<text x="150" y="264" text-anchor="middle" font-size="11" fill="#fff" opacity=".8">${esc((p.tn||'').slice(0,18))}${p.lg?' · '+esc(footLgName(p.lg)):''}</text>
 ${D.rows.map(stat).join('')}
 <line x1="150" x2="150" y1="268" y2="360" stroke="url(#${uid}b)" stroke-width="1" opacity=".5"/>
 <text x="150" y="392" text-anchor="middle" font-size="9" fill="#f5e6a8" opacity=".7" letter-spacing="1.5">NOTE SUR ${Object.values(footIdx().P).filter(x=>inLg(x,p.lg)&&x.gp>=2&&(p.pg==='?'||x.pg===p.pg)).length} JOUEURS</text>
@@ -2151,7 +2151,7 @@ const multiLive=lg=>{ try{ return multiDetect().some(d=>d.lg===lg&&d.start<=Date
 function multiBanner(){
   const D=multiDetect(); if(!D.length) return '';
   const today=parisDK(new Date().toISOString());
-  return D.slice(0,2).map(d=>{ const iso=new Date(d.start).toISOString(), live=d.ms.some(m=>m.st==='in'), day=parisDK(iso)===today?'ce soir':'demain';
+  return D.slice(0,2).map(d=>{ const iso=new Date(d.start).toISOString(), live=d.ms.some(m=>m.st==='in'), hr=+new Date(iso).toLocaleTimeString('fr-FR',{timeZone:'Europe/Paris',hour:'2-digit',hour12:false}).slice(0,2), day=parisDK(iso)===today?(hr>=18?'ce soir':'aujourd\'hui'):(hr>=18?'demain soir':'demain');
     return `<div class="card" style="border-left:4px solid #e04030"><div class="row between"><div>🔥 <b>Multiplex ${esc(footLgName(d.lg))} ${live?'en cours':day}</b> : ${d.ms.length} matchs à ${esc(parisT(iso))}</div><button data-act="multigo" data-lg="${esc(d.lg)}">${live?'Suivre en direct':'Ouvrir'}</button></div></div>`; }).join('');
 }
 function multiSet(lg){
@@ -2166,7 +2166,7 @@ function multiTable(lg,ms){
     for(const [id,gf,ga] of [[m.hid,m.hs,m.as],[m.aid,m.as,m.hs]]){ const r=by[id]; if(!r) continue; r.np+=gf>ga?3:gf===ga?1:0; r.ngd+=gf-ga; r.ngf+=gf; r.pl=m; } }
   const zoneAt=LG.standings.map(r=>r.zone), srt=[...rows].sort((a,b)=>b.np-a.np||b.ngd-a.ngd||b.ngf-a.ngf||a.rank-b.rank); srt.forEach((r,i)=>{ r.nr=i+1; });
   const body=srt.map(r=>{ const mv=r.rank-r.nr, ar=mv>0?`<span style="color:var(--ok)">▲${mv}</span>`:mv<0?`<span style="color:var(--bad)">▼${-mv}</span>`:'<span class="mut">=</span>',
-    z=zoneAt[r.nr-1], z0=r.zone, ch=mv!==0&&z&&(!z0||z.d!==z0.d), tag=ch?` <span style="font-size:11px;color:${esc(z.c||'var(--mut)')}">→ ${esc(z.d)}</span>`:'';
+    z=zoneAt[r.nr-1], z0=r.zone, ch=mv!==0&&z&&(!z0||z.d!==z0.d), tag=ch?`<span style="display:block;font-size:11px;color:${esc(z.c||'var(--mut)')}">→ ${esc(zoneFr(z.d))}</span>`:'';
     const sc=r.pl?` <span class="mut" style="font-size:12px">(${r.pl.hs}-${r.pl.as}${r.pl.st==='in'?' en cours':' terminé'})</span>`:'';
     return `<tr class="${r.pl?'favrow':''}"><td>${r.nr}</td><td>${ar}</td><td class="l">${footLogo(r.logo,18)}${esc(r.name)}${sc}${tag}</td><td><b>${r.np}</b></td><td>${r.ngd>0?'+':''}${r.ngd}</td></tr>`; }).join('');
   return `<div class="card"><h2>📈 Classement live <span class="mut" style="font-weight:400;font-size:12px">· projeté avec les scores du moment${used?'':' (aucun match commencé)'}</span></h2><div class="scroll"><table><thead><tr><th>#</th><th></th><th class="l">Club</th><th>Pts</th><th>Diff.</th></tr></thead><tbody>${body}</tbody></table></div><p class="mut" style="font-size:12px;margin:6px 0 0">Basé sur le dernier classement chargé : « ▲▼ » = places gagnées ou perdues si les scores restent ainsi.</p></div>`;
@@ -2185,7 +2185,7 @@ function multiBilan(ms){
   li.push(`⚽ <b>${goals}</b> but${goals>1?'s':''} sur ${started.length} match${started.length>1?'s':''} commencé${started.length>1?'s':''}`);
   if(comeback){ const m=comeback.m, nm=comeback.side==='h'?m.hn:m.an; li.push(`🔄 <b>Plus gros retournement</b> : ${esc(nm)} était mené de ${comeback.def} but${comeback.def>1?'s':''} et ${comeback.win?'gagne':'égalise'} (${esc(m.hn)} ${m.hs}-${m.as} ${esc(m.an)})`); }
   if(late&&late.min>0) li.push(`⏱️ <b>But le plus tardif</b> : ${esc(late.p||'?')} à la ${esc(late.ms||late.min+"'")}${late.og?' (csc)':''} (${esc(late.m.hn)} - ${esc(late.m.an)})`);
-  if(best.length&&top[0][1]>=1) li.push(`👑 <b>Meilleur buteur de la soirée</b> : ${best.slice(0,3).map(esc).join(', ')+(best.length>3?' et '+(best.length-3)+' autre(s)':'')} (${top[0][1]} but${top[0][1]>1?'s':''})`);
+  if(best.length&&top[0][1]>=1) li.push(`👑 <b>Meilleur buteur de la soirée</b> : ${best.slice(0,3).map(esc).join(', ')+(best.length>3?' et '+(best.length-3)+(best.length-3>1?' autres':' autre'):'')} (${top[0][1]} but${top[0][1]>1?'s':''})`);
   return `<div class="card"><h2>📊 Bilan de la soirée</h2>${li.map(x=>`<p style="margin:6px 0">${x}</p>`).join('')}</div>`;
 }
 function footMultiView(){
@@ -2458,17 +2458,17 @@ $('#sportSeg').addEventListener('click',e=>{ const b=e.target.closest('[data-spo
 const gsNorm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
 function gsSearch(q){
   q=gsNorm(q).trim(); if(q.length<2) return null;
-  const has=(...a)=>a.some(x=>gsNorm(x).includes(q)), out={nba:{p:[],t:[],m:[]},foot:{p:[],t:[],m:[]}};
+  const sc=(...a)=>Math.min(...a.map(x=>{ x=gsNorm(x); return x.startsWith(q)?0:new RegExp('[\\s\\-\'.(]'+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).test(x)?1:(q.length>=3&&x.includes(q))?2:9; })), has=(...a)=>sc(...a)<9, out={nba:{p:[],t:[],m:[]},foot:{p:[],t:[],m:[]}};
   try{
     const S=buildStats();
-    out.nba.t=Object.keys(TEAMS).filter(k=>has(TEAMS[k][0],k)).slice(0,5).map(k=>({id:k,l:tname(k),s:k}));
-    out.nba.p=Object.values(S.P).filter(p=>has(p.name)).sort((a,b)=>b.pts/b.gp-a.pts/a.gp).slice(0,6).map(p=>({id:p.id,l:p.name,s:p.tri+' · '+f1(p.pts/p.gp)+' pts'}));
+    out.nba.t=Object.keys(TEAMS).filter(k=>has(TEAMS[k][0],k)).sort((a,b)=>sc(TEAMS[a][0],a)-sc(TEAMS[b][0],b)).slice(0,5).map(k=>({id:k,l:tname(k),s:k}));
+    out.nba.p=Object.values(S.P).filter(p=>has(p.name)).sort((a,b)=>sc(a.name)-sc(b.name)||b.pts/b.gp-a.pts/a.gp).slice(0,6).map(p=>({id:p.id,l:p.name,s:p.tri+' · '+f1(p.pts/p.gp)+' pts'}));
     out.nba.m=Object.values(games).filter(g=>has(g.home.name,g.away.name,g.home.tri,g.away.tri)).sort((a,b)=>Date.parse(b.time)-Date.parse(a.time)).slice(0,5).map(g=>({id:g.id,l:`${g.away.tri} ${g.away.score} - ${g.home.score} ${g.home.tri}`,s:fmtD(g.time)}));
   }catch(e){}
   try{
     const {P,T,mt}=footIdx();
-    out.foot.t=Object.values(T).filter(t=>has(t.n)).slice(0,5).map(t=>({id:t.id,l:t.n,s:footLgName(t.lg)}));
-    out.foot.p=Object.values(P).filter(p=>has(p.n)).sort((a,b)=>b.g-a.g).slice(0,6).map(p=>({id:p.id,l:p.n,s:p.tn+' · '+p.g+' but(s)'}));
+    out.foot.t=Object.values(T).filter(t=>has(t.n)).sort((a,b)=>sc(a.n)-sc(b.n)).slice(0,5).map(t=>({id:t.id,l:t.n,s:footLgName(t.lg)}));
+    out.foot.p=Object.values(P).filter(p=>has(p.n)).sort((a,b)=>sc(a.n)-sc(b.n)||b.g-a.g).slice(0,6).map(p=>({id:p.id,l:p.n,s:p.tn+' · '+p.g+' but'+(p.g>1?'s':'')}));
     out.foot.m=mt.filter(m=>has(m.hn,m.an)).sort((a,b)=>Date.parse(b.d)-Date.parse(a.d)).slice(0,5).map(m=>({id:m.id,l:m.done?`${m.hn} ${m.hs}-${m.as} ${m.an}`:`${m.hn} - ${m.an}`,s:fmtD(m.d)+(m.done?'':' · à venir')}));
   }catch(e){}
   return out;
@@ -2500,7 +2500,7 @@ const KEYC='suivi-cloud';
 let cloud=loadJ(KEYC,{tok:'',gid:'',auto:false,last:0,sig:''});
 const cloudSave=()=>{ try{ localStorage.setItem(KEYC,JSON.stringify(cloud)); }catch(e){} };
 const cloudData=()=>{ const o={}; for(const k of CLOUD_KEYS){ try{ const v=localStorage.getItem(k); if(v) o[k+'.json']={content:v}; }catch(e){} } return o; };
-const cloudSig=()=>{ const o=cloudData(); let n=0; for(const k in o){ const c=o[k].content; n+=c.length; for(let i=0;i<c.length;i+=97) n=(n*31+c.charCodeAt(i))|0; } return String(n); };
+const cloudSig=()=>{ const o=cloudData(); let n=0; for(const k in o){ const c=o[k].content; n+=c.length; for(let i=0;i<c.length;i++) n=(n*31+c.charCodeAt(i))|0; } return String(n); };
 async function cloudApi(path,opt={}){
   const r=await fetch('https://api.github.com'+path,{...opt,headers:{'Accept':'application/vnd.github+json','Authorization':'Bearer '+cloud.tok,'Content-Type':'application/json'}});
   if(!r.ok){ const t=await r.text().catch(()=>''); throw new Error(r.status===401?'Jeton refusé (vérifie-le)':r.status===404?'Espace cloud introuvable':('Erreur '+r.status+' '+t.slice(0,80))); }
@@ -2531,7 +2531,7 @@ function cloudRender(){
   <ol class="mut" style="padding-left:18px;margin:6px 0 10px"><li>Sur github.com : Settings → Developer settings → Personal access tokens → <i>Tokens (classic)</i> → Generate new token.</li><li>Coche seulement la case <b>gist</b>, valide, copie le jeton.</li><li>Colle-le ci-dessous. Sur le 2<sup>e</sup> appareil, colle le même jeton puis « Récupérer ».</li></ol>
   <input id="cloudtok" type="password" placeholder="Jeton GitHub (ghp_…)" value="${esc(cloud.tok)}" autocomplete="off" style="width:100%;box-sizing:border-box">
   <div class="row" style="margin:10px 0"><button id="cloudup">⬆️ Envoyer vers le cloud</button><button class="sec" id="clouddown">⬇️ Récupérer depuis le cloud</button></div>
-  <label class="row" style="gap:8px"><input type="checkbox" id="cloudauto" ${cloud.auto?'checked':''}> Envoi automatique quand mes données changent</label>
+  <label style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;cursor:pointer"><input type="checkbox" id="cloudauto" style="width:auto;flex:none" ${cloud.auto?'checked':''}><span>Envoi automatique quand mes données changent</span></label>
   <p class="mut" style="margin:8px 0 0">Dernière synchro : ${esc(when)}${cloud.gid?'':' · espace pas encore créé'}</p>
   <p id="cloudmsg" style="margin:6px 0 0;min-height:1.3em"></p>
   <div class="row" style="justify-content:flex-end"><button class="sec" id="cloudclose">Fermer</button></div>`;
