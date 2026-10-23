@@ -50,6 +50,7 @@
   tr.click{cursor:pointer}tr.click:hover td{background:var(--hover)}
   .scroll{overflow-x:auto}
   .win{font-weight:700}
+  .pallbtn{display:none}.rk{white-space:nowrap}
   .tm-m{display:none;font-size:11px}.ntri{display:none}.dshort{display:none}
   .link{cursor:pointer;color:var(--acc)}.link:hover{text-decoration:underline}
   .tag{display:inline-block;padding:1px 7px;border-radius:99px;font-size:11px;border:1px solid var(--line);color:var(--mut)}
@@ -182,6 +183,8 @@
     #modal{padding:0}
     #modal .mbox{width:100%}
     #modal .mbox>.card{border-radius:0;min-height:100vh;box-shadow:none;padding:12px 10px calc(24px + env(safe-area-inset-bottom))}
+    .pallbtn{display:inline-block}table:not(.pall) .pc{display:none}.rk{font-size:12px;min-width:44px}
+    td.pn{max-width:44vw;white-space:normal;line-height:1.25}td.pn .av,th.pn .av{display:none!important}.rk .mv{display:none}.rk{min-width:0;padding-right:2px}
     .tm-m{display:inline}.dfull{display:none}.dshort{display:inline}.fctl{flex:1 1 100%;min-width:0}.tag.fin{display:none}.nfull{display:none}.ntri{display:inline;font-weight:inherit}
     #fPer{flex:1 1 100%!important}
     button[data-act=footrefresh]{flex:1 1 100%}
@@ -694,9 +697,9 @@ function weekCard(S){
   let min=ui.weekMin, lowered=false; if(!rows.some(r=>r.n>=min)){ min=1; lowered=ui.weekMin>1; }
   rows=rows.filter(r=>r.n>=min).sort((a,b)=>b.sc-a.sc).slice(0,5);
   const label=latest?`du ${fmtD(new Date(latest-7*86400e3).toISOString())} au ${fmtD(new Date(latest).toISOString())}`:'tous les matchs';
-  return `<div class="card"><div class="row between"><h2 style="margin:0">⭐ Équipe de la semaine <span class="mut" style="font-weight:400;font-size:13px">${label}</span></h2><select id="weekMin">${[1,2,3].map(n=>`<option value="${n}" ${ui.weekMin===n?'selected':''}>≥ ${n} match(s)</option>`).join('')}</select></div>
+  return `<div class="card"><div class="row between"><h2 style="margin:0">⭐ Équipe de la semaine <span class="mut" style="font-weight:400;font-size:13px">${label}</span></h2></div>
   <div class="scroll"><table><thead><tr><th class="l">Joueur</th><th>MJ</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>Score</th></tr></thead><tbody>${rows.map((r,i)=>`<tr><td class="l">${i+1}. ${avatar(r.id,r.name,r.tri,26)}${playerLink(r.id,r.name)} <span class="mut">${esc(r.tri)}</span></td><td>${r.n}</td><td>${f1(r.pts/r.n)}</td><td>${f1(r.reb/r.n)}</td><td>${f1(r.ast/r.n)}</td><td>${f1(r.stl/r.n)}</td><td>${f1(r.blk/r.n)}</td><td><b>${f1(r.sc)}</b></td></tr>`).join('')||'<tr><td colspan="8" class="empty">Aucun joueur.</td></tr>'}</tbody></table></div>
-  <p class="mut" style="margin:6px 0 0">Score = points + rebonds + passes + interceptions + contres, en moyenne par match. Période : 7 jours avant le dernier match de ta base.${lowered?' Aucun joueur n\'a assez de matchs, le minimum est abaissé à 1.':''}</p></div>`;
+  <p class="mut" style="margin:6px 0 0">Score = points + rebonds + passes + interceptions + contres, en moyenne par match. Période : 7 jours avant le dernier match de ta base.</p></div>`;
 }
 
 /* ---- Repos et enchaînements ---- */
@@ -754,9 +757,9 @@ function prevStats(){
 function moveHtml(prevMap,key,nowRank){
   if(!prevMap) return '';
   const p=prevMap.get(key);
-  if(p==null) return ' <span class="mut" title="Nouveau dans ce classement">new</span>';
+  if(p==null) return ' <span class="mut mv" title="Nouveau dans ce classement">new</span>';
   const d=p-nowRank;
-  return d>0?` <span class="ok" title="Monte de ${d} place(s)">▲${d}</span>`:d<0?` <span class="err" title="Descend de ${-d} place(s)">▼${-d}</span>`:' <span class="mut" title="Inchangé">=</span>';
+  return d>0?` <span class="ok mv" title="Monte de ${d} place(s)">▲${d}</span>`:d<0?` <span class="err mv" title="Descend de ${-d} place(s)">▼${-d}</span>`:' <span class="mut mv" title="Inchangé">=</span>';
 }
 const moveNote=S=>S.prev?`<p class="mut" style="margin:8px 0 0">▲▼ = places gagnées ou perdues grâce aux matchs du ${esc(fmtD(S.prev.day))} (dernière soirée de ta base). « = » : inchangé, « new » : absent du classement avant.</p>`:'';
 const rankMap=ids=>new Map(ids.map((id,i)=>[id,i+1]));
@@ -999,9 +1002,10 @@ function viewHome(S){
   B.favs=`<div class="card"><h2>Mes favoris</h2>${(teamCards||playerCards)?`<div class="grid2">${teamCards}${playerCards}</div>`:'<p class="mut">Aucun favori pour l\'instant. Ajoute une équipe ci-dessous, ou clique sur l\'étoile ☆ à côté d\'un joueur.</p>'}${sel}</div>`;
   B.notes=notesCard(S);
   B.bigmatch=bigCard(S); B.duel=duelCard(S); B.news=newsCard();
-  const last=[...fin].reverse().slice(0,6).map(g=>{ const aw=+g.away.score>+g.home.score, hw=+g.home.score>+g.away.score;
+  const lastDay=fin.length?nyDay(fin[fin.length-1].time):null, dayG=fin.filter(g=>nyDay(g.time)===lastDay);
+  const last=[...(lastDay?dayG:[])].reverse().map(g=>{ const aw=+g.away.score>+g.home.score, hw=+g.home.score>+g.away.score;
     return `<tr class="click" data-act="opengame" data-id="${g.id}"><td class="l">${gameDate(g)}</td><td class="l ${aw?'win':''}">${teamLogo(g.away.tri,20)}<span class="nfull">${esc(g.away.name)}</span><span class="ntri">${esc(g.away.tri)}</span></td><td class="${aw?'win':''}">${g.away.score}</td><td class="l ${hw?'win':''}">@ ${teamLogo(g.home.tri,20)}<span class="nfull">${esc(g.home.name)}</span><span class="ntri">${esc(g.home.tri)}</span></td><td class="${hw?'win':''}">${g.home.score}</td></tr>`; }).join('');
-  B.results=`<div class="card"><h2>Derniers résultats</h2><div class="scroll"><table><tbody>${last||'<tr><td class="empty">Aucun match terminé</td></tr>'}</tbody></table></div></div>`;
+  B.results=`<div class="card"><h2>Derniers résultats <span class="mut" style="font-weight:400;font-size:13px">${lastDay?esc(fmtD(dayG[dayG.length-1].time))+' · '+dayG.length+' match'+(dayG.length>1?'s':''):''}</span></h2><div class="scroll"><table><tbody>${last||'<tr><td class="empty">Aucun match terminé</td></tr>'}</tbody></table></div></div>`;
   const topAll=Object.values(S.P).sort((a,b)=>b.pts/b.gp-a.pts/a.gp), pvTop=S.prev?rankMap(playerRanking(S.prev.P,'pts',-1,1)):null;
   const top=topAll.slice(0,5).map((p,i)=>`<tr><td class="l">${i+1}.${moveHtml(pvTop,p.id,i+1)} ${avatar(p.id,p.name,p.tri,26)}${playerLink(p.id,p.name)} <span class="mut">${p.tri}</span></td><td>${p.gp}</td><td><b>${f1(p.pts/p.gp)}</b></td><td>${p.pts}</td></tr>`).join('');
   B.scorers=`<div class="card"><h2>Meilleurs marqueurs</h2><div class="scroll"><table><thead><tr><th class="l">Joueur</th><th>MJ</th><th>PTS moy.</th><th>PTS tot.</th></tr></thead><tbody>${top||'<tr><td class="empty" colspan="4">–</td></tr>'}</tbody></table></div></div>`;
@@ -1017,7 +1021,6 @@ function viewGames(S){
   const rows=list.map(g=>{ const fin=g.status===3, hw=+g.home.score>+g.away.score, aw=+g.away.score>+g.home.score;
     return `<tr class="click" data-act="opengame" data-id="${g.id}"><td class="l">${gameDate(g)}${noteMark('game:'+g.id)}</td><td class="l ${aw&&fin?'win':''}">${teamLogo(g.away.tri,20)}<span class="nfull">${esc(g.away.name)}</span><span class="ntri">${esc(g.away.tri)}</span></td><td class="${aw&&fin?'win':''}">${g.away.score}</td><td class="l ${hw&&fin?'win':''}">@ ${teamLogo(g.home.tri,20)}<span class="nfull">${esc(g.home.name)}</span><span class="ntri">${esc(g.home.tri)}</span></td><td class="${hw&&fin?'win':''}">${g.home.score}</td><td>${fin?'<span class="tag fin">Terminé</span>':`<span class="tag live">${esc(g.statusText||'À venir')}</span>`}</td><td><button class="danger" data-act="delgame" data-id="${g.id}" title="Supprimer">✕</button></td></tr>`; }).join('');
   let h=`<div class="card"><div class="row" style="margin-bottom:10px"><select id="gTeam"><option value="">Toutes les équipes</option>${tris.map(t=>`<option value="${t}" ${t===ui.gTeam?'selected':''}>${esc(tname(t))}</option>`).join('')}</select><span class="mut">${list.length} match(s) · clique sur un match pour le box score</span></div><div class="scroll"><table><thead><tr><th>Date</th><th class="l">Visiteur</th><th></th><th class="l">Domicile</th><th></th><th>Statut</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="7" class="empty">Aucun match.</td></tr>'}</tbody></table></div></div>`;
-  if(ui.openGame&&games[ui.openGame]) h+=boxScore(games[ui.openGame]);
   return h;
 }
 
@@ -1091,7 +1094,7 @@ const PCOL={
 };
 const PMODES={avg:['gp','min','pts','sp','reb','ast','stl','blk','to','fg','tp','ft','pm','tr'],tot:['gp','tmin','tpts','treb','tast','tstl','tblk','tto','tfg','ttp','tft'],adv:['gp','min','gmsc','ts','efg','p36','r36','a36','ato','dd','td','pm']};
 function playerRows(S){
-  let rows=Object.values(S.P).filter(r=>r.gp>=ui.pMin);
+  let rows=Object.values(S.P);
   if(ui.pTeam) rows=rows.filter(r=>r.tri===ui.pTeam);
   if(ui.pFav) rows=rows.filter(r=>fav.players[r.id]);
   if(ui.pSearch) rows=rows.filter(r=>r.name.toLowerCase().includes(ui.pSearch.toLowerCase()));
@@ -1099,13 +1102,15 @@ function playerRows(S){
   rows.sort((a,b)=>{ if(k==='name'||k==='tri') return String(a[k]).localeCompare(String(b[k]))*d; const c=PCOL[k]||PCOL.pts; const x=c.v(a),y=c.v(b); return (x>y?1:x<y?-1:0)*d; });
   return rows;
 }
+const PKEY={avg:['pts','reb','ast'],tot:['tpts','treb','tast'],adv:['gmsc','ts','efg']};
 function playersTable(rows,cols,withTeam=true,rk=null){
-  const th=cols.map(k=>`<th class="s" data-act="sort" data-k="${k}">${PCOL[k].l}${ui.pSort.k===k?(ui.pSort.d>0?' ▲':' ▼'):''}</th>`).join('');
-  return `<div class="scroll"><table><thead><tr>${rk?'<th>#</th>':''}<th class="l s pn" data-act="sort" data-k="name">Joueur${ui.pSort.k==='name'?(ui.pSort.d>0?' ▲':' ▼'):''}</th>${withTeam?`<th class="s hide-m" data-act="sort" data-k="tri">Éq.</th>`:''}${th}</tr></thead><tbody>${rows.map(r=>`<tr>${rk?`<td>${rk.now.get(r.id)||''}${moveHtml(rk.prev,r.id,rk.now.get(r.id))}</td>`:''}<td class="l pn">${star('player',r.id,r.name)}${avatar(r.id,r.name,r.tri,26)}${playerLink(r.id,r.name)}${withTeam?` <span class="mut tm-m">${esc(r.tri)}</span>`:''}${noteMark('player:'+r.id)}</td>${withTeam?`<td class="hide-m">${esc(r.tri)}</td>`:''}${cols.map(k=>`<td>${PCOL[k].f(r)}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${cols.length+3}" class="empty">Aucun joueur (il faut au moins un match terminé).</td></tr>`}</tbody></table></div>`;
+  const ess=new Set([...(PKEY[ui.pMode]||[]),ui.pSort.k]), isP=cols===PMODES[ui.pMode], pc=k=>isP&&!ess.has(k)?' pc':'';
+  const th=cols.map(k=>`<th class="s${pc(k)}" data-act="sort" data-k="${k}">${PCOL[k].l}${ui.pSort.k===k?(ui.pSort.d>0?' ▲':' ▼'):''}</th>`).join('');
+  return `<div class="scroll"><table class="${ui.pAll?'pall':''}"><thead><tr>${rk?'<th>#</th>':''}<th class="l s pn" data-act="sort" data-k="name">Joueur${ui.pSort.k==='name'?(ui.pSort.d>0?' ▲':' ▼'):''}</th>${withTeam?`<th class="s hide-m" data-act="sort" data-k="tri">Éq.</th>`:''}${th}</tr></thead><tbody>${rows.map(r=>`<tr>${rk?`<td class="rk">${rk.now.get(r.id)||''}${moveHtml(rk.prev,r.id,rk.now.get(r.id))}</td>`:''}<td class="l pn">${star('player',r.id,r.name)}${avatar(r.id,r.name,r.tri,26)}${playerLink(r.id,r.name)}${withTeam?` <span class="mut tm-m">${esc(r.tri)}</span>`:''}${noteMark('player:'+r.id)}</td>${withTeam?`<td class="hide-m">${esc(r.tri)}</td>`:''}${cols.map(k=>`<td class="${pc(k).trim()}">${PCOL[k].f(r)}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${cols.length+3}" class="empty">Aucun joueur (il faut au moins un match terminé).</td></tr>`}</tbody></table></div>`;
 }
 function playerRk(S){
   const k=ui.pSort.k; if(k==='name'||k==='tri') return null;
-  return {now:rankMap(playerRanking(S.P,k,ui.pSort.d,ui.pMin)),prev:S.prev?rankMap(playerRanking(S.prev.P,k,ui.pSort.d,ui.pMin)):null};
+  return {now:rankMap(playerRanking(S.P,k,ui.pSort.d,1)),prev:S.prev?rankMap(playerRanking(S.prev.P,k,ui.pSort.d,1)):null};
 }
 function viewPlayers(S){
   const rows=playerRows(S), teams=[...new Set(Object.values(S.P).map(r=>r.tri))].sort();
@@ -1114,9 +1119,9 @@ function viewPlayers(S){
     <input type="text" id="pSearch" placeholder="Rechercher un joueur…" value="${esc(ui.pSearch)}" style="min-width:160px;flex:0 1 220px">
     <select id="pTeam"><option value="">Toutes les équipes</option>${teams.map(t=>`<option value="${t}" ${t===ui.pTeam?'selected':''}>${t}</option>`).join('')}</select>
     <select id="pMode"><option value="avg" ${ui.pMode==='avg'?'selected':''}>Moyennes</option><option value="tot" ${ui.pMode==='tot'?'selected':''}>Totaux</option><option value="adv" ${ui.pMode==='adv'?'selected':''}>Avancées</option></select>
-    <select id="pMin">${Array.from({length:maxGp},(_,i)=>`<option value="${i+1}" ${ui.pMin===i+1?'selected':''}>≥ ${i+1} match(s)</option>`).join('')}</select>
+    
     <label class="mut"><input type="checkbox" id="pFav" ${ui.pFav?'checked':''}> Favoris</label>
-    <button class="sec" data-act="csv">CSV</button></div>
+    <button class="sec" data-act="csv">CSV</button><button class="sec pallbtn" data-act="pall">${ui.pAll?'Moins de stats':'Toutes les stats'}</button></div>
     ${playersTable(rows,PMODES[ui.pMode],true,playerRk(S))}
     <p class="mut" style="margin:8px 0 0">Matchs terminés uniquement. ${ui.pMode==='adv'?'TS% = efficacité réelle au tir ; eFG% = tir ajusté aux 3 pts ; /36 = par 36 minutes ; DD/TD = double-doubles / triple-doubles ; Game Score = indice de performance de Hollinger moyen par match.':''} Clique sur un nom pour le détail. Le rang # suit la colonne triée, sur l'ensemble des joueurs.</p>${moveNote(S)}</div>`;
   return h;
@@ -1373,7 +1378,7 @@ function viewCal(S){
 }
 
 /* ================= Foot (ESPN) : données ================= */
-function closeModals(){ ui.openPlayer=ui.openTeam=ui.fMatch=ui.fPlayer=ui.fTeam=null; }
+function closeModals(){ ui.openPlayer=ui.openTeam=ui.openGame=ui.fMatch=ui.fPlayer=ui.fTeam=null; }
 function setSport(x){ const ch=ui.sport!==x; ui.sport=x; try{ localStorage.setItem('suivi-sport',x); }catch(e){} if(ch) setTimeout(()=>{ try{ showWelcome(false); liveRender(); }catch(e){} },400); }
 const KEYFO='suivi-foot-v1', KEYFF='suivi-foot-fav', KEYFP='suivi-foot-favp', KEYSP='suivi-sport';
 const FLG=[['fra.1','Ligue 1'],['eng.1','Premier League'],['esp.1','Liga'],['ita.1','Serie A'],['ger.1','Bundesliga'],['uefa.champions','Ligue des champions'],['uefa.europa','Europa League'],['uefa.europa.conf','Conférence League']];
@@ -2035,6 +2040,7 @@ function render(){
     if(FT) mh=footModalHtml();
     else if(ui.openPlayer&&S.P[ui.openPlayer]) mh=playerDetail(S,S.P[ui.openPlayer]);
     else if(ui.openTeam&&S.T[ui.openTeam]) mh=teamDetail(S,S.T[ui.openTeam]);
+    else if(ui.openGame&&games[ui.openGame]) mh=boxScore(games[ui.openGame]);
     mb.innerHTML=mh; M.classList.toggle('on',!!mh); document.body.style.overflow=mh?'hidden':''; M.scrollTop=keep;
     try{ renderLeaders(S); }catch(e){}
   }catch(e){ console.error(e); $('#view').innerHTML='<div class="card err">Erreur d\'affichage : '+esc(e.message)+'</div>'; }
@@ -2107,8 +2113,9 @@ function toggleFav(type,id,name){
   if(a==='closewelcome') return;
   if(a==='favteam') toggleFav('team',id);
   else if(a==='favplayer') toggleFav('player',id,el.dataset.name);
-  else if(a==='opengame'){ closeModals(); ui.openGame=(ui.tab==='games'&&ui.openGame===id)?null:id; ui.tab='games'; render(); if(ui.openGame) setTimeout(()=>{ const c=document.querySelectorAll('#view .card'); if(c.length>1) c[c.length-1].scrollIntoView({behavior:'smooth',block:'start'}); },30); }
+  else if(a==='opengame'){ closeModals(); ui.openGame=id; $('#modal').scrollTop=0; render(); }
   else if(a==='closegame'){ ui.openGame=null; render(); }
+  else if(a==='pall'){ ui.pAll=!ui.pAll; render(); }
   else if(a==='delgame'){ if(confirm('Supprimer ce match ?')){ delete games[id]; if(ui.openGame===id) ui.openGame=null; save(); render(); } }
   else if(a==='openplayer'){ ui.openPlayer=id; ui.openTeam=null; $('#modal').scrollTop=0; render(); }
   else if(a==='closeplayer'){ ui.openPlayer=null; render(); }
@@ -2144,7 +2151,7 @@ function toggleFav(type,id,name){
   else if(a==='addfavteam'){ const v=$('#favTeamSel').value; if(v&&!fav.teams.includes(v)){ fav.teams.push(v); saveFav(); render(); } }
 }));
 $('#modal').addEventListener('click',e=>{ if(e.target.id==='modal'){ closeModals(); render(); } });
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&$('#welcome').classList.contains('on')){ closeWelcome(); return; } if(e.key==='Escape'&&!tv.on&&(ui.openPlayer||ui.openTeam||ui.fMatch||ui.fTeam||ui.fPlayer)){ closeModals(); render(); } });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&$('#welcome').classList.contains('on')){ closeWelcome(); return; } if(e.key==='Escape'&&!tv.on&&(ui.openPlayer||ui.openTeam||ui.openGame||ui.fMatch||ui.fTeam||ui.fPlayer)){ closeModals(); render(); } });
 $('#modal').addEventListener('change',e=>{ const t=e.target; if(t.dataset&&t.dataset.note){ setNote(t.dataset.note,t.dataset.name,t.value); t.style.borderColor='var(--ok)'; setTimeout(()=>{ t.style.borderColor=''; },900); } });
 $('#tabs').addEventListener('click',e=>{ const b=e.target.closest('[data-act=tab]'); if(b){ if(ui.sport==='foot') ui.ftab=b.dataset.t; else ui.tab=b.dataset.t; closeModals(); render(); } });
 $('#view').addEventListener('change',e=>{
