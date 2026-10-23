@@ -1,0 +1,36 @@
+name: Statify notifications
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+# un seul passage à la fois : les suivants attendent (pas de doublons d'alertes)
+concurrency:
+  group: statify-notif
+  cancel-in-progress: false
+jobs:
+  notif:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - id: run
+        run: node notify.mjs
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+      - name: Garder la mémoire des alertes déjà envoyées
+        if: always()
+        run: |
+          git config user.name statify-bot
+          git config user.email bot@users.noreply.github.com
+          git add state.json
+          git diff --cached --quiet || (git commit -m "état" && git pull --rebase -q && git push)
+      - name: Match encore en cours : on relance tout de suite (pas de trou)
+        if: steps.run.outputs.again == 'true'
+        run: gh workflow run statify-notif.yml
+        env:
+          GH_TOKEN: ${{ github.token }}
