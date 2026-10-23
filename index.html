@@ -146,6 +146,12 @@
   .gsh{font-size:12px;font-weight:700;color:var(--mut);margin:10px 4px 2px;text-transform:uppercase;letter-spacing:.04em}
   .gsr{display:flex;justify-content:space-between;gap:10px;padding:10px 8px;border-radius:8px;cursor:pointer}.gsr:hover,.gsr:active{background:var(--hover)}
   #gsq{font-size:16px}
+  .fbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px;font-size:12px}
+  .fbar .fbtn{padding:5px 11px;font-size:13px}
+  .fmenu{display:flex;flex-direction:column;gap:6px;max-width:360px;margin:-4px 0 12px;padding:8px;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+  .fmenu button{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:1px;padding:8px 10px}
+  .fmenu button span{font-size:12px;font-weight:400;opacity:.8}
+  .fmenu .fmx{align-items:center;padding:5px}
   #offPill{display:none;position:fixed;left:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:9400;background:var(--warn);color:#1a1200;font-weight:700;font-size:12px;padding:6px 10px;border-radius:999px;box-shadow:0 2px 10px rgba(0,0,0,.3)}
   body.offline #offPill{display:block}
   #modal .mbox{width:min(1000px,100%);min-width:0;max-width:100%;margin:0 auto}
@@ -196,7 +202,7 @@
     td.pn{max-width:44vw;white-space:normal;line-height:1.25}td.pn .av,th.pn .av{display:none!important}.rk .mv{display:none}.rk{min-width:0;padding-right:2px}
     .tm-m{display:inline}.dfull{display:none}.dshort{display:inline}.fctl{flex:1 1 100%;min-width:0}.tag.fin{display:none}.nfull{display:none}.ntri{display:inline;font-weight:inherit}
     #fPer{flex:1 1 100%!important}
-    button[data-act=footrefresh]{flex:1 1 100%}
+
     .liverow .ls{font-size:18px}
     h2{font-size:17px}
   }
@@ -338,6 +344,7 @@ function saveJ(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){}
 let games = loadJ(KEY,{});
 let fav = loadJ(KEYF,{teams:[],players:{}}); if(!fav.teams) fav.teams=[]; if(!fav.players) fav.players={};
 let sched = loadJ(KEYS,[]);
+let liveData={items:[],t:0,err:'',busy:false}, liveMem={}, liveLast=0, liveSeen=new Set();
 let notes = loadJ(KEYN,{});
 let backup = loadJ(KEYB,{last:null,snooze:0});
 let homeCfg = loadJ(KEYH,{order:HOME_BLOCKS.map(b=>b[0]),hidden:[]});
@@ -1605,21 +1612,24 @@ function footUrls(per){
     for(let a=a0;a<a1;a++){ out.push({k:'scores',lg,u:`https://site.api.espn.com/apis/site/v2/sports/soccer/${lg}/scoreboard?dates=${f(now+a*day)}`}); } }
   return out;
 }
-async function footGet(u){ let err; for(let k=0;k<3;k++){ try{ const r=await fetch(u); if(!r.ok){ if(r.status===400||r.status===404){ const e=new Error('HTTP '+r.status); e.fatal=1; throw e; } throw new Error('HTTP '+r.status); } return await r.json(); }catch(e){ err=e; if(e.fatal) break; await new Promise(z=>setTimeout(z,400*(k+1))); } } throw err; }
+async function footGet(u){ let err; for(let k=0;k<3;k++){ try{ const r=await fetch(u); if(!r.ok){ if(r.status===400||r.status===404||r.status===403||r.status===429){ const e=new Error('HTTP '+r.status); e.fatal=1; throw e; } throw new Error('HTTP '+r.status); } return await r.json(); }catch(e){ err=e; if(e.fatal) break; await new Promise(z=>setTimeout(z,400*(k+1))); } } throw err; }
 async function footRefresh(){
-  if(footBusy) return; footBusy=true;
+  if(footBusy) return; footBusy=true; try{ render(); }catch(e){}
   const per=footPeriods()[ui.fPer||0], urls=footUrls(per); let ok=0,ko=0,last='',n=0;
   try{
     say('⏳ ESPN : classements et calendrier…','warn');
-    for(let i=0;i<urls.length;i+=6){ if(i%30===0) say(`⏳ ESPN : classements et calendrier ${i}/${urls.length}…`,'warn'); await Promise.all(urls.slice(i,i+6).map(async x=>{ try{ ok+=footIngest({__foot:x.k,league:x.lg,data:await footGet(x.u)}); }catch(e){ ko++; last=e.message||String(e); } })); }
+    const stop=()=>/HTTP 4(03|29)/.test(last);
+    for(let i=0;i<urls.length;i+=6){ if(stop()) break; if(i%30===0) say(`⏳ ESPN : classements et calendrier ${i}/${urls.length}…`,'warn'); await Promise.all(urls.slice(i,i+6).map(async x=>{ try{ ok+=footIngest({__foot:x.k,league:x.lg,data:await footGet(x.u)}); }catch(e){ ko++; last=e.message||String(e); } })); }
+    if(stop()){ saveJ(KEYFO,foot); render(); say('⏸️ ESPN demande de ralentir ('+esc(last)+') : actualisation interrompue pour ne pas être bloqué. Tes données sont gardées, réessaie dans 10-15 minutes.','warn'); return; }
     if(ko>ok){ saveJ(KEYFO,foot); render(); say(`⚠️ ESPN a répondu à ${ok} requête(s) sur ${urls.length} (erreur : ${esc(last)}). Le navigateur bloque la lecture directe depuis ce fichier : utilise le <b>favori foot</b> sur espn.com/soccer, puis Ctrl+V ici.`,'err'); return; }
     if(!ok){ say('ESPN refuse la lecture directe depuis cette page ('+esc(last)+'). Utilise le favori foot sur espn.com/soccer, puis Ctrl+V ici.','err'); return; }
     const todo=Object.entries(foot.leagues).flatMap(([lg,L])=>Object.values(L.matches).filter(m=>m.done&&((!m.x&&!m.nx)||m.lv)).map(m=>({lg,m}))).sort((a,b)=>Date.parse(b.m.d)-Date.parse(a.m.d)).slice(0,400);
-    for(let i=0;i<todo.length;i+=3){ say(`⏳ Détails des matchs : ${i}/${todo.length}…`,'warn');
+    for(let i=0;i<todo.length;i+=3){ if(stop()) break; say(`⏳ Détails des matchs : ${i}/${todo.length}…`,'warn');
       await Promise.all(todo.slice(i,i+3).map(async t=>{ try{ footIngest({__foot:'summary',league:t.lg,id:t.m.id,data:await footGet(`https://site.api.espn.com/apis/site/v2/sports/soccer/${t.lg}/summary?event=${t.m.id}`)}); n++; }catch(e){ ko++; last=e.message||String(e); } })); }
     const saved=footSave(); render();
+    if(stop()){ say(`⏸️ ESPN demande de ralentir : ${ok} lot(s) et ${n} match(s) détaillé(s) enregistrés, le reste a été interrompu pour ne pas être bloqué. Réessaie dans 10-15 minutes.`,'warn'); return; }
     say(`✓ Foot mis à jour : ${ok} lot(s), ${n} match(s) détaillé(s)${ko?`, ${ko} échec(s) (dernière erreur : ${esc(last)})`:''}.${foot.pruned?' Espace presque plein : les détails les plus anciens ont été allégés.':''}${saved?'':' ⚠️ Sauvegarde impossible (espace plein).'}`,saved?'ok':'err');
-  } finally { footBusy=false; }
+  } finally { footBusy=false; try{ render(); }catch(e){} }
 }
 let footBusy=false;
 
@@ -1740,10 +1750,12 @@ function footBig(max=6){
 }
 
 /* ================= Foot : vues ================= */
-function footControls(){
+function footControls(extra){
   const has=Object.keys(foot.leagues).length, nd=footIdx().mt.filter(m=>m.x).length, tot=footIdx().done.length;
   const dbg=foot.dbg?`<details style="margin-top:8px"><summary class="mut">🔧 Certains matchs n'ont pas de détails : diagnostic</summary><p class="mut">Copie ce texte et envoie-le-moi pour que j'adapte la lecture : <code>${esc(JSON.stringify(foot.dbg))}</code></p></details>`:'';
-  return `<div class="card"><div class="row between"><div class="row fctl"><select id="fPer">${footPeriods().map((p,i)=>`<option value="${i}" ${(ui.fPer||0)===i?'selected':''}>${esc(p.l)}</option>`).join('')}</select><button data-act="footrefresh">🔄 Actualiser le foot</button></div><span class="mut">${tot} match(s) joués en mémoire · ${nd} avec détails (compositions, statistiques, buts)</span></div>${has?'':`<p class="mut" style="margin:10px 0 0">Aucune donnée. Clique sur « Actualiser le foot » (lecture directe d'ESPN). Si le navigateur refuse : installe le <b>favori foot</b> (fichier bouton-favori-foot.html), va sur <b>espn.com/soccer</b>, clique sur le favori, puis reviens ici et fais <b>Ctrl+V</b>.</p>`}${dbg}</div>`;
+  const P=[['⚡','Rapide','2 semaines avant / après · ~1 min'],['📅','1 mois','1 mois avant, 3 semaines après · ~2 min'],['🗓️','Toute la saison','depuis août · plusieurs minutes']], cur=ui.fPer||0;
+  const menu=ui.fMenu?`<div class="fmenu">${P.map(([ic,l,d],i)=>`<button class="${i===cur?'':'sec'}" data-act="footper" data-i="${i}"><b>${ic} ${l}</b><span>${d}</span></button>`).join('')}<button class="sec fmx" data-act="footmenu">Annuler</button></div>`:'';
+  return `<div class="fbar"><button class="sec fbtn" data-act="footmenu" ${footBusy?'disabled':''}>${footBusy?'⏳ Actualisation…':'🔄 Actualiser'}</button><span class="mut">${tot} match${tot>1?'s':''} en mémoire · ${nd} détaillé${nd>1?'s':''}</span>${extra?`<span style="margin-left:auto">${extra}</span>`:''}</div>${menu}${has?'':`<div class="card"><p class="mut" style="margin:0">Aucune donnée. Clique sur « Actualiser » (lecture directe d'ESPN). Si le navigateur refuse : installe le <b>favori foot</b> (fichier bouton-favori-foot.html), va sur <b>espn.com/soccer</b>, clique sur le favori, puis reviens ici et fais <b>Ctrl+V</b>.</p></div>`}${dbg}`;
 }
 function footRow(m,showLg){
   const live=m.st==='in', pre=!m.done&&!live, hw=m.done&&m.hs>m.as, aw=m.done&&m.as>m.hs, mine=ffav.includes(m.hid)||ffav.includes(m.aid);
@@ -1785,7 +1797,8 @@ function fhomeEditor(cfg){
 }
 function footHome(){
   const {mt,done,P}=footIdx(), pl=Object.values(P), lg=ui.fLg&&ui.fLg!=='mine'?ui.fLg:'';
-  let h=footControls(); const FB={};
+  const cfg=fhomeNorm();
+  let h=footControls(`${cfg.hidden.length?`<span class="mut">${cfg.hidden.length} bloc${cfg.hidden.length>1?'s':''} masqué${cfg.hidden.length>1?'s':''} · </span>`:''}<button class="sec fbtn" data-act="fhomeedit" title="Personnaliser l'accueil">⚙<span class="hide-m"> Personnaliser</span></button>`); const FB={};
   if(!mt.length) return h;
   h+=multiBanner();
   const al=footAlerts(); if(al.length) FB.alerts=`<div class="card"><div class="row between"><h2 style="margin:0">🔔 Alertes foot</h2><button class="sec" data-act="welcome">🎉 Revoir en plein écran</button></div>${al.map(x=>`<div class="alert">${x}</div>`).join('')}</div>`;
@@ -1799,8 +1812,7 @@ function footHome(){
   FB.matches=`<div class="card"><div class="row between"><h2 style="margin:0">Matchs</h2>${footLgSel('fLg',ui.fLg,true,true)}</div>${footLists(footMatches(),8,!ui.fLg||ui.fLg==='mine')}</div>`;
   const sc=lg?pl.filter(p=>inLg(p,lg)):pl;
   FB.scorers=`<div class="card"><h2>Meilleurs buteurs ${lg?'— '+esc(footLgName(lg)):''}</h2>${sc.length?`<div class="grid2"><div><h3>Buts</h3>${footScorersTable(sc,'g','buts',6)}</div><div><h3>Passes décisives</h3>${footScorersTable(sc,'a','PD',6)}</div></div>`:(lg?footLeadersFallback(lg):'')||'<p class="mut">Les buteurs apparaissent après le chargement des détails des matchs (bouton Actualiser).</p>'}</div>`;
-  const cfg=fhomeNorm();
-  h+=`<div class="row between" style="margin-bottom:10px"><span class="mut">${cfg.hidden.length?cfg.hidden.length+' bloc(s) masqué(s)':''}</span><button class="sec" data-act="fhomeedit">⚙ Personnaliser l'accueil</button></div>${ui.fHomeEdit?fhomeEditor(cfg):''}`;
+  h+=ui.fHomeEdit?fhomeEditor(cfg):'';
   for(const id of cfg.order) if(!cfg.hidden.includes(id)&&FB[id]) h+=FB[id];
   return h;
 }
@@ -2154,20 +2166,16 @@ function multiBanner(){
   return D.slice(0,2).map(d=>{ const iso=new Date(d.start).toISOString(), live=d.ms.some(m=>m.st==='in'), hr=+new Date(iso).toLocaleTimeString('fr-FR',{timeZone:'Europe/Paris',hour:'2-digit',hour12:false}).slice(0,2), day=parisDK(iso)===today?(hr>=18?'ce soir':'aujourd\'hui'):(hr>=18?'demain soir':'demain');
     return `<div class="card" style="border-left:4px solid #e04030"><div class="row between"><div>🔥 <b>Multiplex ${esc(footLgName(d.lg))} ${live?'en cours':day}</b> : ${d.ms.length} matchs à ${esc(parisT(iso))}</div><button data-act="multigo" data-lg="${esc(d.lg)}">${live?'Suivre en direct':'Ouvrir'}</button></div></div>`; }).join('');
 }
-function multiSet(lg){
-  const d=multiDetect().find(x=>x.lg===lg); if(d) return d.ms;
-  const now=Date.now(); return Object.values(multiAll()).filter(m=>m.lg===lg&&Date.parse(m.d)>=now-6*36e5&&Date.parse(m.d)<=now+30*36e5).sort((a,b)=>Date.parse(a.d)-Date.parse(b.d));
-}
 function multiTable(lg,ms){
   const LG=foot.leagues[lg]; if(!LG||!LG.standings.length) return '';
   const upd=LG.upd||0, rows=LG.standings.map(r=>({...r,np:r.pts,ngd:r.gd,ngf:r.gf,pl:null})), by=Object.fromEntries(rows.map(r=>[r.id,r]));
   let used=0;
   for(const m of ms){ if(m.st!=='in'&&m.st!=='post') continue; const tt=Date.parse(m.d); if(m.st==='post'&&upd>=tt+115*6e4) continue; used++;
-    for(const [id,gf,ga] of [[m.hid,m.hs,m.as],[m.aid,m.as,m.hs]]){ const r=by[id]; if(!r) continue; r.np+=gf>ga?3:gf===ga?1:0; r.ngd+=gf-ga; r.ngf+=gf; r.pl=m; } }
+    for(const [id,gf,ga] of [[m.hid,m.hs,m.as],[m.aid,m.as,m.hs]]){ const r=by[id]; if(!r) continue; r.np+=gf>ga?3:gf===ga?1:0; r.ngd+=gf-ga; r.ngf+=gf; r.pl=m; r.res=(gf>ga?'gagne ':gf<ga?'perd ':'nul ')+gf+'-'+ga; } }
   const zoneAt=LG.standings.map(r=>r.zone), srt=[...rows].sort((a,b)=>b.np-a.np||b.ngd-a.ngd||b.ngf-a.ngf||a.rank-b.rank); srt.forEach((r,i)=>{ r.nr=i+1; });
   const body=srt.map(r=>{ const mv=r.rank-r.nr, ar=mv>0?`<span style="color:var(--ok)">▲${mv}</span>`:mv<0?`<span style="color:var(--bad)">▼${-mv}</span>`:'<span class="mut">=</span>',
     z=zoneAt[r.nr-1], z0=r.zone, ch=mv!==0&&z&&(!z0||z.d!==z0.d), tag=ch?`<span style="display:block;font-size:11px;color:${esc(z.c||'var(--mut)')}">→ ${esc(zoneFr(z.d))}</span>`:'';
-    const sc=r.pl?` <span class="mut" style="font-size:12px">(${r.pl.hs}-${r.pl.as}${r.pl.st==='in'?' en cours':' terminé'})</span>`:'';
+    const sc=r.pl?` <span class="mut" style="font-size:12px">(${r.pl.st==='in'?r.res:r.res.replace(/^gagne/,'a gagné').replace(/^perd/,'a perdu').replace(/^nul/,'nul,')})</span>`:'';
     return `<tr class="${r.pl?'favrow':''}"><td>${r.nr}</td><td>${ar}</td><td class="l">${footLogo(r.logo,18)}${esc(r.name)}${sc}${tag}</td><td><b>${r.np}</b></td><td>${r.ngd>0?'+':''}${r.ngd}</td></tr>`; }).join('');
   return `<div class="card"><h2>📈 Classement live <span class="mut" style="font-weight:400;font-size:12px">· projeté avec les scores du moment${used?'':' (aucun match commencé)'}</span></h2><div class="scroll"><table><thead><tr><th>#</th><th></th><th class="l">Club</th><th>Pts</th><th>Diff.</th></tr></thead><tbody>${body}</tbody></table></div><p class="mut" style="font-size:12px;margin:6px 0 0">Basé sur le dernier classement chargé : « ▲▼ » = places gagnées ou perdues si les scores restent ainsi.</p></div>`;
 }
@@ -2185,24 +2193,44 @@ function multiBilan(ms){
   li.push(`⚽ <b>${goals}</b> but${goals>1?'s':''} sur ${started.length} match${started.length>1?'s':''} commencé${started.length>1?'s':''}`);
   if(comeback){ const m=comeback.m, nm=comeback.side==='h'?m.hn:m.an; li.push(`🔄 <b>Plus gros retournement</b> : ${esc(nm)} était mené de ${comeback.def} but${comeback.def>1?'s':''} et ${comeback.win?'gagne':'égalise'} (${esc(m.hn)} ${m.hs}-${m.as} ${esc(m.an)})`); }
   if(late&&late.min>0) li.push(`⏱️ <b>But le plus tardif</b> : ${esc(late.p||'?')} à la ${esc(late.ms||late.min+"'")}${late.og?' (csc)':''} (${esc(late.m.hn)} - ${esc(late.m.an)})`);
-  if(best.length&&top[0][1]>=1) li.push(`👑 <b>Meilleur buteur de la soirée</b> : ${best.slice(0,3).map(esc).join(', ')+(best.length>3?' et '+(best.length-3)+(best.length-3>1?' autres':' autre'):'')} (${top[0][1]} but${top[0][1]>1?'s':''})`);
+  if(best.length&&(top[0][1]>=2||best.length===1)) li.push(`👑 <b>Meilleur buteur de la soirée</b> : ${best.slice(0,3).map(esc).join(', ')+(best.length>3?' et '+(best.length-3)+(best.length-3>1?' autres':' autre'):'')} (${top[0][1]} but${top[0][1]>1?'s':''})`);
   return `<div class="card"><h2>📊 Bilan de la soirée</h2>${li.map(x=>`<p style="margin:6px 0">${x}</p>`).join('')}</div>`;
+}
+const KEYMP='suivi-multi-pick';
+let mpick=loadJ(KEYMP,{});
+function mpickToggle(id){ if(mpick[id]) delete mpick[id]; else mpick[id]=Date.now(); const lim=Date.now()-7*864e5; for(const k in mpick) if(mpick[k]<lim) delete mpick[k]; saveJ(KEYMP,mpick); }
+const multiWin=m=>{ const t=Date.parse(m.d), now=Date.now(); return t>=now-6*36e5&&t<=now+30*36e5; };
+function multiSet(lg){
+  const M=Object.values(multiAll()), byT=(a,b)=>Date.parse(a.d)-Date.parse(b.d);
+  if(lg==='all') return M.filter(multiWin).sort(byT);
+  if(lg==='pick') return M.filter(m=>multiWin(m)&&(mpick[m.id]||ffav.includes(m.hid)||ffav.includes(m.aid))).sort(byT);
+  const d=multiDetect().find(x=>x.lg===lg); if(d) return d.ms;
+  return M.filter(m=>m.lg===lg&&multiWin(m)).sort(byT);
 }
 function footMultiView(){
   const now=Date.now(), M=Object.values(multiAll()), det=multiDetect();
-  const avail=FLG.filter(([c])=>det.some(d=>d.lg===c)||M.some(m=>m.lg===c&&Date.parse(m.d)>=now-6*36e5&&Date.parse(m.d)<=now+30*36e5));
-  let lg=ui.fMulti; if(!avail.find(x=>x[0]===lg)) lg=(det[0]&&det[0].lg)||(avail[0]&&avail[0][0])||'';
+  const lgs=FLG.filter(([c])=>det.some(d=>d.lg===c)||M.some(m=>m.lg===c&&multiWin(m)));
+  const opts=[['all','🌍 Tous les championnats'],['pick','⭐ Ma sélection'],...lgs.map(([c,n])=>[c,(det.some(d=>d.lg===c)?'🔥 ':'')+n])];
+  let lg=ui.fMulti; if(!opts.find(x=>x[0]===lg)) lg=(det[0]&&det[0].lg)||'all';
   let h=footControls();
-  if(!lg) return h+`<div class="card"><h2>🔥 Multiplex</h2><p class="mut">Aucun match dans les prochaines 30 heures. Quand au moins 3 matchs d'un même championnat commencent à moins de 30 minutes d'écart, Statify te prévient ici et sur l'accueil foot. Actualise les scores (🔄) pour charger le calendrier.</p></div>`;
-  const ms=multiSet(lg), isMx=det.some(d=>d.lg===lg), live=ms.filter(m=>m.st==='in').length;
+  if(!lgs.length) return h+`<div class="card"><h2>🔥 Multiplex</h2><p class="mut">Aucun match dans les prochaines 30 heures. Quand au moins 3 matchs d'un même championnat commencent à moins de 30 minutes d'écart, Statify te prévient ici et sur l'accueil foot. Actualise les scores (🔄) pour charger le calendrier.</p></div>`;
+  const ms=multiSet(lg), mixed=new Set(ms.map(m=>m.lg)).size>1, isMx=det.some(d=>d.lg===lg), live=ms.filter(m=>m.st==='in').length;
   const rank=m=>{ const c=liveMem['f'+m.id]; return (c&&c.chg&&now-c.chg<90000)?0:m.st==='in'?1:m.st==='pre'?2:3; };
   const sorted=[...ms].sort((a,b)=>rank(a)-rank(b)||(rank(a)===0?liveMem['f'+b.id].chg-liveMem['f'+a.id].chg:rank(a)===3?Date.parse(b.d)-Date.parse(a.d):Date.parse(a.d)-Date.parse(b.d)));
   const evl=(m,sd)=>m.ev.filter(e=>e.s===sd).sort((x,y)=>x.min-y.min).map(e=>`<div>${e.t==='rc'?'🟥':'⚽'} ${esc(e.p||'?')} ${esc(e.ms||e.min+"'")}${e.t==='og'?' (csc)':e.t==='pg'?' (pen.)':''}</div>`).join('');
-  const card=m=>{ const c=liveMem['f'+m.id], fl=(c&&c.chg&&now-c.chg<30000)?' flash':'', mid=m.st==='pre'?parisT(m.d):m.st==='post'?'Terminé':m.txt||'En cours', mine=ffav.includes(m.hid)||ffav.includes(m.aid);
-    return `<div class="liverow${fl}" data-act="fmatch" data-id="${esc(m.id)}" style="cursor:pointer"><div class="lt">${footLogo(m.hl,22)}<b>${esc(m.hn)}</b>${mine?' ⭐':''}</div><div class="ls">${m.st==='pre'?'<span class="mut">–</span>':m.hs+' - '+m.as}<span class="lm" style="${m.st==='post'?'color:var(--mut)':m.st==='pre'?'color:var(--mut)':''}">${esc(mid)}</span></div><div class="lt r"><b>${esc(m.an)}</b>${footLogo(m.al,22)}</div>${m.ev.length?`<div class="lev"><div>${evl(m,'h')}</div><div style="text-align:right">${evl(m,'a')}</div></div>`:''}</div>`; };
-  const first=ms.length?[...ms].sort((a,b)=>Date.parse(a.d)-Date.parse(b.d))[0]:null;
-  h+=`<div class="card livecard"><div class="row between" style="margin-bottom:6px"><h2 style="margin:0">${live?'<span class="livedot"></span>':''}🔥 ${isMx?'Multiplex':'Soirée'} ${esc(footLgName(lg))}</h2><select id="fMulti">${avail.map(([c,n])=>`<option value="${esc(c)}" ${c===lg?'selected':''}>${esc(n)}</option>`).join('')}</select></div><p class="mut" style="margin:0 0 6px">${ms.length} match${ms.length>1?'s':''}${first?' · premier coup d\'envoi à '+esc(parisT(first.d))+' (heure de Paris)':''}${live?' · '+live+' en cours':''} · le match qui vient de marquer remonte en premier</p>${sorted.map(card).join('')||'<p class="mut">Aucun match.</p>'}</div>`;
-  h+=multiTable(lg,ms)+multiBilan(ms);
+  const card=m=>{ const c=liveMem['f'+m.id], fl=(c&&c.chg&&now-c.chg<30000)?' flash':'', mid=m.st==='pre'?parisT(m.d):m.st==='post'?'Terminé':m.txt||'En cours', fv=ffav.includes(m.hid)||ffav.includes(m.aid), pk=!!mpick[m.id];
+    const star=fv?'<span title="Match d\'un de tes clubs : toujours dans ta sélection" style="opacity:.8">⭐</span>':`<span class="link" data-act="mpick" data-id="${esc(m.id)}" title="${pk?'Retirer de':'Ajouter à'} ma sélection" style="font-size:18px;text-decoration:none">${pk?'⭐':'☆'}</span>`;
+    return `<div class="liverow${fl}" data-act="fmatch" data-id="${esc(m.id)}" style="cursor:pointer"><div class="lt">${star}${footLogo(m.hl,22)}<b>${esc(m.hn)}</b></div><div class="ls">${m.st==='pre'?'<span class="mut">–</span>':m.hs+' - '+m.as}<span class="lm" style="${m.st!=='in'?'color:var(--mut)':''}">${esc(mid)}</span></div><div class="lt r"><b>${esc(m.an)}</b>${footLogo(m.al,22)}</div>${m.ev.length?`<div class="lev"><div>${evl(m,'h')}</div><div style="text-align:right">${evl(m,'a')}</div></div>`:''}${mixed?`<div class="mut" style="grid-column:1/-1;text-align:center;font-size:11px;margin-top:-2px">${esc(footLgName(m.lg))}</div>`:''}</div>`; };
+  const first=ms.length?ms[0]:null, title=lg==='all'?'🌍 Multiplex tous championnats':lg==='pick'?'⭐ Mon multiplex':`🔥 ${isMx?'Multiplex':'Soirée'} ${esc(footLgName(lg))}`;
+  const empty=lg==='pick'?'<p class="mut">Ta sélection est vide. Choisis « 🌍 Tous les championnats » et touche ☆ sur les matchs que tu veux suivre (les matchs de tes clubs favoris y sont ajoutés d\'office).</p>':'<p class="mut">Aucun match.</p>';
+  h+=`<div class="card livecard"><div class="row between" style="margin-bottom:6px"><h2 style="margin:0">${live?'<span class="livedot"></span>':''}${title}</h2><select id="fMulti">${opts.map(([c,n])=>`<option value="${esc(c)}" ${c===lg?'selected':''}>${esc(n)}</option>`).join('')}</select></div>${ms.length?`<p class="mut" style="margin:0 0 6px">${ms.length} match${ms.length>1?'s':''}${first?' · premier coup d\'envoi à '+esc(parisT(first.d))+' (heure de Paris)':''}${live?' · '+live+' en cours':''} · touche ☆ pour ajouter un match à ta sélection</p>`:''}${sorted.map(card).join('')||empty}</div>`;
+  // classement live : un championnat à la fois
+  const tl=[...new Set(ms.map(m=>m.lg))].filter(l=>foot.leagues[l]&&foot.leagues[l].standings.length);
+  if(tl.length){ const liveLg=(ms.find(m=>m.st==='in')||{}).lg; let cur=ui.fMultiT; if(!tl.includes(cur)) cur=tl.includes(liveLg)?liveLg:tl[0];
+    let tb=multiTable(cur,ms.filter(m=>m.lg===cur));
+    if(tl.length>1) tb=tb.replace('<h2>📈 Classement live',`<div class="row" style="margin-bottom:6px"><select id="fMultiT">${tl.map(l=>`<option value="${esc(l)}" ${l===cur?'selected':''}>${esc(footLgName(l))}</option>`).join('')}</select></div><h2>📈 Classement live`);
+    h+=tb; }
+  h+=multiBilan(ms);
   return h;
 }
 
@@ -2372,6 +2400,8 @@ function toggleFav(type,id,name){
   else if(a==='fcpre'){ const lg=footLgOrFirst(), D=footCurveData(lg); if(D&&ui.fCurve){ const by=[...D.ids].sort((a,b)=>D.rank[a][D.K-1]-D.rank[b][D.K-1]); ui.fCurve.sel=id==='top'?by.slice(0,5):id==='bot'?by.slice(-5):by.filter(i=>ffav.includes(i)).slice(0,8); } render(); }
   else if(a==='footlg'){ ui.fLg=id; ui.fpTeam=ui.fTeamF=ui.fCalTeam=''; render(); }
   else if(a==='footrefresh') footRefresh();
+  else if(a==='footmenu'){ ui.fMenu=!ui.fMenu; render(); }
+  else if(a==='footper'){ ui.fPer=+el.dataset.i; ui.fMenu=false; render(); footRefresh(); }
   else if(a==='nbarefresh') nbaRefresh();
   else if(a==='footfav'){ const i=ffav.indexOf(id); if(i>=0) ffav.splice(i,1); else ffav.push(id); saveJ(KEYFF,ffav); render(); }
   else if(a==='footfavp'){ const i=ffavP.indexOf(id); if(i>=0) ffavP.splice(i,1); else ffavP.push(id); saveJ(KEYFP,ffavP); render(); }
@@ -2379,6 +2409,7 @@ function toggleFav(type,id,name){
   else if(a==='fmore'){ ui.fLimit=(ui.fLimit||60)+60; render(); }
   else if(a==='fcalmore'){ ui.fCalLimit=(ui.fCalLimit||250)+250; render(); }
   else if(a==='fcsv') footCsv();
+  else if(a==='mpick'){ mpickToggle(id); render(); }
   else if(a==='multigo'){ closeModals(); ui.ftab='multi'; ui.fMulti=el.dataset.lg; render(); window.scrollTo(0,0); }
   else if(a==='cmpgo'){ closeModals(); if(el.dataset.sp==='foot'){ ui.ftab='compare'; ui.fCmpMode='teams'; ui.fCmpA=el.dataset.a; ui.fCmpB=el.dataset.b; ui.fLg=''; } else { ui.tab='compare'; ui.cmpMode='teams'; ui.cmpA=el.dataset.a; ui.cmpB=el.dataset.b; } render(); window.scrollTo(0,0); }
   else if(a==='cmpopen'){ closeModals(); ui.tab='compare'; ui.cmpMode='players'; ui.cmpA=el.dataset.a; ui.cmpB=el.dataset.b; render(); }
@@ -2405,7 +2436,7 @@ $('#view').addEventListener('change',e=>{
   else if(id==='pMin') ui.pMin=+t.value; else if(id==='pFav') ui.pFav=t.checked; else if(id==='confF') ui.confF=t.value;
   else if(id==='recMin') ui.recMin=+t.value; else if(id==='weekMin') ui.weekMin=+t.value; else if(id==='schedFav') ui.schedFav=t.checked; else if(id==='calEarly') ui.calEarly=t.checked; else if(id==='raceF') ui.raceF=t.value;
   else if(id==='fLg'){ ui.fLg=t.value; ui.fpTeam=ui.fTeamF=ui.fCalTeam=''; } else if(id==='fTeamF') ui.fTeamF=t.value; else if(id==='fWhen') ui.fWhen=t.value; else if(id==='fpTeam') ui.fpTeam=t.value; else if(id==='fpPos') ui.fpPos=t.value; else if(id==='fpMin') ui.fpMin=+t.value;
-  else if(id==='fMulti') ui.fMulti=t.value; else if(id==='fPer') ui.fPer=+t.value; else if(id==='fTMode') ui.fTMode=t.value; else if(id==='fCurveMode'){ if(ui.fCurve) ui.fCurve.mode=t.value; } else if(id==='fCurveAdd'){ if(ui.fCurve&&t.value&&ui.fCurve.sel&&ui.fCurve.sel.length<8) ui.fCurve.sel.push(t.value); } else if(id==='fCmpMode'){ ui.fCmpMode=t.value; ui.fCmpA=''; ui.fCmpB=''; } else if(id==='fCmpA') ui.fCmpA=t.value; else if(id==='fCmpB') ui.fCmpB=t.value;
+  else if(id==='fMulti') ui.fMulti=t.value; else if(id==='fMultiT') ui.fMultiT=t.value; else if(id==='fPer') ui.fPer=+t.value; else if(id==='fTMode') ui.fTMode=t.value; else if(id==='fCurveMode'){ if(ui.fCurve) ui.fCurve.mode=t.value; } else if(id==='fCurveAdd'){ if(ui.fCurve&&t.value&&ui.fCurve.sel&&ui.fCurve.sel.length<8) ui.fCurve.sel.push(t.value); } else if(id==='fCmpMode'){ ui.fCmpMode=t.value; ui.fCmpA=''; ui.fCmpB=''; } else if(id==='fCmpA') ui.fCmpA=t.value; else if(id==='fCmpB') ui.fCmpB=t.value;
   else if(id==='fCalWhen') ui.fCalWhen=t.value; else if(id==='fCalTeam') ui.fCalTeam=t.value; else if(id==='fCalMonth') ui.fCalMonth=t.value; else if(id==='calTeam') ui.calTeam=t.value; else if(id==='calWhen') ui.calWhen=t.value; else if(id==='calMonth') ui.calMonth=t.value;
   else if(/^rkT[012]$/.test(id)){ const cur=[0,1,2].map(i=>(document.getElementById('rkT'+i)||{}).value||''); ui.rkT=cur; }
   else if(id==='cmpMode'){ ui.cmpMode=t.value; ui.cmpA=''; ui.cmpB=''; } else if(id==='cmpA') ui.cmpA=t.value; else if(id==='cmpB') ui.cmpB=t.value;
@@ -2447,7 +2478,7 @@ $('#fileImport').onchange=async e=>{
   }catch(err){ say('Fichier invalide.','err'); }
 };
 $('#btnMore').onclick=()=>document.body.classList.toggle('menu-open');
-$('#btnRefresh').onclick=()=>{ if(ui.sport==='foot') footRefresh(); else nbaRefresh(); };
+$('#btnRefresh').onclick=()=>{ if(ui.sport==='foot'){ if(footBusy) return; ui.fMenu=true; render(); window.scrollTo({top:0,behavior:'smooth'}); } else nbaRefresh(); };
 ['#msg','#fmsg'].forEach(q=>{ const n=$(q); if(n) n.addEventListener('click',()=>{ n.innerHTML=''; n.style.display='none'; }); });
 window.addEventListener('afterprint',()=>document.body.classList.remove('print-one'));
 setTimeout(notifyBig,1200);
@@ -2495,7 +2526,7 @@ $('#gs').addEventListener('click',e=>{
 });
 
 /* ================= Cloud (GitHub Gist privé) ================= */
-const CLOUD_KEYS=['suivi-nba-v1','suivi-nba-fav','suivi-nba-sched','suivi-nba-notes','suivi-nba-home','suivi-nba-lead','suivi-foot-v1','suivi-foot-fav','suivi-foot-favp','suivi-foot-home','suivi-live-fav'];
+const CLOUD_KEYS=['suivi-nba-v1','suivi-nba-fav','suivi-nba-sched','suivi-nba-notes','suivi-nba-home','suivi-nba-lead','suivi-foot-v1','suivi-foot-fav','suivi-foot-favp','suivi-foot-home','suivi-multi-pick','suivi-live-fav'];
 const KEYC='suivi-cloud';
 let cloud=loadJ(KEYC,{tok:'',gid:'',auto:false,last:0,sig:''});
 const cloudSave=()=>{ try{ localStorage.setItem(KEYC,JSON.stringify(cloud)); }catch(e){} };
@@ -2597,7 +2628,7 @@ function nLbl(sn,clk,per,det){
 }
 function liveFavOnly(){ try{ return localStorage.getItem('suivi-live-fav')!=='0'; }catch(e){ return true; } }
 function liveAlertOk(it){ if(!liveFavOnly()||!ffav.length) return true; if(multiLive(it.lg)) return true; return ffav.includes(it.h.id)||ffav.includes(it.a.id); }
-let liveData={items:[],t:0,err:'',busy:false}, liveMem={}, liveLast=0, liveSeen=new Set();
+/* liveData & co : déclarés en haut du script (utilisés dès le premier affichage) */
 const liveF=t=>new Date(t).toISOString().slice(0,10).replace(/-/g,'');
 function liveItem(kind,lg,e){
   const c=e.competitions&&e.competitions[0]; if(!c) return null;
@@ -2639,28 +2670,40 @@ function liveRender(){
     return `<div class="liverow${fl}"${go}><div class="lt">${lo(x.h)}<b>${esc(x.h.n)}</b></div><div class="ls">${x.h.s} - ${x.a.s}<span class="lm">${esc(liveText(x))}</span></div><div class="lt r"><b>${esc(x.a.n)}</b>${lo(x.a)}</div>${bar(x)}${evs(x)}<div class="lc mut">${mine(x)?'⭐ ':''}${esc(lg)}</div></div>`; };
   box.innerHTML=`<div class="card livecard"><h2><span class="livedot"></span><span class="lhn">En direct</span> <span class="mut" style="font-size:12px;font-weight:400">· mis à jour il y a ${ago} s · <span class="link" data-act="liverefresh">actualiser</span></span>${want==='f'?`<label class="mut" style="font-size:12px;margin-left:auto;font-weight:400"><input type="checkbox" data-act="livefav" ${liveFavOnly()?'checked':''}> Alertes buts : mes clubs</label>`:''}</h2>${L.map(row).join('')}</div>`;
 }
-async function liveFetch(manual){
-  if(liveData.busy) return; liveData.busy=true;
+async function liveFetch(manual,only){
+  if(liveData.busy) return; liveData.busy=true; liveTry=Date.now();
   try{
     const now=Date.now(), jobs=[];
     const days=[liveF(now)]; if(new Date(now).getUTCHours()<5) days.push(liveF(now-864e5));
-    for(const [lg] of FLG) for(const d of days) jobs.push({k:'f',lg,u:`https://site.api.espn.com/apis/site/v2/sports/soccer/${lg}/scoreboard?dates=${d}`});
-    jobs.push({k:'n',lg:'nba',u:`https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${liveF(now-6*36e5)}`});
-    let ok=0; const items=[], ing=[];
-    await Promise.all(jobs.map(async j=>{ try{ const r=await fetch(j.u,{cache:'no-store'}); if(!r.ok) throw 0; const d=await r.json(); ok++;
+    if(!only) liveFull=now;
+    for(const [lg] of FLG) if(!only||only.has(lg)) for(const d of days) jobs.push({k:'f',lg,u:`https://site.api.espn.com/apis/site/v2/sports/soccer/${lg}/scoreboard?dates=${d}`});
+    if(!only||only.has('nba')) jobs.push({k:'n',lg:'nba',u:`https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${liveF(now-6*36e5)}`});
+    let ok=0; const items=[], ing=[], okLg=new Set(), failLg=new Set(); let lim=false;
+    await Promise.all(jobs.map(async j=>{ try{ const r=await fetch(j.u,{cache:'no-store'}); if(!r.ok){ if(r.status===429||r.status===403) lim=true; throw 0; } const d=await r.json(); ok++; okLg.add(j.k==='n'?'nba':j.lg);
       let any=false; for(const e of (d.events||[])){ const it=liveItem(j.k,j.lg,e); if(!it) continue; items.push(it); if(it.st==='in'||liveSeen.has(it.k+':'+it.lg+':'+it.id)) any=true; }
-      if(j.k==='f'&&any) ing.push({lg:j.lg,d}); }catch(e){} }));
+      if(j.k==='f'&&any) ing.push({lg:j.lg,d}); }catch(e){ failLg.add(j.k==='n'?'nba':j.lg); } }));
+    for(const l of failLg) okLg.delete(l);
+    // ESPN refuse ou ne répond pas : on ralentit (30 s, 1 min, 2 min… jusqu'à 5 min), retour au rythme normal dès que ça répond
+    liveFail=lim?Math.min(liveFail+2,6):!ok?Math.min(liveFail+1,6):0;
     if(!ok){ liveData.err='ESPN ne répond pas'; if(manual) say('⚠️ Live : ESPN ne répond pas.','err'); return; }
     liveData.err=''; liveData.t=Date.now(); liveLast=liveData.t;
+    // mode rapide : on garde tels quels les championnats non interrogés
+    // championnats non interrogés (mode rapide) ou qui n'ont pas répondu : on garde leurs derniers scores connus
+    for(const x of (liveData.items||[])) if(!okLg.has(x.k==='n'?'nba':x.lg)) items.push(x);
+    { const seen=new Set(); for(let i=0;i<items.length;i++){ const k=items[i].k+items[i].id; if(seen.has(k)){ items.splice(i,1); i--; } else seen.add(k); } }
     // changements de score
     const cur=new Set(); let changed=false;
     for(const it of items){ if(it.st!=='in') continue; const key=it.k+it.id; cur.add(it.k+':'+it.lg+':'+it.id); const sc=it.h.s+'-'+it.a.s, o=liveMem[key];
-      if(!o||o.sc!==sc){ liveMem[key]={sc,chg:o?Date.now():0}; if(o){ changed=true; if(it.k==='f'&&ui.sport==='foot'&&liveAlertOk(it)){ const lg=(it.ev||[]).filter(e=>e.g).pop(); say(`⚽ <b>BUT !</b> ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}${lg&&lg.p?' · '+esc(lg.p)+' '+esc(lg.m):''}`,'ok'); } } } }
+      if(!o||o.sc!==sc){ liveMem[key]={sc,chg:o?Date.now():0}; if(o){ changed=true; if(it.k==='f'&&ui.sport==='foot'&&liveAlertOk(it)){ const [oh,oa]=String(o.sc).split('-').map(Number), sd=it.h.s>oh?'h':it.a.s>oa?'a':'', gl=(it.ev||[]).filter(e=>e.g&&e.s===sd), lg=(sd&&gl.length===(sd==='h'?it.h.s:it.a.s))?gl[gl.length-1]:null, tm=sd==='h'?it.h.n:sd==='a'?it.a.n:''; say(sd?`⚽ <b>BUT de ${esc(tm)} !</b> ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}${lg&&lg.p?' · '+esc(lg.p)+' '+esc(lg.m)+(lg.og?' (csc)':lg.pg?' (pen.)':''):''}`:`📝 <b>Score modifié</b> (VAR ?) : ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}`,sd?'ok':'warn'); } } } }
     const ended=[...liveSeen].filter(k=>!cur.has(k)); liveSeen=cur;
     liveData.items=items;
-    for(const g of ing){ try{ footIngest({__foot:'scores',league:g.lg,data:g.d}); changed=true; }catch(e){} }
+    for(const g of ing){ try{ footIngest({__foot:'scores',league:g.lg,data:g.d}); }catch(e){} }
     if(ing.length) footSave();
-    liveRender(); if(changed&&!document.querySelector('input:focus')) render();
+    // on ne redessine la page que s'il s'est passé quelque chose (ou chaque minute pour faire avancer les minutes)
+    const sig=items.filter(x=>x.st!=='pre').map(x=>x.k+x.id+':'+x.h.s+'-'+x.a.s+':'+x.st+':'+(x.ev||[]).length).sort().join('|');
+    if(sig!==liveSig){ liveSig=sig; changed=true; }
+    if(!changed&&items.some(x=>x.st==='in')&&Date.now()-liveRen>6e4) changed=true;
+    liveRender(); if(changed&&!document.querySelector('input:focus')){ liveRen=Date.now(); render(); }
     if(ui.fMatch) await liveDetail(ui.fMatch);
     // fins de match : on complète les détails
     for(const k of ended){ const [kind,lg,id]=k.split(':'); const it=items.find(x=>x.k===kind&&x.id===id&&x.lg===lg);
@@ -2681,11 +2724,18 @@ function liveNeed(){
   if(Object.values(foot.leagues).some(L=>Object.values(L.matches).some(m=>!m.done&&m.st!=='post'&&w(m.d)))) return true;
   return sched.some(x=>x.s!==3&&w(x.t));
 }
+let liveFull=0, liveSig='', liveRen=0, liveFail=0, liveTry=0;
 function liveTick(){
   if(document.hidden) return; const now=Date.now(), age=now-liveLast;
-  if((liveNeed()&&age>=45e3)||age>=5*6e4) liveFetch(false); else liveRender();
+  // 1 échec isolé : on garde le rythme ; échecs répétés ou refus d'ESPN : 30 s, 1 min, 2 min… (max 5 min)
+  if(liveFail>=2&&now-liveTry<Math.min(3e5,15e3*2**(liveFail-1))){ liveRender(); return; }
+  const soon=x=>{ const t=Date.parse(x.d); return x.st==='pre'&&t&&t<=now+15*6e4&&t>=now-45*6e4; };
+  const L=(liveData.items||[]).filter(x=>x.st==='in'||soon(x));
+  // match en cours ou coup d'envoi dans les 15 min : toutes les ~15 s, seulement les championnats concernés ; tour complet de sécurité toutes les 3 min
+  if(L.length&&age>=15e3){ if(now-liveFull>=3*6e4) liveFetch(false); else liveFetch(false,new Set(L.map(x=>x.k==='n'?'nba':x.lg))); return; }
+  if((liveNeed()&&age>=30e3)||age>=5*6e4) liveFetch(false); else liveRender();
 }
-setInterval(liveTick,15000);
+setInterval(liveTick,5000);
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&Date.now()-liveLast>6e4) liveFetch(false); });
 setTimeout(()=>liveFetch(false),2500);
 document.addEventListener('click',e=>{ const r=e.target.closest('#liveBox [data-act=fmatch]'); if(r) setTimeout(()=>liveDetail(r.dataset.id),80); },false);
