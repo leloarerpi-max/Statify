@@ -2583,6 +2583,28 @@ async function cloudPull(){
     if(c){ try{ JSON.parse(c); localStorage.setItem(k,c); n++; }catch(e){} } }
   cloud.last=Date.now(); cloud.remote=g.updated_at; cloud.sig=cloudSig(); cloudSave(); return n;
 }
+function notifConfig(){
+  const nba=[...new Set(fav.teams)].filter(t=>TEAMS[t]);
+  let T={}; try{ T=footIdx().T; }catch(e){}
+  const names=[], lgs=new Set(), unk=[], order=FLG.map(x=>x[0]);
+  for(const id of ffav){ const t=T[id]; if(!t){ unk.push(id); continue; } names.push(t.n); Object.keys(t.comps||{}).forEach(l=>lgs.add(l)); if(t.lg) lgs.add(t.lg); }
+  let leagues=[...lgs].filter(l=>order.includes(l)).sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+  if(!leagues.length&&names.length) leagues=['fra.1'];
+  const cfg={ntfyTopic:'le-nom-secret-est-dans-le-secret-GitHub-NTFY_TOPIC',nba,foot:{teams:[...new Set(names)],leagues},multiplex:{enabled:true,leagues:['fra.1','uefa.champions']},alerts:{kickoff:true,score:true,final:true},live:{everySeconds:15,runMinutes:9}};
+  return {cfg,unk,text:JSON.stringify(cfg,null,2)};
+}
+async function notifSync(force){
+  if(!cloud.tok) throw new Error('Ajoute d\'abord ton jeton GitHub');
+  const n=notifConfig();
+  if(n.unk.length) throw new Error('Un club étoilé n\'est pas chargé : ouvre l\'onglet Foot, actualise (🔄), puis réessaie');
+  const core=JSON.stringify({nba:n.cfg.nba,foot:n.cfg.foot});
+  if(!force&&cloud.nsig===core) return false;
+  const files={'statify-notif.json':{content:JSON.stringify({v:1,nba:n.cfg.nba,foot:n.cfg.foot,maj:new Date().toISOString()},null,1)}};
+  let g=null;
+  if(cloud.nid){ try{ g=await cloudApi('/gists/'+cloud.nid,{method:'PATCH',body:JSON.stringify({files})}); }catch(e){ if(/introuvable/.test(e.message)) cloud.nid=''; else throw e; } }
+  if(!g) g=await cloudApi('/gists',{method:'POST',body:JSON.stringify({description:'Statify - alertes',public:true,files})});
+  cloud.nid=g.id; cloud.nsig=core; cloud.nlast=Date.now(); cloudSave(); return true;
+}
 function cloudMsg(t,ok){ const m=$('#cloudmsg'); if(m){ m.textContent=t; m.style.color=ok?'var(--ok)':'var(--bad)'; } }
 function cloudRender(){
   const b=$('#cloudbody'), when=cloud.last?new Date(cloud.last).toLocaleString('fr-FR'):'jamais';
@@ -2594,6 +2616,18 @@ function cloudRender(){
   <label style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;cursor:pointer"><input type="checkbox" id="cloudauto" style="width:auto;flex:none" ${cloud.auto?'checked':''}><span>Envoi automatique quand mes données changent</span></label>
   <p class="mut" style="margin:8px 0 0">Dernière synchro : ${esc(when)}${cloud.gid?'':' · espace pas encore créé'}</p>
   <p id="cloudmsg" style="margin:6px 0 0;min-height:1.3em"></p>
+  ${(()=>{ const n=notifConfig(), none=!n.cfg.nba.length&&!n.cfg.foot.teams.length, on=!!cloud.nid, when=cloud.nlast?new Date(cloud.nlast).toLocaleString('fr-FR'):'';
+    return `<hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
+  <h3 style="margin:0 0 6px">🔔 Alertes quand l'appli est fermée</h3>
+  <p class="mut" style="margin:0 0 6px">Le robot GitHub lit tes équipes étoilées (<b>${n.cfg.nba.length} en NBA, ${n.cfg.foot.teams.length} en foot</b>) dans un petit espace « Statify - alertes » de ton compte. Il est <b>public</b> mais ne contient que les noms de tes équipes.</p>
+  ${none?'<p class="mut"><b>Aucune équipe étoilée pour l\'instant.</b> Mets une ☆ sur tes équipes, puis reviens ici.</p>':''}
+  ${n.unk.length?`<p class="mut">⚠️ ${n.unk.length} club(s) étoilé(s) non chargé(s) : ouvre l'onglet Foot, actualise (🔄), puis reviens ici.</p>`:''}
+  <div class="row" style="margin:8px 0 0"><button id="nsend">🔔 ${on?'Mettre à jour maintenant':'Activer les alertes'}</button></div>
+  <p class="mut" style="margin:6px 0 0">${on?`✓ Actif${when?' · dernier envoi : '+esc(when):''}. Ensuite c'est automatique : ajoute ou retire une ☆, et le robot suit (Statify doit être ouvert au moment où tu changes tes étoiles).`:'Colle d\'abord ton jeton GitHub dans la zone plus haut, puis touche ce bouton.'}</p>
+  <p id="nmsg" style="margin:6px 0 0;min-height:1.3em"></p>
+  <details style="margin-top:6px"><summary class="mut" style="cursor:pointer">Secours : copier la config à la main</summary>
+  <textarea id="ncfg" readonly rows="9" style="width:100%;box-sizing:border-box;font:16px/1.3 ui-monospace,Menlo,monospace;white-space:pre;margin-top:6px">${esc(n.text)}</textarea>
+  <div class="row" style="margin:8px 0 0"><button class="sec" id="ncopy">📋 Copier ma config</button></div></details>`; })()}
   <div class="row" style="justify-content:flex-end"><button class="sec" id="cloudclose">Fermer</button></div>`;
 }
 function cloudOpen(){ cloudRender(); $('#cloud').classList.add('on'); }
@@ -2601,6 +2635,18 @@ function cloudClose(){ $('#cloud').classList.remove('on'); }
 $('#btnCloud').addEventListener('click',cloudOpen);
 $('#cloud').addEventListener('click',async e=>{
   const id=e.target.id; if(id==='cloud'||id==='cloudclose'){ cloudClose(); return; }
+  if(id==='nsend'){
+    const tk=($('#cloudtok').value||'').trim(); if(tk){ cloud.tok=tk; cloudSave(); }
+    const m=$('#nmsg'), say=(t,ok)=>{ if(m){ m.textContent=t; m.style.color=ok?'var(--ok)':'var(--bad)'; } };
+    say('Envoi…',true);
+    try{ await notifSync(true); say('✓ Alertes activées : le robot suit maintenant tes équipes étoilées.',true); }
+    catch(err){ say('⚠️ '+(err.message==='Failed to fetch'?'Pas de réseau':err.message),false); }
+    return; }
+  if(id==='ncopy'){
+    const ta=$('#ncfg'), m=$('#nmsg'), ok=()=>{ if(m){ m.textContent='✓ Copié. Colle-le dans config.json sur GitHub.'; m.style.color='var(--ok)'; } };
+    const fb=()=>{ try{ ta.focus(); ta.select(); ta.setSelectionRange(0,ta.value.length); if(document.execCommand('copy')) ok(); else if(m){ m.textContent='Sélectionne le texte et copie-le à la main.'; m.style.color='var(--bad)'; } }catch(err){ if(m){ m.textContent='Sélectionne le texte et copie-le à la main.'; m.style.color='var(--bad)'; } } };
+    try{ navigator.clipboard.writeText(ta.value).then(ok,fb); }catch(err){ fb(); }
+    return; }
   if(id==='cloudup'||id==='clouddown'){
     cloud.tok=($('#cloudtok').value||'').trim(); cloudSave();
     try{
@@ -2611,6 +2657,8 @@ $('#cloud').addEventListener('click',async e=>{
   }
 });
 $('#cloud').addEventListener('change',e=>{ if(e.target.id==='cloudauto'){ cloud.tok=($('#cloudtok').value||cloud.tok).trim(); cloud.auto=e.target.checked; cloudSave(); } });
+setInterval(()=>{ if(!cloud.tok||!cloud.nid||navigator.onLine===false) return; notifSync(false).catch(()=>{}); },60000);
+setTimeout(()=>{ if(cloud.tok&&cloud.nid&&navigator.onLine!==false) notifSync(false).catch(()=>{}); },8000);
 setInterval(()=>{ if(!cloud.auto||!cloud.tok||navigator.onLine===false) return; const sg=cloudSig(); if(sg!==cloud.sig) cloudPush().catch(()=>{}); },60000);
 document.addEventListener('keydown',e=>{
   const tag=(e.target.tagName||'').toLowerCase(), typing=tag==='input'||tag==='textarea'||tag==='select';
