@@ -1,49 +1,86 @@
 // Statify - notifications même appli fermée.
-// Tourne sur GitHub Actions toutes les ~10 min. Envoie des alertes via ntfy.sh (appli gratuite sur téléphone).
+// Tourne sur GitHub Actions. Quand un match qui t'intéresse est en cours (ou va démarrer),
+// le robot reste allumé et interroge ESPN toutes les ~15 s ; sinon il fait un seul passage et s'arrête.
+// Envoie des alertes via ntfy.sh (appli gratuite sur téléphone).
 import fs from 'node:fs';
 const cfg = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 const STATE = 'state.json';
+
+// Équipes étoilées dans Statify : le robot les lit dans le petit espace public « Statify - alertes » du propriétaire du dépôt.
+// S'il n'existe pas encore (ou est illisible), on garde la liste de config.json.
+async function loadStars() {
+  const owner = process.env.GITHUB_REPOSITORY_OWNER; if (!owner) return;
+  const hdr = { Accept: 'application/vnd.github+json', ...(process.env.GH_TOKEN ? { Authorization: `Bearer ${process.env.GH_TOKEN}` } : {}) };
+  try {
+    const r = await fetch(`https://api.github.com/users/${owner}/gists?per_page=100`, { headers: hdr });
+    if (!r.ok) { console.log(`Espace Statify illisible (${r.status}) : config.json utilisé`); return; }
+    const g = (await r.json()).find(x => x.description === 'Statify - alertes' && x.files && x.files['statify-notif.json']);
+    if (!g) { console.log("Pas encore d'espace « Statify - alertes » : config.json utilisé"); return; }
+    const full = await fetch(`https://api.github.com/gists/${g.id}`, { headers: hdr });
+    if (!full.ok) { console.log(`Espace Statify illisible (${full.status}) : config.json utilisé`); return; }
+    const j = JSON.parse((await full.json()).files['statify-notif.json'].content);
+    cfg.nba = Array.isArray(j.nba) ? j.nba : [];
+    cfg.foot = { ...(cfg.foot || {}), teams: j.foot?.teams || [], leagues: j.foot?.leagues?.length ? j.foot.leagues : (cfg.foot?.leagues || []) };
+    console.log(`Équipes lues depuis Statify : ${cfg.nba.length} NBA, ${cfg.foot.teams.length} foot`);
+  } catch { console.log('Lecture des étoiles impossible : config.json utilisé'); }
+}
+await loadStars();
 let st = {}; try { st = JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch {}
-const now = Date.now(), msgs = [];
+let now = Date.now(), msgs = [], days = [], blocked = false, act = new Map();
 const day = d => d.toISOString().slice(0, 10).replace(/-/g, '');
-const days = [day(new Date(now - 864e5)), day(new Date(now)), day(new Date(now + 864e5))];
+const setDays = () => { now = Date.now(); days = [day(new Date(now - 864e5)), day(new Date(now)), day(new Date(now + 864e5))]; };
+const ESPN_TRI = { WSH: 'WAS', NO: 'NOP', UTAH: 'UTA', SA: 'SAS', NY: 'NYK', GS: 'GSW' };   // codes ESPN -> codes de l'appli
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const favF = (cfg.foot?.teams || []).map(norm);
 const hm = iso => new Date(iso).toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' });
 
-async function board(path) {
+async function board(path, ds) {
   const out = [];
-  for (const d of days) {
+  for (const d of ds || days) {
     try {
       const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard?dates=${d}`);
-      if (r.ok) out.push(...((await r.json()).events || []));
+      if (r.status === 429 || r.status === 403) blocked = true;
+      else if (r.ok) out.push(...((await r.json()).events || []).map(e => { e._d = d; return e; }));
     } catch {}
   }
   return [...new Map(out.map(e => [e.id, e])).values()];
 }
+function isMine(e, kind) {
+  const c = e.competitions?.[0]; if (!c) return false;
+  const [h, a] = ['home', 'away'].map(s => c.competitors.find(x => x.homeAway === s)); if (!h || !a) return false;
+  return kind === 'nba'
+    ? [h, a].some(t => (cfg.nba || []).includes(ESPN_TRI[t.team.abbreviation] || t.team.abbreviation))
+    : [h, a].some(t => favF.some(f => norm(t.team.displayName).includes(f) || norm(t.team.shortDisplayName).includes(f)));
+}
+// un match est « actif » s'il est en cours ou démarre dans moins de 30 min : le robot reste alors allumé
+function mark(path, e) {
+  const state = e.status?.type?.state, t = Date.parse(e.date);
+  if ((state === 'in' && now - t < 5 * 3600e3) || (state === 'pre' && t - now <= 30 * 60e3 && t - now > -10 * 60e3)) {
+    if (!act.has(path)) act.set(path, new Set()); act.get(path).add(e._d);
+  }
+}
 function handle(e, kind, label) {
+  const lgName = kind === 'nba' ? 'NBA' : (LGN[label] || label), ico = kind === 'nba' ? '🏀' : '⚽';
   const c = e.competitions?.[0]; if (!c) return;
   const [h, a] = ['home', 'away'].map(s => c.competitors.find(x => x.homeAway === s));
   if (!h || !a) return;
-  const mine = kind === 'nba'
-    ? [h, a].some(t => (cfg.nba || []).includes(t.team.abbreviation))
-    : [h, a].some(t => favF.some(f => norm(t.team.displayName).includes(f) || norm(t.team.shortDisplayName).includes(f)));
-  if (!mine) return;
+  if (!isMine(e, kind)) return;
   const name = t => t.team.shortDisplayName || t.team.displayName;
   const state = e.status?.type?.state, start = Date.parse(e.date);
   const score = `${name(h)} ${h.score ?? 0} - ${a.score ?? 0} ${name(a)}`;
   const s = (st[e.id] ||= {});
   if (cfg.alerts?.kickoff && state === 'pre' && !s.k && start - now <= 20 * 60e3 && start - now > -5 * 60e3) {
-    s.k = 1; msgs.push([`${label} · coup d'envoi ${hm(e.date)}`, `${name(h)} - ${name(a)}`]);
+    s.k = 1; msgs.push([`⏰ Coup d'envoi à ${hm(e.date)} · ${lgName}`, `${ico} ${name(h)} - ${name(a)}`]);
   }
   const inMx = mx.enabled && (mx.leagues || cfg.foot?.leagues || []).includes(label) && Object.keys(st).some(k => k.startsWith(`mx:${label}:`) && now - Number(k.split(':')[2]) < 3.5 * 3600e3 && now >= Number(k.split(':')[2]) - 5 * 60e3);
-  if (cfg.alerts?.score && state === 'in' && !(kind === 'foot' && inMx)) {
+  if (cfg.alerts?.score && kind === 'foot' && state === 'in' && !inMx) {
     const sc = `${h.score}-${a.score}`;
-    if (s.sc !== undefined && s.sc !== sc) msgs.push([`${kind === 'nba' ? '🏀' : '⚽'} ${label}${kind === 'nba' ? '' : ' · BUT'}`, `${score}${e.status?.displayClock ? ` (${e.status.displayClock})` : ''}`]);
+    if (s.sc !== undefined && s.sc !== sc) msgs.push([`⚽ BUT ! · ${lgName}`, `${score}${e.status?.displayClock ? ` (${e.status.displayClock})` : ''}`]);
     s.sc = sc;
   }
   if (cfg.alerts?.final && state === 'post' && !s.f && now - start < 8 * 3600e3) {
-    s.f = 1; msgs.push([`${label} · terminé`, score]);
+    s.f = 1; msgs.push([`🏁 Terminé · ${lgName}`, `${ico} ${score}`]);
   }
 }
 const LGN = { 'fra.1': 'Ligue 1', 'eng.1': 'Premier League', 'esp.1': 'Liga', 'ita.1': 'Serie A', 'ger.1': 'Bundesliga', 'uefa.champions': 'Ligue des champions', 'uefa.europa': 'Europa League', 'uefa.europa.conf': 'Conférence League' };
@@ -93,7 +130,8 @@ async function multiplexAlerts(lg, evs) {
         const { e, h, a, p, cur } = ch, scorer = cur[0] > p[0] ? h : a, nm = t => t.team.shortDisplayName || t.team.displayName;
         let rk = '';
         if (base && base.length) { const before = project(base, [e], { [e.id]: p }), after = project(base, [e]), id = String(scorer.team.id);
-          if (before[id] && after[id]) rk = before[id].nr !== after[id].nr ? ` · ${nm(scorer)} ${after[id].nr < before[id].nr ? 'passe' : 'tombe'} ${before[id].nr}e → ${after[id].nr}e` : ` · ${nm(scorer)} ${after[id].nr}e`; }
+          const o = n => n === 1 ? '1er' : n + 'e';
+          if (before[id] && after[id]) rk = before[id].nr !== after[id].nr ? ` · ${nm(scorer)} ${after[id].nr < before[id].nr ? 'passe' : 'tombe'} ${o(before[id].nr)} → ${o(after[id].nr)}` : ` · ${nm(scorer)} ${o(after[id].nr)}`; }
         msgs.push([`🚨 But à ${nm(scorer)} (${label})`, `${nm(h)} ${cur[0]} - ${cur[1]} ${nm(a)}${e.status?.displayClock ? ` (${e.status.displayClock})` : ''}${rk}`]);
       }
       for (const e of live) { const [h, a] = sides(e) || []; if (h && a) prev[e.id] = [+h.score || 0, +a.score || 0]; }
@@ -101,24 +139,51 @@ async function multiplexAlerts(lg, evs) {
   }
 }
 
-const jobs = [];
-if ((cfg.nba || []).length) jobs.push(board('basketball/nba').then(ev => ev.forEach(e => handle(e, 'nba', 'NBA'))));
 const mxLeagues = new Set(mx.enabled ? (mx.leagues || cfg.foot?.leagues || []) : []);
-for (const lg of new Set([...(cfg.foot?.leagues || []), ...mxLeagues])) jobs.push(board(`soccer/${lg}`).then(async ev => {
-  if (!(cfg.foot?.leagues || []).includes(lg)) { /* ligue uniquement suivie pour les multiplex */ } else ev.forEach(e => handle(e, 'foot', lg));
-  if (mxLeagues.has(lg)) await multiplexAlerts(lg, ev);
-}));
-await Promise.all(jobs);
+const footLg = cfg.foot?.leagues || [];
+const PATHS = [];
+if ((cfg.nba || []).length) PATHS.push({ path: 'basketball/nba', kind: 'nba', code: 'NBA', foot: true, mx: false });
+for (const lg of new Set([...footLg, ...mxLeagues])) PATHS.push({ path: `soccer/${lg}`, kind: 'foot', code: lg, foot: footLg.includes(lg), mx: mxLeagues.has(lg) });
+
+async function pass(prevAct) {
+  setDays(); msgs = []; act = new Map();
+  const plan = prevAct ? PATHS.filter(p => prevAct.has(p.path)).map(p => ({ ...p, ds: [...prevAct.get(p.path)] })) : PATHS;
+  await Promise.all(plan.map(async p => {
+    const ev = await board(p.path, p.ds);
+    if (p.foot) ev.forEach(e => handle(e, p.kind, p.code));
+    if (p.mx) await multiplexAlerts(p.code, ev);
+    ev.forEach(e => { if ((p.foot && isMine(e, p.kind)) || p.mx) mark(p.path, e); });
+  }));
+}
 
 const topic = process.env.NTFY_TOPIC || cfg.ntfyTopic;
-for (const [title, body] of msgs) {
-  await fetch('https://ntfy.sh/', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ topic, title, message: body })
-  }).catch(() => {});
-  console.log('envoyé :', title, '|', body);
+async function flush() {
+  for (const [title, body] of msgs) {
+    await fetch('https://ntfy.sh/', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic, title, message: body })
+    }).catch(() => {});
+    console.log('envoyé :', title, '|', body);
+  }
 }
-// on oublie les vieux matchs
-for (const k of Object.keys(st)) { if (!st[k].t) st[k].t = now; if (now - st[k].t > 3 * 864e5) delete st[k]; }
-fs.writeFileSync(STATE, JSON.stringify(st));
-console.log(msgs.length ? msgs.length + ' alerte(s)' : 'rien de neuf');
+function save() {
+  // on oublie les vieux matchs
+  for (const k of Object.keys(st)) { if (!st[k].t) st[k].t = now; if (now - st[k].t > 3 * 864e5) delete st[k]; }
+  fs.writeFileSync(STATE, JSON.stringify(st));
+}
+
+const EVERY = Math.max(5, +(cfg.live?.everySeconds ?? 15)) * 1000;       // pas de 15 s par défaut (minimum 5 s)
+const BUDGET = Math.max(1, +(cfg.live?.runMinutes ?? 9)) * 60e3;          // durée max d'un passage en continu
+const t0 = Date.now();
+let prevAct = null, total = 0, again = false;
+for (;;) {
+  await pass(prevAct);
+  await flush(); total += msgs.length; save();
+  if (blocked) { console.log('ESPN limite les requêtes : on arrête ce tour, nouvel essai au prochain passage'); break; }
+  prevAct = act;
+  if (!prevAct.size) break;                                // plus rien d'actif : on s'arrête
+  if (Date.now() - t0 + EVERY + 3000 > BUDGET) { again = true; break; }   // encore actif : on demandera un nouveau passage
+  await sleep(EVERY);
+}
+if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `again=${again}\n`);
+console.log(total ? total + ' alerte(s)' : 'rien de neuf', again ? '· encore actif, relance' : '');
