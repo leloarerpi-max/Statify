@@ -2588,9 +2588,12 @@ function notifConfig(){
   let T={}; try{ T=footIdx().T; }catch(e){}
   const names=[], lgs=new Set(), unk=[], order=FLG.map(x=>x[0]);
   for(const id of ffav){ const t=T[id]; if(!t){ unk.push(id); continue; } names.push(t.n); Object.keys(t.comps||{}).forEach(l=>lgs.add(l)); if(t.lg) lgs.add(t.lg); }
+  // matchs choisis avec l'étoile dans le multiplex / le calendrier (récents ou à venir seulement)
+  const picks=[]; try{ const byId=new Map(footIdx().mt.map(m=>[String(m.id),m])), lim=Date.now()-24*36e5;
+    for(const id of Object.keys(mpick||{})){ const m=byId.get(String(id)); if(m&&Date.parse(m.d)>lim){ picks.push(String(m.id)); lgs.add(m.lg); } } }catch(e){}
   let leagues=[...lgs].filter(l=>order.includes(l)).sort((a,b)=>order.indexOf(a)-order.indexOf(b));
-  if(!leagues.length&&names.length) leagues=['fra.1'];
-  const cfg={ntfyTopic:'le-nom-secret-est-dans-le-secret-GitHub-NTFY_TOPIC',nba,foot:{teams:[...new Set(names)],leagues},multiplex:{enabled:true,leagues:['fra.1','uefa.champions']},alerts:{kickoff:true,score:true,final:true},live:{everySeconds:15,runMinutes:9}};
+  if(!leagues.length&&(names.length||picks.length)) leagues=['fra.1'];
+  const cfg={ntfyTopic:'le-nom-secret-est-dans-le-secret-GitHub-NTFY_TOPIC',nba,foot:{teams:[...new Set(names)],leagues,matches:picks},multiplex:{enabled:true,leagues:['fra.1','uefa.champions']},alerts:{kickoff:true,score:true,final:true},live:{everySeconds:15,runMinutes:9}};
   return {cfg,unk,text:JSON.stringify(cfg,null,2)};
 }
 async function notifSync(force){
@@ -2616,10 +2619,10 @@ function cloudRender(){
   <label style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;cursor:pointer"><input type="checkbox" id="cloudauto" style="width:auto;flex:none" ${cloud.auto?'checked':''}><span>Envoi automatique quand mes données changent</span></label>
   <p class="mut" style="margin:8px 0 0">Dernière synchro : ${esc(when)}${cloud.gid?'':' · espace pas encore créé'}</p>
   <p id="cloudmsg" style="margin:6px 0 0;min-height:1.3em"></p>
-  ${(()=>{ const n=notifConfig(), none=!n.cfg.nba.length&&!n.cfg.foot.teams.length, on=!!cloud.nid, when=cloud.nlast?new Date(cloud.nlast).toLocaleString('fr-FR'):'';
+  ${(()=>{ const n=notifConfig(), none=!n.cfg.nba.length&&!n.cfg.foot.teams.length&&!n.cfg.foot.matches.length, on=!!cloud.nid, when=cloud.nlast?new Date(cloud.nlast).toLocaleString('fr-FR'):'';
     return `<hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
   <h3 style="margin:0 0 6px">🔔 Alertes quand l'appli est fermée</h3>
-  <p class="mut" style="margin:0 0 6px">Le robot GitHub lit tes équipes étoilées (<b>${n.cfg.nba.length} en NBA, ${n.cfg.foot.teams.length} en foot</b>) dans un petit espace « Statify - alertes » de ton compte. Il est <b>public</b> mais ne contient que les noms de tes équipes.</p>
+  <p class="mut" style="margin:0 0 6px">Le robot GitHub lit tes équipes étoilées (<b>${n.cfg.nba.length} en NBA, ${n.cfg.foot.teams.length} en foot, ${n.cfg.foot.matches.length} match(s) choisi(s) dans le multiplex</b>) dans un petit espace « Statify - alertes » de ton compte. Il est <b>public</b> mais ne contient que les noms de tes équipes.</p>
   ${none?'<p class="mut"><b>Aucune équipe étoilée pour l\'instant.</b> Mets une ☆ sur tes équipes, puis reviens ici.</p>':''}
   ${n.unk.length?`<p class="mut">⚠️ ${n.unk.length} club(s) étoilé(s) non chargé(s) : ouvre l'onglet Foot, actualise (🔄), puis reviens ici.</p>`:''}
   <div class="row" style="margin:8px 0 0"><button id="nsend">🔔 ${on?'Mettre à jour maintenant':'Activer les alertes'}</button></div>
