@@ -997,12 +997,15 @@ async function newsGet(url,src){
       if(!r.ok) throw new Error('HTTP '+r.status); const items=newsParseXml(await r.text(),src); if(!items.length) throw new Error('aucun article lu'); return items;
     }catch(e){ errs.push(e.message||String(e)); } }
   throw new Error(errs[errs.length-1]||'échec'); }
-async function newsRefresh(auto){
-  if(newsBusy) return; newsBusy=true; if(!auto) say('⏳ Actus NBA…','warn');
-  try{ let all=[], bad=[]; for(const [src,url] of NEWS_SRC){ try{ all=all.concat(await newsGet(url,src)); }catch(e){ bad.push(src+' ('+(e.message||e)+')'); } }
-    if(all.length){ const seen=new Set(); all=all.concat(news.items||[]).filter(i=>!seen.has(i.l)&&seen.add(i.l)&&(!i.d||Date.now()-i.d<21*864e5)).sort((a,b)=>b.d-a.d).slice(0,150); news={t:Date.now(),items:all,err:bad.join(' ; ')}; saveJ(KEYNEWS,news); if(!auto) say(`✓ ${all.length} article(s) récupéré(s)${bad.length?' — indisponible : '+esc(bad.join(' ; ')):''}.`,bad.length?'warn':'ok'); }
+async function newsRefresh(auto,pages){
+  if(newsBusy) return; newsBusy=true; if(!auto) say('⏳ Actus NBA…','warn'); pages=pages||3;
+  if(ui.openGame&&ui.sport!=='foot') try{ render(); }catch(e){}
+  try{ let all=[], bad=[];
+    // le flux ne contient que ~10 articles : on lit aussi les pages suivantes (?paged=2, 3…) pour remonter ~1 jour en arrière
+    await Promise.all(NEWS_SRC.map(async ([src,url])=>{ for(let pg=1;pg<=pages;pg++){ try{ const it=await newsGet(pg===1?url:url+'?paged='+pg,src); all=all.concat(it); if(!it.length||Date.now()-Math.min(...it.map(i=>i.d||Date.now()))>4*864e5) break; }catch(e){ if(pg===1) bad.push(src+' ('+(e.message||e)+')'); break; } } }));
+    if(all.length){ const seen=new Set(); all=all.concat(news.items||[]).filter(i=>!seen.has(i.l)&&seen.add(i.l)&&(!i.d||Date.now()-i.d<21*864e5)).sort((a,b)=>b.d-a.d).slice(0,400); news={t:Date.now(),items:all,err:bad.join(' ; ')}; saveJ(KEYNEWS,news); if(!auto) say(`✓ ${all.length} article(s) récupéré(s)${bad.length?' — indisponible : '+esc(bad.join(' ; ')):''}.`,bad.length?'warn':'ok'); }
     else { news={...news,t:Date.now(),err:bad.join(' ; ')}; saveJ(KEYNEWS,news); if(!auto) say('⚠️ Actus : lecture directe refusée par le navigateur. Utilise le favori « Actus » sur basketusa.com puis Ctrl+V ici.','err'); }
-    if(ui.sport!=='foot'&&(ui.tab==='home'||ui.openGame)&&!$('#modal').classList.contains('on')) render();
+    if(ui.sport!=='foot'&&(ui.tab==='home'||ui.openGame)&&(ui.openGame||!$('#modal').classList.contains('on'))) render();
   } finally { newsBusy=false; } }
 function newsIngest(o){ try{ const it=newsParseXml(String(o.xml||''),o.src||'Actus'); if(!it.length) return 0; const seen=new Set(); const all=it.concat(news.items||[]).filter(i=>!seen.has(i.l)&&seen.add(i.l)&&(!i.d||Date.now()-i.d<21*864e5)).sort((a,b)=>b.d-a.d).slice(0,150); news={t:Date.now(),items:all,err:''}; saveJ(KEYNEWS,news); return it.length; }catch(e){ return 0; } }
 function newsAgo(t){ if(!t) return ''; const m=Math.max(0,Math.round((Date.now()-t)/6e4)); return m<60?`il y a ${m} min`:m<1440?`il y a ${Math.round(m/60)} h`:`il y a ${Math.round(m/1440)} j`; }
@@ -1059,13 +1062,14 @@ function nbaHas(txt,keys){ return keys.some(k=>new RegExp('(^|[^a-zà-ÿ0-9])'+k
 function gameNews(g){
   if(!g||g.status!==3||!news||!(news.items||[]).length) return [];
   const t0=Date.parse(g.time)||0, kh=nbaKeys(g.home.tri), ka=nbaKeys(g.away.tri), a=+g.away.score||0, h=+g.home.score||0, W=Math.max(a,h), Lo=Math.min(a,h);
-  const sc=new RegExp('\\b'+W+'\\s*(-|–|à|a)\\s*'+Lo+'\\b'), res=/(victoire|bat\b|battu|s'impose|s’impose|domine|défaite|renvers|plie|écrase|fait chuter|sombre|craque|punit|remporte|l'emporte|l’emporte|résiste|ko\b)/i;
+  const sc=new RegExp('\\b'+W+'\\s*(-|–|à|a)\\s*'+Lo+'\\b'), res=/(victoire|vainqueur|bat\b|battent|battu|s'impos|s’impos|domin|défaite|renvers|plie|écras|fait chuter|font chuter|sombre|craque|punit|punissent|remporte|l'emport|l’emport|résiste|k\.?o\b|efface|effacent|remontée|retournement|enchaîn|s'offre|s’offre|s'offrent|corrige|surclass|dompt|terrass|étrill|atomis|assomm|crucifi|scalp|douche|refroidi|stopp|vient à bout|viennent à bout|se défait|tombe|tombent|chute|s'incline|s’incline|cède|cèdent|piège|piègent|maîtris|s'adjug|déroul|carton|humili|record)/i, prev=/(pronostic|paris joueurs|paris sportifs|aperçu|avant-match|preview|programme|à quelle heure|où regarder|blessures et)/i;
   const out=[];
-  for(const it of news.items){ if(!it.d) continue; const dt=it.d-t0; if(dt<-2*36e5||dt>60*36e5) continue;
+  for(const it of news.items){ if(!it.d) continue; const dt=it.d-t0; if(dt<-2*36e5||dt>60*36e5||prev.test(it.t)) continue;
     const txt=(it.t+' '+(it.e||'')).toLowerCase(), th=nbaHas(txt,kh), ta=nbaHas(txt,ka), titleBoth=nbaHas(it.t.toLowerCase(),kh)&&nbaHas(it.t.toLowerCase(),ka);
     let v=0; if(th&&ta) v+=3; else if(th||ta) v+=1; if(titleBoth) v+=2; if(sc.test(txt)) v+=2; if(res.test(it.t)) v+=1;
     const recap=sc.test(txt)||res.test(it.t)||/(récap|resume|résumé|compte rendu)/i.test(it.t);
-    if(th&&ta&&((titleBoth&&recap)||sc.test(txt))) out.push({it,v}); }
+    if(th&&ta&&((titleBoth&&recap)||sc.test(txt))) out.push({it,v});
+    else if(titleBoth&&dt>=36e5&&dt<=20*36e5) out.push({it,v:v-1}); }
   const best={}; for(const x of out.sort((a,b)=>b.v-a.v||a.it.d-b.it.d)){ if(!best[x.it.s]) best[x.it.s]=x.it; }
   return Object.values(best).slice(0,2);
 }
@@ -1073,9 +1077,10 @@ function nbaRecapHtml(g){
   if(!g||g.status!==3) return '';
   if(!ui.newsTriedG&&(!news.t||Date.now()-news.t>30*6e4)){ ui.newsTriedG=1; setTimeout(()=>newsRefresh(true),200); }
   const L=gameNews(g), q=(NICK[g.away.tri]||g.away.tri)+' '+(NICK[g.home.tri]||g.home.tri);
+  const deep=(ui.newsDeep ||= {}); if(!L.length&&!deep[g.id]&&Date.now()-(Date.parse(g.time)||0)<5*864e5){ deep[g.id]=1; setTimeout(()=>newsRefresh(true,6),300); }
   const links=NEWS_SEARCH.map(([n,f])=>`<a href="${esc(f(q))}" target="_blank" rel="noopener">${n} ↗</a>`).join(' · ');
   const body=L.length?L.map(i=>`<div class="alert"><a href="${esc(i.l)}" target="_blank" rel="noopener"><b>${esc(i.t)}</b></a> <span class="mut" style="font-size:12px">· ${esc(i.s)}</span>${i.e?`<div class="mut" style="margin-top:2px">${esc(i.e)}${i.e.length>=189?'…':''}</div>`:''}</div>`).join('')
-    :`<p class="mut" style="margin:6px 0">${news.items&&news.items.length?'Pas encore d\'article trouvé pour ce match dans les flux récents.':'Actus pas encore chargées.'} <span class="link" data-act="newsrefresh">🔄 Chercher</span></p>`;
+    :`<p class="mut" style="margin:6px 0">${news.items&&news.items.length?(newsBusy?'⏳ Recherche du résumé dans les derniers articles…':'Pas encore d\'article trouvé pour ce match dans les derniers articles.'):'Actus pas encore chargées.'} <span class="link" data-act="newsrefresh">🔄 Chercher</span></p>`;
   return `<div class="card" style="background:var(--field);margin:10px 0"><h3 style="margin:0 0 6px">📰 Le match vu par la presse française</h3>${body}<p class="mut" style="margin:6px 0 0;font-size:12px">Chercher le résumé complet : ${links}</p></div>`;
 }
 function boxScore(g){
