@@ -5,10 +5,31 @@
 import fs from 'node:fs';
 const cfg = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 const STATE = 'state.json';
+
+// Équipes étoilées dans Statify : le robot les lit dans le petit espace public « Statify - alertes » du propriétaire du dépôt.
+// S'il n'existe pas encore (ou est illisible), on garde la liste de config.json.
+async function loadStars() {
+  const owner = process.env.GITHUB_REPOSITORY_OWNER; if (!owner) return;
+  const hdr = { Accept: 'application/vnd.github+json', ...(process.env.GH_TOKEN ? { Authorization: `Bearer ${process.env.GH_TOKEN}` } : {}) };
+  try {
+    const r = await fetch(`https://api.github.com/users/${owner}/gists?per_page=100`, { headers: hdr });
+    if (!r.ok) { console.log(`Espace Statify illisible (${r.status}) : config.json utilisé`); return; }
+    const g = (await r.json()).find(x => x.description === 'Statify - alertes' && x.files && x.files['statify-notif.json']);
+    if (!g) { console.log("Pas encore d'espace « Statify - alertes » : config.json utilisé"); return; }
+    const full = await fetch(`https://api.github.com/gists/${g.id}`, { headers: hdr });
+    if (!full.ok) { console.log(`Espace Statify illisible (${full.status}) : config.json utilisé`); return; }
+    const j = JSON.parse((await full.json()).files['statify-notif.json'].content);
+    cfg.nba = Array.isArray(j.nba) ? j.nba : [];
+    cfg.foot = { ...(cfg.foot || {}), teams: j.foot?.teams || [], leagues: j.foot?.leagues?.length ? j.foot.leagues : (cfg.foot?.leagues || []) };
+    console.log(`Équipes lues depuis Statify : ${cfg.nba.length} NBA, ${cfg.foot.teams.length} foot`);
+  } catch { console.log('Lecture des étoiles impossible : config.json utilisé'); }
+}
+await loadStars();
 let st = {}; try { st = JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch {}
 let now = Date.now(), msgs = [], days = [], blocked = false, act = new Map();
 const day = d => d.toISOString().slice(0, 10).replace(/-/g, '');
 const setDays = () => { now = Date.now(); days = [day(new Date(now - 864e5)), day(new Date(now)), day(new Date(now + 864e5))]; };
+const ESPN_TRI = { WSH: 'WAS', NO: 'NOP', UTAH: 'UTA', SA: 'SAS', NY: 'NYK', GS: 'GSW' };   // codes ESPN -> codes de l'appli
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const favF = (cfg.foot?.teams || []).map(norm);
@@ -29,7 +50,7 @@ function isMine(e, kind) {
   const c = e.competitions?.[0]; if (!c) return false;
   const [h, a] = ['home', 'away'].map(s => c.competitors.find(x => x.homeAway === s)); if (!h || !a) return false;
   return kind === 'nba'
-    ? [h, a].some(t => (cfg.nba || []).includes(t.team.abbreviation))
+    ? [h, a].some(t => (cfg.nba || []).includes(ESPN_TRI[t.team.abbreviation] || t.team.abbreviation))
     : [h, a].some(t => favF.some(f => norm(t.team.displayName).includes(f) || norm(t.team.shortDisplayName).includes(f)));
 }
 // un match est « actif » s'il est en cours ou démarre dans moins de 30 min : le robot reste alors allumé
