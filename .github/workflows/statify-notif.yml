@@ -6,7 +6,6 @@ on:
 permissions:
   contents: write
   actions: write
-# un seul passage à la fois : les suivants attendent (pas de doublons d'alertes)
 concurrency:
   group: statify-notif
   cancel-in-progress: false
@@ -22,15 +21,14 @@ jobs:
         run: node notify.mjs
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-          GH_TOKEN: ${{ github.token }}
-      - name: Garder la mémoire des alertes déjà envoyées
+      - name: Garder la memoire des alertes deja envoyees
         if: always()
         run: |
           git config user.name statify-bot
           git config user.email bot@users.noreply.github.com
           git add state.json
-          git diff --cached --quiet || (git commit -m "état" && git pull --rebase -q && git push)
-      - name: Match encore en cours, on relance tout de suite
+          git diff --cached --quiet || (git commit -m "etat" && git pull --rebase -q && git push)
+      - name: Relancer si un match est encore en cours
         if: steps.run.outputs.again == 'true'
         run: gh workflow run statify-notif.yml
         env:
