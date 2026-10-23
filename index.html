@@ -1808,8 +1808,8 @@ function footHome(){
   const {mt,done,P}=footIdx(), pl=Object.values(P), lg=ui.fLg&&ui.fLg!=='mine'?ui.fLg:'';
   const cfg=fhomeNorm();
   let h=footControls(`${cfg.hidden.length?`<span class="mut">${cfg.hidden.length} bloc${cfg.hidden.length>1?'s':''} masqué${cfg.hidden.length>1?'s':''} · </span>`:''}<button class="sec fbtn" data-act="fhomeedit" title="Personnaliser l'accueil">⚙<span class="hide-m"> Personnaliser</span></button>`); const FB={};
-  if(!mt.length) return h;
   h+=multiBanner();
+  if(!mt.length) return h;
   const al=footAlerts(); if(al.length) FB.alerts=`<div class="card"><div class="row between"><h2 style="margin:0">🔔 Alertes foot</h2><button class="sec" data-act="welcome">🎉 Revoir en plein écran</button></div>${al.map(x=>`<div class="alert">${x}</div>`).join('')}</div>`;
   const nw=footNews(3); if(nw.length) FB.news=`<div class="card"><h2>📰 À la une</h2>${nw.map(n=>`<div class="alert"><b>${mlink(n.m,esc(n.r.title))}</b> <span class="mut" style="font-size:12px">· ${esc(footLgName(n.m.lg))} · ${n.age<1?'aujourd\'hui':n.age<2?'hier':'il y a '+Math.floor(n.age)+' j'}</span><div class="mut" style="margin-top:3px">${(()=>{ const t=n.r.paras[1]||n.r.paras[0]; if(t.length<=230) return t; const c=t.slice(0,230), i=c.lastIndexOf(' ; '); return (i>60?c.slice(0,i):c.replace(/\s+\S*$/,''))+' … <span class="link" data-act="fmatch" data-id="'+esc(n.m.id)+'">lire la suite</span>'; })()}</div></div>`).join('')}</div>`;
   const goals=done.reduce((s,m)=>s+m.hs+m.as,0);
@@ -2170,10 +2170,10 @@ function multiDetect(){
 }
 const multiLive=lg=>{ try{ return multiDetect().some(d=>d.lg===lg&&d.start<=Date.now()+20*6e4); }catch(e){ return false; } };
 function multiBanner(){
-  const D=multiDetect(); if(!D.length) return '';
+  const D=multiDetect().filter(d=>!mhide[d.lg+':'+d.start]); if(!D.length) return '';
   const today=parisDK(new Date().toISOString());
   return D.slice(0,2).map(d=>{ const iso=new Date(d.start).toISOString(), live=d.ms.some(m=>m.st==='in'), hr=+new Date(iso).toLocaleTimeString('fr-FR',{timeZone:'Europe/Paris',hour:'2-digit',hour12:false}).slice(0,2), day=parisDK(iso)===today?(hr>=18?'ce soir':'aujourd\'hui'):(hr>=18?'demain soir':'demain');
-    return `<div class="card" style="border-left:4px solid #e04030"><div class="row between"><div>🔥 <b>Multiplex ${esc(footLgName(d.lg))} ${live?'en cours':day}</b> : ${d.ms.length} matchs à ${esc(parisT(iso))}</div><button data-act="multigo" data-lg="${esc(d.lg)}">${live?'Suivre en direct':'Ouvrir'}</button></div></div>`; }).join('');
+    return `<div class="card" style="border-left:4px solid #e04030"><div class="row between"><div>🔥 <b>Multiplex ${esc(footLgName(d.lg))} ${live?'en cours':day}</b> : ${d.ms.length} matchs à ${esc(parisT(iso))}</div><div class="row" style="gap:6px"><button data-act="multigo" data-lg="${esc(d.lg)}" data-d="${esc(parisDK(iso))}">${live?'Suivre en direct':'Ouvrir'}</button><button class="sec" data-act="mbanx" data-k="${esc(d.lg+':'+d.start)}" title="Masquer cette bannière">✕</button></div></div></div>`; }).join('');
 }
 function multiTable(lg,ms){
   const LG=foot.leagues[lg]; if(!LG||!LG.standings.length) return '';
@@ -2205,26 +2205,33 @@ function multiBilan(ms){
   if(best.length&&(top[0][1]>=2||best.length===1)) li.push(`👑 <b>Meilleur buteur de la soirée</b> : ${best.slice(0,3).map(esc).join(', ')+(best.length>3?' et '+(best.length-3)+(best.length-3>1?' autres':' autre'):'')} (${top[0][1]} but${top[0][1]>1?'s':''})`);
   return `<div class="card"><h2>📊 Bilan de la soirée</h2>${li.map(x=>`<p style="margin:6px 0">${x}</p>`).join('')}</div>`;
 }
-const KEYMP='suivi-multi-pick';
+const KEYMP='suivi-multi-pick', KEYMH='suivi-multi-hide'; let mhide=loadJ(KEYMH,{});
 let mpick=loadJ(KEYMP,{});
 function mpickToggle(id,d){ const on=!mpick[id]; if(on) mpick[id]=Date.parse(d)||Date.now(); else delete mpick[id]; const lim=Date.now()-2*864e5; for(const k in mpick) if(mpick[k]<lim) delete mpick[k]; saveJ(KEYMP,mpick); return on; }
 const mpickStar=m=>(ffav.includes(m.hid)||ffav.includes(m.aid))?'<span title="Match d\'un de tes clubs : toujours dans ton multiplex" style="opacity:.85;font-size:18px;padding:2px">⭐</span>':`<span class="link mpk" data-act="mpick" data-id="${esc(m.id)}" data-d="${esc(m.d)}" title="${mpick[m.id]?'Retirer de':'Ajouter à'} mon multiplex">${mpick[m.id]?'⭐':'☆'}</span>`;
 // matchs du jour (date de Paris) + ceux encore en cours (un match qui déborde après minuit)
-const multiWin=m=>m.st==='in'||(!!Date.parse(m.d)&&parisDK(m.d)===parisDK(new Date().toISOString()));
+const todayDK=()=>parisDK(new Date().toISOString());
+const multiDay=()=>ui.fMultiDay||todayDK();
+const dayDK=t=>parisDK(new Date(t).toISOString());
+function multiDays(){ const t=todayDK(), lim=Date.now()+7*864e5, s=new Set([t]); for(const m of Object.values(multiAll())){ const x=Date.parse(m.d); if(x&&x<=lim) s.add(parisDK(m.d)); } return [...s].filter(d=>d>=t).sort().slice(0,7); }
+const dayLabel=d=>{ const t=todayDK(), tm=dayDK(Date.now()+864e5); return d===t?'Aujourd\'hui':d===tm?'Demain':new Date(d+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'short',day:'numeric'}); };
+// matchs du jour choisi (date de Paris) ; aujourd'hui : aussi ceux encore en cours (match qui déborde après minuit)
+const multiWin=m=>{ const day=multiDay(); if(day===todayDK()&&m.st==='in') return true; return !!Date.parse(m.d)&&parisDK(m.d)===day; };
 function multiSet(lg){
   const M=Object.values(multiAll()), byT=(a,b)=>Date.parse(a.d)-Date.parse(b.d);
   if(lg==='all') return M.filter(multiWin).sort(byT);
   if(lg==='pick') return M.filter(m=>multiWin(m)&&(mpick[m.id]||ffav.includes(m.hid)||ffav.includes(m.aid))).sort(byT);
-  const d=multiDetect().find(x=>x.lg===lg); if(d) return d.ms;
   return M.filter(m=>m.lg===lg&&multiWin(m)).sort(byT);
 }
 function footMultiView(){
-  const now=Date.now(), M=Object.values(multiAll()), det=multiDetect();
+  if(ui.fMultiDay&&ui.fMultiDay<todayDK()) ui.fMultiDay=null;
+  const now=Date.now(), day=multiDay(), M=Object.values(multiAll()), det=multiDetect().filter(d=>dayDK(d.start)===day||(day===todayDK()&&d.ms.some(m=>m.st==='in')));
+  const dbar=`<div class="row" style="gap:6px;margin:0 0 10px;flex-wrap:wrap;align-items:center">${multiDays().map(d=>`<button class="${d===day?'':'sec'} fbtn" data-act="mday" data-d="${d}">${esc(dayLabel(d))}</button>`).join('')}<button class="sec fbtn" data-act="multiclose" title="Fermer le multiplex" style="margin-left:auto">✕ Fermer</button></div>`;
   const lgs=FLG.filter(([c])=>det.some(d=>d.lg===c)||M.some(m=>m.lg===c&&multiWin(m)));
   const opts=[['all','🌍 Tous les championnats'],['pick','⭐ Ma sélection'],...lgs.map(([c,n])=>[c,(det.some(d=>d.lg===c)?'🔥 ':'')+n])];
   let lg=ui.fMulti; if(!opts.find(x=>x[0]===lg)) lg=(det[0]&&det[0].lg)||'all';
-  let h=footControls();
-  if(!lgs.length) return h+`<div class="card"><h2>🔥 Multiplex</h2><p class="mut">Aucun match aujourd'hui. Quand au moins 3 matchs d'un même championnat commencent à moins de 30 minutes d'écart, Statify te prévient ici et sur l'accueil foot. Actualise les scores (🔄) pour charger le calendrier.</p></div>`;
+  let h=footControls()+dbar;
+  if(!lgs.length) return h+`<div class="card"><h2>🔥 Multiplex</h2><p class="mut">Aucun match ${day===todayDK()?'aujourd\'hui':'ce jour-là'}. Quand au moins 3 matchs d'un même championnat commencent à moins de 30 minutes d'écart, Statify te prévient ici et sur l'accueil foot. Actualise les scores (🔄) pour charger le calendrier.</p></div>`;
   const ms=multiSet(lg), mixed=new Set(ms.map(m=>m.lg)).size>1, isMx=det.some(d=>d.lg===lg), live=ms.filter(m=>m.st==='in').length;
   const rank=m=>{ const c=liveMem['f'+m.id]; return (c&&c.chg&&now-c.chg<90000)?0:m.st==='in'?1:m.st==='pre'?2:3; };
   const sorted=[...ms].sort((a,b)=>rank(a)-rank(b)||(rank(a)===0?liveMem['f'+b.id].chg-liveMem['f'+a.id].chg:rank(a)===3?Date.parse(b.d)-Date.parse(a.d):Date.parse(a.d)-Date.parse(b.d)));
@@ -2233,7 +2240,7 @@ function footMultiView(){
     const star=mpickStar(m);
     return `<div class="liverow${fl}" data-act="fmatch" data-id="${esc(m.id)}" style="cursor:pointer"><div class="lt">${star}${footLogo(m.hl,22)}<b>${esc(m.hn)}</b></div><div class="ls">${m.st==='pre'?'<span class="mut">–</span>':m.hs+' - '+m.as}<span class="lm" style="${m.st!=='in'?'color:var(--mut)':''}">${esc(mid)}</span></div><div class="lt r"><b>${esc(m.an)}</b>${footLogo(m.al,22)}</div>${m.ev.length?`<div class="lev"><div>${evl(m,'h')}</div><div style="text-align:right">${evl(m,'a')}</div></div>`:''}${mixed?`<div class="mut" style="grid-column:1/-1;text-align:center;font-size:11px;margin-top:-2px">${esc(footLgName(m.lg))}</div>`:''}</div>`; };
   const first=ms.length?ms[0]:null, title=lg==='all'?'🌍 Multiplex tous championnats':lg==='pick'?'⭐ Mon multiplex':`🔥 ${isMx?'Multiplex':'Soirée'} ${esc(footLgName(lg))}`;
-  const empty=lg==='all'?`<p class="mut">Aucun match aujourd'hui.${(()=>{ const nx=M.filter(m=>m.st==='pre'&&Date.parse(m.d)>now).sort((a,b)=>Date.parse(a.d)-Date.parse(b.d))[0]; return nx?' Prochain match : '+esc(parisD(nx.d))+' à '+esc(parisT(nx.d))+'.':''; })()}</p>`:lg==='pick'?'<p class="mut">Aucun match de ta sélection aujourd\'hui. Choisis « 🌍 Tous les championnats » et touche ☆ sur les matchs que tu veux suivre (les matchs de tes clubs favoris y sont ajoutés d\'office).</p>':'<p class="mut">Aucun match.</p>';
+  const empty=lg==='all'?`<p class="mut">Aucun match ${day===todayDK()?'aujourd\'hui':'ce jour-là'}.${(()=>{ const nx=M.filter(m=>m.st==='pre'&&Date.parse(m.d)>now).sort((a,b)=>Date.parse(a.d)-Date.parse(b.d))[0]; return nx?' Prochain match : '+esc(parisD(nx.d))+' à '+esc(parisT(nx.d))+'.':''; })()}</p>`:lg==='pick'?'<p class="mut">Aucun match de ta sélection ce jour-là. Choisis « 🌍 Tous les championnats » et touche ☆ sur les matchs que tu veux suivre (les matchs de tes clubs favoris y sont ajoutés d\'office).</p>':'<p class="mut">Aucun match.</p>';
   h+=`<div class="card livecard"><div class="row between" style="margin-bottom:6px"><h2 style="margin:0">${live?'<span class="livedot"></span>':''}${title}</h2><select id="fMulti">${opts.map(([c,n])=>`<option value="${esc(c)}" ${c===lg?'selected':''}>${esc(n)}</option>`).join('')}</select></div>${ms.length?`<p class="mut" style="margin:0 0 6px">${ms.length} match${ms.length>1?'s':''}${first?' · premier coup d\'envoi à '+esc(parisT(first.d))+' (heure de Paris)':''}${live?' · '+live+' en cours':''} · touche ☆ pour ajouter un match à ta sélection</p>`:''}${sorted.map(card).join('')||empty}</div>`;
   // classement live : un championnat à la fois
   const tl=[...new Set(ms.map(m=>m.lg))].filter(l=>foot.leagues[l]&&foot.leagues[l].standings.length);
@@ -2428,7 +2435,10 @@ function toggleFav(type,id,name){
   else if(a==='fcalmore'){ ui.fCalLimit=(ui.fCalLimit||250)+250; render(); }
   else if(a==='fcsv') footCsv();
   else if(a==='mpick'){ const on=mpickToggle(id,el.dataset.d); render(); if(ui.ftab!=='multi') say(on?'⭐ Ajouté à ton multiplex : onglet 🔥 Multiplex → « ⭐ Ma sélection » le jour du match.':'Retiré de ton multiplex.','ok'); }
-  else if(a==='multigo'){ closeModals(); ui.ftab='multi'; ui.fMulti=el.dataset.lg; render(); window.scrollTo(0,0); }
+  else if(a==='multigo'){ closeModals(); ui.ftab='multi'; ui.fMulti=el.dataset.lg; ui.fMultiDay=el.dataset.d&&el.dataset.d!==todayDK()?el.dataset.d:null; render(); window.scrollTo(0,0); }
+  else if(a==='mday'){ ui.fMultiDay=el.dataset.d===todayDK()?null:el.dataset.d; render(); }
+  else if(a==='multiclose'){ ui.ftab='home'; ui.fMultiDay=null; render(); window.scrollTo(0,0); }
+  else if(a==='mbanx'){ mhide[el.dataset.k]=Date.now(); for(const k in mhide) if(Date.now()-mhide[k]>4*864e5) delete mhide[k]; saveJ(KEYMH,mhide); render(); }
   else if(a==='cmpgo'){ closeModals(); if(el.dataset.sp==='foot'){ ui.ftab='compare'; ui.fCmpMode='teams'; ui.fCmpA=el.dataset.a; ui.fCmpB=el.dataset.b; ui.fLg=''; } else { ui.tab='compare'; ui.cmpMode='teams'; ui.cmpA=el.dataset.a; ui.cmpB=el.dataset.b; } render(); window.scrollTo(0,0); }
   else if(a==='cmpopen'){ closeModals(); ui.tab='compare'; ui.cmpMode='players'; ui.cmpA=el.dataset.a; ui.cmpB=el.dataset.b; render(); }
   else if(a==='notiftoggle'){ try{ if(localStorage.getItem(KEYNOT)==='1'){ localStorage.setItem(KEYNOT,'0'); render(); } else Notification.requestPermission().then(r=>{ if(r==='granted'){ localStorage.setItem(KEYNOT,'1'); localStorage.removeItem(KEYNOT+'-day'); } else alert('Notifications refusées par le navigateur.'); render(); }); }catch(e){ alert('Ton navigateur ne permet pas les notifications ici.'); } }
@@ -2447,7 +2457,7 @@ $('#modal').addEventListener('click',e=>{ if(e.target.id==='modal'){ closeModals
 $('#mclose').addEventListener('click',()=>{ closeModals(); render(); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&$('#welcome').classList.contains('on')){ closeWelcome(); return; } if(e.key==='Escape'&&!tv.on&&(ui.openPlayer||ui.openTeam||ui.openGame||ui.fMatch||ui.fTeam||ui.fPlayer)){ closeModals(); render(); } });
 $('#modal').addEventListener('change',e=>{ const t=e.target; if(t.dataset&&t.dataset.note){ setNote(t.dataset.note,t.dataset.name,t.value); t.style.borderColor='var(--ok)'; setTimeout(()=>{ t.style.borderColor=''; },900); } });
-$('#tabs').addEventListener('click',e=>{ const b=e.target.closest('[data-act=tab]'); if(b){ if(ui.sport==='foot') ui.ftab=b.dataset.t; else ui.tab=b.dataset.t; closeModals(); render(); } });
+$('#tabs').addEventListener('click',e=>{ const b=e.target.closest('[data-act=tab]'); if(b){ if(ui.sport==='foot'){ if(b.dataset.t!=='multi'||ui.ftab!=='multi') ui.fMultiDay=null; ui.ftab=b.dataset.t; } else ui.tab=b.dataset.t; closeModals(); render(); } });
 $('#view').addEventListener('change',e=>{
   const t=e.target, id=t.id;
   if(t.dataset&&t.dataset.note){ setNote(t.dataset.note,t.dataset.name,t.value); t.style.borderColor='var(--ok)'; setTimeout(()=>{ t.style.borderColor=''; },900); return; }
