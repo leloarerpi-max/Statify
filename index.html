@@ -139,6 +139,15 @@
   .legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:0 0 10px;font-size:.85em;color:var(--mut)}.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;background:var(--line)}.legend i.z1{background:#3ecf8e}.legend i.z2{background:#f5a524}.legend i.z3{background:#ff8a4f}
   #modal{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:none;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}
   #modal.on{display:flex}
+  #gs{position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.6);display:none;align-items:flex-start;justify-content:center;padding:calc(env(safe-area-inset-top,0px) + 10px) 10px 10px}
+  #gs.on,#cloud.on{display:flex}
+  #cloud{position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.6);display:none;align-items:flex-start;justify-content:center;padding:calc(env(safe-area-inset-top,0px) + 10px) 10px 10px}
+  .gsbox{width:min(560px,100%);max-height:88vh;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;box-shadow:0 10px 40px rgba(0,0,0,.4)}
+  .gsh{font-size:12px;font-weight:700;color:var(--mut);margin:10px 4px 2px;text-transform:uppercase;letter-spacing:.04em}
+  .gsr{display:flex;justify-content:space-between;gap:10px;padding:10px 8px;border-radius:8px;cursor:pointer}.gsr:hover,.gsr:active{background:var(--hover)}
+  #gsq{font-size:16px}
+  #offPill{display:none;position:fixed;left:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:9400;background:var(--warn);color:#1a1200;font-weight:700;font-size:12px;padding:6px 10px;border-radius:999px;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+  body.offline #offPill{display:block}
   #modal .mbox{width:min(1000px,100%);min-width:0;max-width:100%;margin:0 auto}
   #modal .mbox>.card{min-width:0;max-width:100%;overflow-x:auto}
   #modal .mbox>.card{margin:0;box-shadow:0 10px 40px rgba(0,0,0,.5)}
@@ -199,8 +208,10 @@
   <div class="seg" id="sportSeg"><button data-sport="nba">🏀 NBA</button><button data-sport="foot">⚽ Foot</button></div>
   <div id="leaders"></div>
   <div class="row">
+    <button class="sec" id="btnSearch" title="Rechercher (touche /)" aria-label="Rechercher">🔍</button>
     <button class="sec" id="btnRefresh" title="Actualiser les scores">🔄<span class="hide-m"> Actualiser</span></button>
     <span id="hdrMore" class="hdrmore">
+    <button class="sec" id="btnCloud" title="Synchroniser téléphone / ordinateur">☁️ Cloud</button>
     <button class="sec" id="btnXlsx">Excel</button>
     <button class="sec" id="btnExport">Sauvegarde</button>
     <button class="sec" id="btnImport">Importer</button>
@@ -251,6 +262,9 @@
   </footer>
   <div id="welcome"></div>
   <div id="modal"><div class="mbox"></div></div>
+  <div id="cloud"><div class="gsbox" id="cloudbody"></div></div>
+  <div id="offPill">📴 Hors ligne : dernières données enregistrées</div>
+  <div id="gs"><div class="gsbox"><div class="row" style="flex-wrap:nowrap"><input id="gsq" type="search" placeholder="Joueur, équipe ou match…" autocomplete="off" style="flex:1;min-width:0"><button class="sec" id="gsx">✕</button></div><div id="gsres"></div></div></div>
 </main>
 
 <script type="text/plain" id="bmcode">
@@ -316,7 +330,7 @@ const ink = c => { const n=parseInt(c.slice(1),16); return (((n>>16)*299+(((n>>8
 const cdist = (x,y) => { const p=parseInt(x.slice(1),16), q=parseInt(y.slice(1),16); return Math.hypot((p>>16)-(q>>16),((p>>8)&255)-((q>>8)&255),(p&255)-(q&255)); };
 function pickColors(cs){ const fb=['#34b64f','#f0b010','#f07020']; const out=[]; cs.forEach((c,i)=>{ let col=c||fb[i%3]; if(out.some(o=>cdist(o,col)<70)) col=fb.find(f=>!out.some(o=>cdist(o,f)<70))||fb[i%3]; out.push(col); }); return out; }
 const TABS=[['home','Accueil'],['games','Matchs'],['players','Joueurs'],['teams','Équipes'],['standings','Classement'],['race','Qualification'],['records','Records'],['compare','Comparer'],['rest','Repos'],['cal','Calendrier']];
-const HOME_BLOCKS=[['kpis','Chiffres clés'],['alerts','Alertes sur mes favoris'],['week','Équipe de la semaine'],['bigmatch','Gros matchs à venir'],['news','Actus NBA (français)'],['duel','Duel de la semaine'],['favs','Mes favoris'],['notes','Mes notes'],['results','Derniers résultats'],['scorers','Meilleurs marqueurs']];
+const HOME_BLOCKS=[['tonight','Ce soir (heure de Paris)'],['kpis','Chiffres clés'],['alerts','Alertes sur mes favoris'],['week','Équipe de la semaine'],['bigmatch','Gros matchs à venir'],['news','Actus NBA (français)'],['duel','Duel de la semaine'],['favs','Mes favoris'],['notes','Mes notes'],['results','Derniers résultats'],['scorers','Meilleurs marqueurs']];
 const HOME_FULL=['kpis','alerts','week','favs','notes','news'];
 
 function loadJ(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } }
@@ -902,7 +916,7 @@ function lineScore(g){
 }
 
 /* ---- Accueil personnalisable ---- */
-function homeCfgNorm(){ const ids=HOME_BLOCKS.map(b=>b[0]); const o=(homeCfg.order||[]).filter(i=>ids.includes(i)); for(const i of ids) if(!o.includes(i)) o.push(i); return {order:o,hidden:(homeCfg.hidden||[]).filter(i=>ids.includes(i))}; }
+function homeCfgNorm(){ const ids=HOME_BLOCKS.map(b=>b[0]); const o=(homeCfg.order||[]).filter(i=>ids.includes(i)); for(const i of ids) if(!o.includes(i)){ if(i==='tonight') o.unshift(i); else o.push(i); } return {order:o,hidden:(homeCfg.hidden||[]).filter(i=>ids.includes(i))}; }
 function homeEditor(cfg){
   const lab=Object.fromEntries(HOME_BLOCKS);
   return `<div class="card"><h2>Personnaliser l'accueil</h2><p class="mut">Coche les blocs à afficher et change leur ordre avec les flèches.</p>${cfg.order.map((id,i)=>`<div class="row hrow"><label><input type="checkbox" data-act="hometoggle" data-id="${id}" ${cfg.hidden.includes(id)?'':'checked'}> ${esc(lab[id])}</label><button class="sec" data-act="homemove" data-id="${id}" data-d="-1" ${i===0?'disabled':''}>↑</button><button class="sec" data-act="homemove" data-id="${id}" data-d="1" ${i===cfg.order.length-1?'disabled':''}>↓</button></div>`).join('')}<div class="row" style="margin-top:10px"><button data-act="homeedit">Terminé</button><button class="sec" data-act="homereset">Tout réinitialiser</button></div></div>`;
@@ -1001,7 +1015,7 @@ function viewHome(S){
   const sel=`<div class="row" style="margin-top:10px"><select id="favTeamSel"><option value="">Ajouter une équipe favorite…</option>${Object.keys(TEAMS).filter(t=>!favT.includes(t)).map(t=>`<option value="${t}">${esc(tname(t))}</option>`).join('')}</select><button class="sec" data-act="addfavteam">Ajouter</button></div>`;
   B.favs=`<div class="card"><h2>Mes favoris</h2>${(teamCards||playerCards)?`<div class="grid2">${teamCards}${playerCards}</div>`:'<p class="mut">Aucun favori pour l\'instant. Ajoute une équipe ci-dessous, ou clique sur l\'étoile ☆ à côté d\'un joueur.</p>'}${sel}</div>`;
   B.notes=notesCard(S);
-  B.bigmatch=bigCard(S); B.duel=duelCard(S); B.news=newsCard();
+  B.tonight=tonightNba(S); B.bigmatch=bigCard(S); B.duel=duelCard(S); B.news=newsCard();
   const lastDay=fin.length?nyDay(fin[fin.length-1].time):null, dayG=fin.filter(g=>nyDay(g.time)===lastDay);
   const last=[...(lastDay?dayG:[])].reverse().map(g=>{ const aw=+g.away.score>+g.home.score, hw=+g.home.score>+g.away.score;
     return `<tr class="click" data-act="opengame" data-id="${g.id}"><td class="l">${gameDate(g)}</td><td class="l ${aw?'win':''}">${teamLogo(g.away.tri,20)}<span class="nfull">${esc(g.away.name)}</span><span class="ntri">${esc(g.away.tri)}</span></td><td class="${aw?'win':''}">${g.away.score}</td><td class="l ${hw?'win':''}">@ ${teamLogo(g.home.tri,20)}<span class="nfull">${esc(g.home.name)}</span><span class="ntri">${esc(g.home.tri)}</span></td><td class="${hw?'win':''}">${g.home.score}</td></tr>`; }).join('');
@@ -1159,6 +1173,7 @@ function teamDetail(S,t){
   const rows=[...t.log].reverse().map(x=>`<tr><td class="l">${fmtD(x.time)}</td><td class="l">${x.home?'vs':'@'} ${esc(tname(x.opp))}</td><td><span class="dot ${x.win?'w':'l'}">${x.win?'V':'D'}</span></td><td>${x.pf}-${x.pa}</td></tr>`).join('');
   return `<div class="card print-target" style="border-left:4px solid ${c}"><div class="phead" style="background:linear-gradient(135deg,${c}33,transparent 65%)">${teamLogo(t.tri,84)}<div class="pinfo"><div class="pname">${star('team',t.tri)}${esc(t.name)}</div><div class="psub">${t.w}-${t.l} · ${t.pf} pts marqués, ${t.pa} encaissés · série ${streak(t.log)}</div></div><div class="row"><button class="sec" data-act="print">Imprimer / PDF</button><button class="sec" data-act="closeteam">Fermer</button></div></div>
   ${ad?`<div class="grid"><div class="kpi"><span class="mut">Rythme</span><b>${f1(ad.pace)}</b></div><div class="kpi"><span class="mut">Attaque (/100 poss.)</span><b>${f1(ad.off)}</b></div><div class="kpi"><span class="mut">Défense (/100 poss.)</span><b>${f1(ad.def)}</b></div><div class="kpi"><span class="mut">Net</span><b class="${ad.off>=ad.def?'ok':'err'}">${(ad.off-ad.def>0?'+':'')+f1(ad.off-ad.def)}</b></div></div>`:''}
+  ${teamExtraNba(S,t)}
   <h3>Points marqués et encaissés par match</h3>${barsChart(t.log.map(x=>fmtD(x.time)),t.log.map(x=>x.pf),t.log.map(x=>x.pa),'Marqués','Encaissés',cf,ca)}
   <div class="grid2"><div><h3>Profil (par rapport aux autres équipes)</h3>${radarChart(RADTL,[{name:t.name,color:c,vals:radarValsT(S,t)}],'équipes')}</div><div>${tq?`<h3>Par quart-temps (moyenne par match)</h3><div class="scroll"><table><thead><tr><th class="l"></th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th></tr></thead><tbody><tr><td class="l">Marqués</td>${tq.map(x=>`<td>${f1(x.f)}</td>`).join('')}</tr><tr><td class="l">Encaissés</td>${tq.map(x=>`<td>${f1(x.a)}</td>`).join('')}</tr><tr><td class="l">Écart</td>${tq.map(x=>`<td class="${x.f>=x.a?'ok':'err'}">${(x.f-x.a>0?'+':'')+f1(x.f-x.a)}</td>`).join('')}</tr><tr><td class="l">Quarts gagnés</td>${tq.map(x=>`<td>${x.w}/${x.n}</td>`).join('')}</tr></tbody></table></div>`:'<h3>Par quart-temps</h3><p class="mut">Pas de score par quart-temps dans les matchs de cette équipe (ré-ajoute-les pour l\'obtenir).</p>'}</div></div>
   ${H?`<h3>Évolution au classement</h3>${rankChart([{name:t.name,color:c,values:H.teams.map(m=>m.get(t.tri)??null)}],H.days.map(d=>fmtD(d)),Math.max(...H.teams.map(m=>m.size)))}`:''}
@@ -1232,7 +1247,7 @@ function viewCompare(S){
   h+=`<h3>Profil comparé</h3>`+(pl?radarChart(RADL,[{name:label(a),color:colA,vals:radarVals(S,a)},{name:label(b),color:colB,vals:radarVals(S,b)}],'joueurs'):radarChart(RADTL,[{name:label(a),color:colA,vals:radarValsT(S,a)},{name:label(b),color:colB,vals:radarValsT(S,b)}],'équipes'));
   const va=pl?a.log.map(x=>x.pts):a.log.map(x=>x.pf), vb=pl?b.log.map(x=>x.pts):b.log.map(x=>x.pf), n=Math.max(va.length,vb.length);
   h+=`<h3>${pl?'Points':'Points marqués'} par match</h3>`+lineChart([{name:label(a),values:Array.from({length:n},(_,i)=>va[i]??null),color:colA},{name:label(b),values:Array.from({length:n},(_,i)=>vb[i]??null),color:colB}],Array.from({length:n},(_,i)=>'M'+(i+1)));
-  return h+(pl?'':h2h(S,a,b))+'</div>';
+  return h+(pl?'':cmpExtraNba(S,a,b)+h2h(S,a,b))+'</div>';
 }
 
 /* --- Calendrier --- */
@@ -1306,6 +1321,135 @@ function bigCard(S){
   let nb=''; try{ if('Notification' in window) nb=`<button class="sec" data-act="notiftoggle">${localStorage.getItem(KEYNOT)==='1'?'🔔 Résumé à l\'ouverture : activé':'🔔 Me prévenir à l\'ouverture'}</button>`; }catch(e){}
   const lab=new Date(b.day+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
   return `<div class="card"><div class="row between"><h2 style="margin:0">🔥 À ne pas manquer — soirée du ${esc(lab)}</h2>${nb}</div><p class="mut">${b.total} match(s) au programme.</p>${b.items.length?b.items.map(i=>`<div class="alert"><b>${teamLogo(i.x.a,18)}${esc(tname(i.x.a))} @ ${teamLogo(i.x.h,18)}${esc(tname(i.x.h))}</b> <span class="mut">${esc(fmtDT(i.x.t))}</span><br>${i.tags.map(t=>`<span class="chip">${esc(t)}</span>`).join(' ')}</div>`).join(''):'<p class="mut">Pas de gros match repéré (programme calme, ou pas encore assez de matchs dans ta base).</p>'}</div>`;
+}
+
+/* ================= Statify+ : Ce soir, légendes, face-à-face, buts par minute ================= */
+const PARIS={timeZone:'Europe/Paris'};
+const parisT=iso=>new Date(iso).toLocaleTimeString('fr-FR',{...PARIS,hour:'2-digit',minute:'2-digit'});
+const parisD=iso=>new Date(iso).toLocaleDateString('fr-FR',{...PARIS,weekday:'long',day:'numeric',month:'long'});
+const parisDK=iso=>new Date(iso).toLocaleDateString('en-CA',PARIS);
+const wikiLink=(q,label)=>`<a href="https://fr.wikipedia.org/w/index.php?search=${encodeURIComponent(q)}&go=Go" target="_blank" rel="noopener">${esc(label||q)}</a>`;
+
+/* --- Légendes des clubs --- */
+const LEG_NBA={ATL:['Dominique Wilkins','Bob Pettit','Lou Hudson','Trae Young'],BOS:['Bill Russell','Larry Bird','John Havlicek','Paul Pierce','Bob Cousy'],BKN:['Julius Erving','Jason Kidd','Vince Carter','Kenyon Martin'],CHA:['Kemba Walker','Alonzo Mourning','Larry Johnson','Muggsy Bogues'],CHI:['Michael Jordan','Scottie Pippen','Dennis Rodman','Derrick Rose'],CLE:['LeBron James','Brad Daugherty','Mark Price','Kyrie Irving'],DAL:['Dirk Nowitzki','Jason Terry','Michael Finley','Rolando Blackman'],DEN:['Nikola Jokić','Alex English','Dikembe Mutombo','David Thompson'],DET:['Isiah Thomas','Joe Dumars','Ben Wallace','Chauncey Billups','Bill Laimbeer'],GSW:['Stephen Curry','Wilt Chamberlain','Rick Barry','Chris Mullin','Klay Thompson'],HOU:['Hakeem Olajuwon','Moses Malone','Yao Ming','Clyde Drexler','Rudy Tomjanovich'],IND:['Reggie Miller','Rik Smits','Mel Daniels','George McGinnis'],LAC:['Chris Paul','Blake Griffin','Bob McAdoo','Elton Brand'],LAL:['Magic Johnson','Kareem Abdul-Jabbar','Kobe Bryant',"Shaquille O'Neal",'Jerry West','Elgin Baylor'],MEM:['Marc Gasol','Zach Randolph','Mike Conley','Tony Allen'],MIA:['Dwyane Wade','Alonzo Mourning','Udonis Haslem','Tim Hardaway','Chris Bosh'],MIL:['Kareem Abdul-Jabbar','Oscar Robertson','Giannis Antetokounmpo','Sidney Moncrief','Bob Dandridge'],MIN:['Kevin Garnett','Kevin Love','Karl-Anthony Towns','Sam Cassell'],NOP:['Chris Paul','Anthony Davis','David West','Tyson Chandler'],NYK:['Willis Reed','Walt Frazier','Patrick Ewing','Bernard King','Earl Monroe'],OKC:['Kevin Durant','Russell Westbrook','Gary Payton','Shawn Kemp'],ORL:["Shaquille O'Neal",'Penny Hardaway','Dwight Howard','Nick Anderson'],PHI:['Julius Erving','Wilt Chamberlain','Allen Iverson','Moses Malone','Charles Barkley'],PHX:['Steve Nash','Charles Barkley','Kevin Johnson','Devin Booker','Alvan Adams'],POR:['Clyde Drexler','Bill Walton','Damian Lillard','Brandon Roy'],SAC:['Mitch Richmond','Chris Webber','Peja Stojaković','Oscar Robertson'],SAS:['Tim Duncan','David Robinson','Tony Parker','Manu Ginóbili','George Gervin'],TOR:['Vince Carter','Chris Bosh','Kyle Lowry','DeMar DeRozan','Kawhi Leonard'],UTA:['Karl Malone','John Stockton','Jeff Hornacek','Mark Eaton'],WAS:['Wes Unseld','Elvin Hayes','John Wall','Gilbert Arenas']};
+const LEG_F=[
+ [/paris sg|^psg|paris saint/,['Zlatan Ibrahimović','Ronaldinho','Pauleta','Kylian Mbappé','Edinson Cavani','Marco Verratti']],
+ [/marseille|^om$/,['Jean-Pierre Papin','Chris Waddle','Abedi Pelé','Basile Boli','Didier Deschamps','Steve Mandanda']],
+ [/^lyon|olympique lyon/,['Juninho Pernambucano','Karim Benzema','Sidney Govou','Alexandre Lacazette','Cris']],
+ [/monaco/,['Thierry Henry','Jean Tigana','Radamel Falcao','Kylian Mbappé','Youri Djorkaeff']],
+ [/^lille|losc/,['Eden Hazard','Yohan Cabaye','Rio Mavuba']],
+ [/saint.?etienne|^asse/,['Michel Platini','Dominique Rocheteau','Jean-Michel Larqué']],
+ [/bordeaux/,['Zinédine Zidane','Alain Giresse','Christophe Dugarry','Jean Tigana']],
+ [/^nantes/,['Marcel Desailly','Christian Karembeu','Patrice Loko']],
+ [/auxerre/,['Éric Cantona','Guy Roux','Djibril Cissé','Philippe Mexès']],
+ [/montpellier/,['Laurent Blanc','Carlos Valderrama','Olivier Giroud']],
+ [/man(chester)? ?u|united.*man|^man utd/,['Bobby Charlton','George Best','Eric Cantona','Ryan Giggs','Wayne Rooney']],
+ [/man(chester)? ?c(ity)?$|^man city/,['Sergio Agüero','Vincent Kompany','David Silva','Colin Bell']],
+ [/liverpool/,['Steven Gerrard','Kenny Dalglish','Ian Rush','Mohamed Salah']],
+ [/arsenal/,['Thierry Henry','Dennis Bergkamp','Patrick Vieira','Tony Adams']],
+ [/chelsea/,['Frank Lampard','John Terry','Didier Drogba','Gianfranco Zola']],
+ [/tottenham|spurs/,['Harry Kane','Glenn Hoddle','Jimmy Greaves','Gareth Bale']],
+ [/newcastle/,['Alan Shearer','Kevin Keegan','Les Ferdinand']],
+ [/everton/,['Dixie Dean','Neville Southall','Duncan Ferguson']],
+ [/west ham/,['Bobby Moore','Geoff Hurst','Martin Peters']],
+ [/leicester/,['Jamie Vardy','Gary Lineker','Kasper Schmeichel']],
+ [/real madrid/,['Alfredo Di Stéfano','Raúl','Iker Casillas','Cristiano Ronaldo','Zinédine Zidane']],
+ [/barcelon/,['Lionel Messi','Johan Cruyff','Xavi','Andrés Iniesta','Ronaldinho']],
+ [/atletico|atlético/,['Fernando Torres','Antoine Griezmann','Diego Godín','Luis Aragonés']],
+ [/sevill/,['Jesús Navas','Frédéric Kanouté','Ivan Rakitić']],
+ [/valencia/,['David Villa','Gaizka Mendieta','Santiago Cañizares']],
+ [/athletic|bilbao/,['Telmo Zarra','José Ángel Iribar','Aritz Aduriz']],
+ [/real sociedad/,['Xabi Alonso','Luis Arconada','Mikel Oyarzabal']],
+ [/villarreal/,['Juan Román Riquelme','Marcos Senna','Diego Forlán']],
+ [/juventus|^juve/,['Alessandro Del Piero','Gianluigi Buffon','Michel Platini','Pavel Nedvěd']],
+ [/^ac milan|^milan/,['Paolo Maldini','Franco Baresi','Marco van Basten','Kaká']],
+ [/inter/,['Javier Zanetti','Giuseppe Meazza','Ronaldo','Giacinto Facchetti']],
+ [/napoli/,['Diego Maradona','Marek Hamšík','Dries Mertens']],
+ [/^roma|as roma/,['Francesco Totti','Daniele De Rossi','Bruno Conti']],
+ [/lazio/,['Alessandro Nesta','Paul Gascoigne','Giorgio Chinaglia']],
+ [/fiorentina/,['Gabriel Batistuta','Roberto Baggio','Giancarlo Antognoni']],
+ [/sampdoria/,['Gianluca Vialli','Roberto Mancini']],
+ [/parma/,['Hernán Crespo','Lilian Thuram','Gianluigi Buffon']],
+ [/bayern/,['Franz Beckenbauer','Gerd Müller','Philipp Lahm','Oliver Kahn','Robert Lewandowski']],
+ [/dortmund/,['Marco Reus','Michael Zorc','Lars Ricken']],
+ [/leverkusen/,['Rudi Völler','Michael Ballack','Bernd Schneider']],
+ [/schalke/,['Klaus Fischer','Olaf Thon','Raúl']],
+ [/bremen/,['Johan Micoud','Miroslav Klose','Claudio Pizarro']],
+ [/hamburg/,['Uwe Seeler','Felix Magath','Kevin Keegan']],
+ [/gladbach|m.?gladbach/,['Günter Netzer','Jupp Heynckes','Berti Vogts']],
+ [/stuttgart/,['Jürgen Klinsmann','Mario Gómez','Guido Buchwald']],
+ [/frankfurt/,['Jay-Jay Okocha','Bernd Hölzenbein','Anthony Yeboah']],
+ [/wolfsburg/,['Edin Džeko','Grafite','Diego']],
+ [/ajax/,['Johan Cruyff','Marco van Basten','Dennis Bergkamp','Edwin van der Sar']],
+ [/benfica/,['Eusébio','Rui Costa','Nuno Gomes']],
+ [/^porto|fc porto/,['Vítor Baía','Deco','Jorge Costa','Fernando Couto']],
+ [/sporting/,['Cristiano Ronaldo','Luís Figo','Paulo Futre']]
+];
+function legendsHtml(kind,key,name){
+  let names=null;
+  if(kind==='nba') names=LEG_NBA[key];
+  else { const k=String(name||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\b(fc|cf|afc|sc|ac|as|ssc|rc|us|ud|sv|vfb|vfl|fsv|1\.)\b\.?/g,m=>/^(ac|as)$/.test(m)?m:'').trim(); const f=LEG_F.find(x=>x[0].test(k)); names=f&&f[1]; }
+  const q=kind==='nba'?(tname(key)+' légendes basket'):(name+' football légendes');
+  return `<h3>🏆 Légendes du club</h3><div>${names?names.map(n=>`<span class="chip">${wikiLink(n)}</span>`).join(''):'<span class="mut">Pas de liste pour ce club.</span>'} <span class="mut" style="font-size:12px">· ${wikiLink(q,'Plus sur Wikipédia ↗')}</span></div>`;
+}
+
+/* --- Ce soir --- */
+function tonightNba(S){
+  if(!sched||!sched.length) return '';
+  const now=Date.now(), L=upcoming().filter(x=>Date.parse(x.t)>=now-3*36e5&&Date.parse(x.t)<=now+30*36e5);
+  let big=new Set(); try{ const b=bigMatches(S); if(b) b.items.forEach(i=>big.add(i.x.id)); }catch(e){}
+  const mine=x=>fav.teams.includes(x.h)||fav.teams.includes(x.a);
+  const rows=[...L].sort((a,b)=>mine(b)-mine(a)||Date.parse(a.t)-Date.parse(b.t)).map(x=>`<div class="liverow" style="grid-template-columns:auto 1fr auto"><div><b>${esc(parisT(x.t))}</b></div><div class="lt">${teamLogo(x.a,22)}<span class="nfull">${esc(tname(x.a))}</span><span class="ntri">${esc(x.a)}</span> <span class="mut">@</span> ${teamLogo(x.h,22)}<span class="nfull">${esc(tname(x.h))}</span><span class="ntri">${esc(x.h)}</span>${mine(x)?' ⭐':''}${big.has(x.id)?' 🔥':''}</div><div><span class="link" data-act="cmpgo" data-sp="nba" data-a="${esc(x.h)}" data-b="${esc(x.a)}" title="Comparer ces deux équipes">⚖️</span></div></div>`).join('');
+  return `<div class="card"><div class="row between"><h2 style="margin:0">🌙 Ce soir / cette nuit <span class="mut" style="font-weight:400;font-size:13px">(heure de Paris)</span></h2></div>${rows||'<p class="mut" style="margin:8px 0 0">Aucun match prévu dans les prochaines 30 heures (calendrier chargé jusqu\'au '+esc(parisD(sched[sched.length-1].t))+').</p>'}</div>`;
+}
+function tonightFoot(){
+  const {mt}=footIdx(); if(!mt.length) return '';
+  const now=Date.now(), L=mt.filter(m=>!m.done&&m.st!=='post'&&Date.parse(m.d)>=now-2*36e5&&Date.parse(m.d)<=now+30*36e5).sort((a,b)=>Date.parse(a.d)-Date.parse(b.d));
+  let big=new Set(); try{ footBig(40).forEach(i=>big.add(i.m.id)); }catch(e){}
+  const mine=m=>ffav.includes(m.hid)||ffav.includes(m.aid);
+  const rows=[...L].sort((a,b)=>mine(b)-mine(a)||Date.parse(a.d)-Date.parse(b.d)).slice(0,14).map(m=>`<div class="liverow" style="grid-template-columns:auto 1fr auto"><div><b>${esc(parisT(m.d))}</b>${m.st==='in'?' <span class="err">🔴</span>':''}</div><div class="lt" data-act="fmatch" data-id="${esc(m.id)}" style="cursor:pointer">${footLogo(m.hl,20)}${esc(m.hn)} <span class="mut">-</span> ${footLogo(m.al,20)}${esc(m.an)}${mine(m)?' ⭐':''}${big.has(m.id)?' 🔥':''}<span class="mut" style="font-size:12px"> · ${esc(footLgName(m.lg))}</span></div><div><span class="link" data-act="cmpgo" data-sp="foot" data-a="${esc(m.hid)}" data-b="${esc(m.aid)}" data-lg="${esc(m.lg)}" title="Comparer ces deux clubs">⚖️</span></div></div>`).join('');
+  return `<div class="card"><h2 style="margin:0 0 6px">🌙 Ce soir <span class="mut" style="font-weight:400;font-size:13px">(heure de Paris)</span></h2>${rows||'<p class="mut" style="margin:8px 0 0">Aucun match prévu dans les prochaines 30 heures.</p>'}</div>`;
+}
+
+/* --- Fiche équipe NBA enrichie --- */
+function teamExtraNba(S,t){
+  const roster=Object.values(S.P).filter(p=>p.tri===t.tri&&p.gp>0), best=k=>[...roster].sort((a,b)=>b[k]/b.gp-a[k]/a.gp)[0];
+  const kp=(l,k)=>{ const p=best(k); return `<div class="kpi"><span class="mut">${l}</span><b style="font-size:16px">${p?playerLink(p.id,p.name):'–'}</b>${p?`<span class="mut">${f1(p[k]/p.gp)} / match</span>`:''}</div>`; };
+  const nx=upcoming().filter(x=>x.h===t.tri||x.a===t.tri).slice(0,5);
+  return `<h3>Forme et prochains matchs</h3><div class="grid"><div class="kpi"><span class="mut">Forme (5 derniers)</span><div style="margin-top:4px">${formDots(t.log)}</div></div>${kp('Meilleur marqueur','pts')}${kp('Meilleur rebondeur','reb')}${kp('Meilleur passeur','ast')}</div>
+  ${nx.length?`<div class="scroll"><table><tbody>${nx.map(x=>`<tr><td class="l">${esc(parisD(x.t))}</td><td>${esc(parisT(x.t))}</td><td class="l">${x.h===t.tri?'vs':'@'} ${teamLogo(x.h===t.tri?x.a:x.h,18)}${esc(tname(x.h===t.tri?x.a:x.h))}</td></tr>`).join('')}</tbody></table></div>`:'<p class="mut">Aucun match à venir dans le calendrier chargé.</p>'}
+  ${legendsHtml('nba',t.tri)}`;
+}
+
+/* --- Face-à-face : forme, joueurs clés, prochaine rencontre --- */
+function cmpExtraNba(S,a,b){
+  const key=t=>[...Object.values(S.P)].filter(p=>p.tri===t.tri&&p.gp>0).sort((x,y)=>y.pts/y.gp-x.pts/x.gp).slice(0,3);
+  const col=t=>`<div><h3 style="margin-top:0">${teamLogo(t.tri,20)} ${esc(t.name)}</h3><div style="margin-bottom:6px">Forme : ${formDots(t.log)} <span class="mut">· série ${streak(t.log)}</span></div>${key(t).map(p=>`<div>${playerLink(p.id,p.name)} <span class="mut">${f1(p.pts/p.gp)} pts · ${f1(p.reb/p.gp)} reb · ${f1(p.ast/p.gp)} pas</span></div>`).join('')||'<span class="mut">–</span>'}</div>`;
+  const nx=upcoming().find(x=>(x.h===a.tri&&x.a===b.tri)||(x.h===b.tri&&x.a===a.tri));
+  return `<h3>Avant le match : forme et joueurs clés</h3><div class="grid2">${col(a)}${col(b)}</div>${nx?`<p class="mut">Prochaine rencontre : ${esc(parisD(nx.t))} à ${esc(parisT(nx.t))} (heure de Paris) — ${esc(tname(nx.a))} @ ${esc(tname(nx.h))}.</p>`:''}`;
+}
+function cmpExtraFoot(a,b){
+  const {P,mt}=footIdx(), key=t=>Object.values(P).filter(p=>p.tid===t.id).sort((x,y)=>(y.g+y.a)-(x.g+x.a)||y.gp-x.gp).slice(0,3);
+  const col=t=>`<div><h3 style="margin-top:0">${footLogo(t.lo,20)}${esc(t.n)}</h3><div style="margin-bottom:6px">Forme : ${fdots(t.id,5)}</div>${key(t).map(p=>`<div>${plink(p.id,p.n)} <span class="mut">${p.g} but(s) · ${p.a} PD · ${p.gp} MJ</span></div>`).join('')||'<span class="mut">Pas encore de stats joueurs.</span>'}</div>`;
+  const nx=mt.filter(m=>!m.done&&((m.hid===a.id&&m.aid===b.id)||(m.hid===b.id&&m.aid===a.id))).sort((x,y)=>Date.parse(x.d)-Date.parse(y.d))[0];
+  return `<h3>Avant le match : forme et joueurs clés</h3><div class="grid2">${col(a)}${col(b)}</div>${nx?`<p class="mut">Prochaine rencontre : ${esc(parisD(nx.d))} à ${esc(parisT(nx.d))} (heure de Paris) — ${esc(nx.hn)} - ${esc(nx.an)}.</p>`:''}`;
+}
+
+/* --- Joueur foot : buts par tranche de minutes --- */
+function footPlayerMinHtml(p){
+  const {mt}=footIdx(), byId=Object.fromEntries(mt.map(m=>[m.id,m])), b=[0,0,0,0,0,0]; let n=0;
+  for(const x of p.log){ const m=byId[x.mid]; if(!m||!m.x) continue; for(const e of m.x.ev){ if((e.t==='g'||e.t==='pg')&&e.p===p.n){ b[Math.min(5,Math.floor(Math.max(0,(e.m||1)-1)/15))]++; n++; } } }
+  if(!n) return '';
+  const mx=Math.max(...b), lab=['0-15','16-30','31-45','46-60','61-75','76-90+'], W=300, H=120, bw=36;
+  const bars=b.map((v,i)=>{ const h=mx?v/mx*70:0, x=14+i*47; return `<rect x="${x}" y="${96-h}" width="${bw}" height="${Math.max(h,1)}" rx="3" style="fill:var(--acc)"/><text x="${x+bw/2}" y="${90-h}" text-anchor="middle">${v}</text><text x="${x+bw/2}" y="112" text-anchor="middle" style="fill:var(--mut)">${lab[i]}</text>`; }).join('');
+  const per=p.g&&p.gp?(p.gp/p.g):0;
+  return `<h3>Quand marque-t-il ?</h3><svg viewBox="0 0 ${W} ${H}" style="max-width:420px;width:100%" font-size="10">${bars}</svg><p class="mut" style="margin:4px 0 0">${n} but(s) avec minute connue${per?` · un but tous les ${per.toFixed(1).replace('.',',')} match(s)`:''}.</p>`;
+}
+
+
+function footTeamExtra(t,plist){
+  const bs=[...plist].sort((x,y)=>y.g-x.g)[0], ba=[...plist].sort((x,y)=>y.a-x.a)[0];
+  return `<h3>Hommes clés</h3><div class="grid"><div class="kpi"><span class="mut">Meilleur buteur</span><b style="font-size:16px">${bs&&bs.g?plink(bs.id,bs.n):'–'}</b>${bs&&bs.g?`<span class="mut">${bs.g} but(s) en ${bs.gp} MJ</span>`:''}</div><div class="kpi"><span class="mut">Meilleur passeur</span><b style="font-size:16px">${ba&&ba.a?plink(ba.id,ba.n):'–'}</b>${ba&&ba.a?`<span class="mut">${ba.a} PD en ${ba.gp} MJ</span>`:''}</div></div>${legendsHtml('foot',t.id,t.n)}`;
 }
 function confetti(box,cols){
   const n=110; let h='';
@@ -1384,7 +1528,7 @@ const KEYFO='suivi-foot-v1', KEYFF='suivi-foot-fav', KEYFP='suivi-foot-favp', KE
 const FLG=[['fra.1','Ligue 1'],['eng.1','Premier League'],['esp.1','Liga'],['ita.1','Serie A'],['ger.1','Bundesliga'],['uefa.champions','Ligue des champions'],['uefa.europa','Europa League'],['uefa.europa.conf','Conférence League']];
 const isEU=lg=>/^uefa\./.test(lg||'');
 const inLg=(o,lg)=>!lg||lg==='mine'||o.lg===lg||!!(o.comps&&o.comps[lg]);
-const FTABS=[['home','Accueil'],['matches','Matchs'],['table','Classement'],['teams','Équipes'],['players','Joueurs'],['records','Records'],['compare','Comparer'],['cal','Calendrier']];
+const FTABS=[['home','Accueil'],['multi','🔥 Multiplex'],['matches','Matchs'],['table','Classement'],['teams','Équipes'],['players','Joueurs'],['records','Records'],['compare','Comparer'],['cal','Calendrier']];
 let foot=loadJ(KEYFO,{leagues:{}}), ffav=loadJ(KEYFF,[]), ffavP=loadJ(KEYFP,[]);
 if(!foot.leagues) foot.leagues={}; if(!foot.ph) foot.ph={};
 let _fidx=null;
@@ -1631,20 +1775,33 @@ function footLeadersFallback(lg){
 }
 
 /* ---------- Accueil ---------- */
+
+const FHOME_BLOCKS=[['alerts','Alertes sur mes clubs'],['tonight','Ce soir (heure de Paris)'],['clubs','Mes clubs'],['players','Mes joueurs'],['big','Gros matchs à venir'],['news','À la une'],['kpis','Chiffres clés'],['matches','Matchs'],['scorers','Meilleurs buteurs']];
+const KEYFH='suivi-foot-home'; let fhomeCfg=loadJ(KEYFH,{order:FHOME_BLOCKS.map(b=>b[0]),hidden:[]});
+function fhomeNorm(){ const ids=FHOME_BLOCKS.map(b=>b[0]); const o=(fhomeCfg.order||[]).filter(i=>ids.includes(i)); for(const i of ids) if(!o.includes(i)) o.push(i); return {order:o,hidden:(fhomeCfg.hidden||[]).filter(i=>ids.includes(i))}; }
+function fhomeEditor(cfg){
+  const lab=Object.fromEntries(FHOME_BLOCKS);
+  return `<div class="card"><h2>Personnaliser l'accueil foot</h2><p class="mut">Coche les blocs à afficher et change leur ordre avec les flèches (mets tes blocs préférés en premier).</p>${cfg.order.map((id,i)=>`<div class="row hrow"><label><input type="checkbox" data-act="fhometoggle" data-id="${id}" ${cfg.hidden.includes(id)?'':'checked'}> ${esc(lab[id])}</label><button class="sec" data-act="fhomemove" data-id="${id}" data-d="-1" ${i===0?'disabled':''}>↑</button><button class="sec" data-act="fhomemove" data-id="${id}" data-d="1" ${i===cfg.order.length-1?'disabled':''}>↓</button></div>`).join('')}<div class="row" style="margin-top:10px"><button data-act="fhomeedit">Terminé</button><button class="sec" data-act="fhomereset">Tout réinitialiser</button></div></div>`;
+}
 function footHome(){
   const {mt,done,P}=footIdx(), pl=Object.values(P), lg=ui.fLg&&ui.fLg!=='mine'?ui.fLg:'';
-  let h=footControls();
+  let h=footControls(); const FB={};
   if(!mt.length) return h;
-  const al=footAlerts(); if(al.length) h+=`<div class="card"><div class="row between"><h2 style="margin:0">🔔 Alertes foot</h2><button class="sec" data-act="welcome">🎉 Revoir en plein écran</button></div>${al.map(x=>`<div class="alert">${x}</div>`).join('')}</div>`;
-  const nw=footNews(3); if(nw.length) h+=`<div class="card"><h2>📰 À la une</h2>${nw.map(n=>`<div class="alert"><b>${mlink(n.m,esc(n.r.title))}</b> <span class="mut" style="font-size:12px">· ${esc(footLgName(n.m.lg))} · ${n.age<1?'aujourd\'hui':n.age<2?'hier':'il y a '+Math.floor(n.age)+' j'}</span><div class="mut" style="margin-top:3px">${(()=>{ const t=n.r.paras[1]||n.r.paras[0]; if(t.length<=230) return t; const c=t.slice(0,230), i=c.lastIndexOf(' ; '); return (i>60?c.slice(0,i):c.replace(/\s+\S*$/,''))+' … <span class="link" data-act="fmatch" data-id="'+esc(n.m.id)+'">lire la suite</span>'; })()}</div></div>`).join('')}</div>`;
+  h+=multiBanner();
+  const al=footAlerts(); if(al.length) FB.alerts=`<div class="card"><div class="row between"><h2 style="margin:0">🔔 Alertes foot</h2><button class="sec" data-act="welcome">🎉 Revoir en plein écran</button></div>${al.map(x=>`<div class="alert">${x}</div>`).join('')}</div>`;
+  const nw=footNews(3); if(nw.length) FB.news=`<div class="card"><h2>📰 À la une</h2>${nw.map(n=>`<div class="alert"><b>${mlink(n.m,esc(n.r.title))}</b> <span class="mut" style="font-size:12px">· ${esc(footLgName(n.m.lg))} · ${n.age<1?'aujourd\'hui':n.age<2?'hier':'il y a '+Math.floor(n.age)+' j'}</span><div class="mut" style="margin-top:3px">${(()=>{ const t=n.r.paras[1]||n.r.paras[0]; if(t.length<=230) return t; const c=t.slice(0,230), i=c.lastIndexOf(' ; '); return (i>60?c.slice(0,i):c.replace(/\s+\S*$/,''))+' … <span class="link" data-act="fmatch" data-id="'+esc(n.m.id)+'">lire la suite</span>'; })()}</div></div>`).join('')}</div>`;
   const goals=done.reduce((s,m)=>s+m.hs+m.as,0);
-  h+=`<div class="grid"><div class="kpi"><span class="mut">Matchs joués</span><b>${done.length}</b></div><div class="kpi"><span class="mut">Buts / match</span><b>${f1(fdiv(goals,done.length))}</b></div><div class="kpi"><span class="mut">Championnats</span><b>${Object.keys(foot.leagues).length}</b></div><div class="kpi"><span class="mut">Joueurs suivis</span><b>${pl.length}</b></div></div>`;
-  h+=`<div class="card"><h2>⭐ Mes clubs</h2>${footFavCards()}</div>`;
-  const bg=footBig(); if(bg.length) h+=`<div class="card"><h2>🔥 À ne pas manquer (8 prochains jours)</h2>${bg.map(i=>`<div class="alert"><b>${mlink(i.m,`${footLogo(i.m.hl,18)}${esc(i.m.hn)} - ${footLogo(i.m.al,18)}${esc(i.m.an)}`)}</b> <span class="mut">${esc(footLgName(i.m.lg))} · ${esc(fmtDT(i.m.d))}</span><br>${i.tags.map(t=>`<span class="chip">${esc(t)}</span>`).join(' ')}</div>`).join('')}</div>`;
-  if(ffavP.length){ h+=`<div class="card"><h2>⭐ Mes joueurs</h2><div class="scroll"><table><thead><tr><th class="l">Joueur</th><th>MJ</th><th>Buts</th><th>PD</th><th>Tirs</th></tr></thead><tbody>${ffavP.map(id=>{ const p=P[id]; return p?`<tr><td class="l">${fpstar(id)}${footAv(p.id,p.n,p.tco,24)}${plink(p.id,p.n)} <span class="mut">${esc(p.tn)}</span></td><td>${p.gp}</td><td><b>${p.g}</b></td><td>${p.a}</td><td>${p.sh}</td></tr>`:`<tr><td class="l">${esc(id)}</td><td colspan="4" class="mut">pas encore de stats</td></tr>`; }).join('')}</tbody></table></div></div>`; }
-  h+=`<div class="card"><div class="row between"><h2 style="margin:0">Matchs</h2>${footLgSel('fLg',ui.fLg,true,true)}</div>${footLists(footMatches(),8,!ui.fLg||ui.fLg==='mine')}</div>`;
+  FB.kpis=`<div class="grid"><div class="kpi"><span class="mut">Matchs joués</span><b>${done.length}</b></div><div class="kpi"><span class="mut">Buts / match</span><b>${f1(fdiv(goals,done.length))}</b></div><div class="kpi"><span class="mut">Championnats</span><b>${Object.keys(foot.leagues).length}</b></div><div class="kpi"><span class="mut">Joueurs suivis</span><b>${pl.length}</b></div></div>`;
+  FB.tonight=tonightFoot();
+  FB.clubs=`<div class="card"><h2>⭐ Mes clubs</h2>${footFavCards()}</div>`;
+  const bg=footBig(); if(bg.length) FB.big=`<div class="card"><h2>🔥 À ne pas manquer (8 prochains jours)</h2>${bg.map(i=>`<div class="alert"><b>${mlink(i.m,`${footLogo(i.m.hl,18)}${esc(i.m.hn)} - ${footLogo(i.m.al,18)}${esc(i.m.an)}`)}</b> <span class="mut">${esc(footLgName(i.m.lg))} · ${esc(fmtDT(i.m.d))}</span><br>${i.tags.map(t=>`<span class="chip">${esc(t)}</span>`).join(' ')}</div>`).join('')}</div>`;
+  if(ffavP.length){ FB.players=`<div class="card"><h2>⭐ Mes joueurs</h2><div class="scroll"><table><thead><tr><th class="l">Joueur</th><th>MJ</th><th>Buts</th><th>PD</th><th>Tirs</th></tr></thead><tbody>${ffavP.map(id=>{ const p=P[id]; return p?`<tr><td class="l">${fpstar(id)}${footAv(p.id,p.n,p.tco,24)}${plink(p.id,p.n)} <span class="mut">${esc(p.tn)}</span></td><td>${p.gp}</td><td><b>${p.g}</b></td><td>${p.a}</td><td>${p.sh}</td></tr>`:`<tr><td class="l">${esc(id)}</td><td colspan="4" class="mut">pas encore de stats</td></tr>`; }).join('')}</tbody></table></div></div>`; }
+  FB.matches=`<div class="card"><div class="row between"><h2 style="margin:0">Matchs</h2>${footLgSel('fLg',ui.fLg,true,true)}</div>${footLists(footMatches(),8,!ui.fLg||ui.fLg==='mine')}</div>`;
   const sc=lg?pl.filter(p=>inLg(p,lg)):pl;
-  h+=`<div class="card"><h2>Meilleurs buteurs ${lg?'— '+esc(footLgName(lg)):''}</h2>${sc.length?`<div class="grid2"><div><h3>Buts</h3>${footScorersTable(sc,'g','buts',6)}</div><div><h3>Passes décisives</h3>${footScorersTable(sc,'a','PD',6)}</div></div>`:(lg?footLeadersFallback(lg):'')||'<p class="mut">Les buteurs apparaissent après le chargement des détails des matchs (bouton Actualiser).</p>'}</div>`;
+  FB.scorers=`<div class="card"><h2>Meilleurs buteurs ${lg?'— '+esc(footLgName(lg)):''}</h2>${sc.length?`<div class="grid2"><div><h3>Buts</h3>${footScorersTable(sc,'g','buts',6)}</div><div><h3>Passes décisives</h3>${footScorersTable(sc,'a','PD',6)}</div></div>`:(lg?footLeadersFallback(lg):'')||'<p class="mut">Les buteurs apparaissent après le chargement des détails des matchs (bouton Actualiser).</p>'}</div>`;
+  const cfg=fhomeNorm();
+  h+=`<div class="row between" style="margin-bottom:10px"><span class="mut">${cfg.hidden.length?cfg.hidden.length+' bloc(s) masqué(s)':''}</span><button class="sec" data-act="fhomeedit">⚙ Personnaliser l'accueil</button></div>${ui.fHomeEdit?fhomeEditor(cfg):''}`;
+  for(const id of cfg.order) if(!cfg.hidden.includes(id)&&FB[id]) h+=FB[id];
   return h;
 }
 
@@ -1869,6 +2026,7 @@ function footTeamModal(t){
   <h3>Domicile et extérieur</h3><div class="scroll"><table><thead><tr><th class="l"></th><th>MJ</th><th>V-N-D</th><th>BP</th><th>BC</th></tr></thead><tbody>${sp('Domicile',t.H)}${sp('Extérieur',t.A)}</tbody></table></div>
   ${nx.length?`<h3>Prochains matchs</h3><div class="scroll"><table><tbody>${nx.map(m=>footRow(m,false)).join('')}</tbody></table></div>`:''}
   <div class="grid2"><div><h3>Résultats</h3><div class="scroll"><table><tbody>${[...lg].reverse().slice(0,20).map(x=>{ const m=ms.find(z=>z.id===x.mid); return `<tr class="click" data-act="fmatch" data-id="${esc(x.mid)}"><td class="l">${fmtD(x.t)}</td><td class="l">${x.home?'vs':'@'} ${esc(x.opp)}</td><td><span class="dot ${x.res}">${x.res==='w'?'V':x.res==='l'?'D':'N'}</span></td><td>${x.gf}-${x.ga}</td></tr>`; }).join('')||'<tr><td class="empty">–</td></tr>'}</tbody></table></div></div><div><h3>Joueurs (matchs détaillés)</h3>${plist.length?`<div class="scroll"><table><thead><tr><th class="l">Joueur</th><th>MJ</th><th>B</th><th>PD</th><th>Tirs</th></tr></thead><tbody>${plist.slice(0,16).map(p=>`<tr><td class="l">${footAv(p.id,p.n,t.co,22)}${plink(p.id,p.n)} <span class="mut">${esc(p.pos)}</span></td><td>${p.gp}</td><td><b>${p.g}</b></td><td>${p.a}</td><td>${p.sh}</td></tr>`).join('')}</tbody></table></div>`:'<p class="mut">Pas de détails de joueurs.</p>'}</div></div>
+  ${footTeamExtra(t,plist)}
   ${noteBox('fteam:'+t.id,t.n,'Ex. : équipe à suivre…')}</div>`;
 }
 
@@ -1917,7 +2075,7 @@ ${logo?`<image onerror="this.style.display='none'" href="${esc(logo)}" x="34" y=
 <circle cx="170" cy="130" r="58" fill="#fff" opacity=".12"/><text x="170" y="146" text-anchor="middle" font-size="44" font-weight="800" fill="#f5e6a8">${esc(initials(p.n))}</text>${photo?`<image onerror="footImgFix(this)" data-pid="${esc(p.id)}" href="${esc(photo)}" x="86" y="40" width="170" height="170" preserveAspectRatio="xMidYMax meet"/>`:''}
 <text x="150" y="238" text-anchor="middle" font-size="${fs}" font-weight="900" fill="#fff" letter-spacing=".5">${esc(disp)}</text>
 <line x1="52" x2="248" y1="248" y2="248" stroke="url(#${uid}b)" stroke-width="1.5"/>
-<text x="150" y="264" text-anchor="middle" font-size="11" fill="#fff" opacity=".8">${esc(p.tn||'')}</text>
+<text x="150" y="264" text-anchor="middle" font-size="10" fill="#fff" opacity=".85">${esc((p.tn||'').slice(0,16))} · ${p.g} B · ${p.a} PD · ${p.gp} MJ</text>
 ${D.rows.map(stat).join('')}
 <line x1="150" x2="150" y1="268" y2="360" stroke="url(#${uid}b)" stroke-width="1" opacity=".5"/>
 <text x="150" y="392" text-anchor="middle" font-size="9" fill="#f5e6a8" opacity=".7" letter-spacing="1.5">NOTE SUR ${Object.values(footIdx().P).filter(x=>inLg(x,p.lg)&&x.gp>=2&&(p.pg==='?'||x.pg===p.pg)).length} JOUEURS</text>
@@ -1947,6 +2105,7 @@ function footPlayerModal(p){
   ${logs.length>1?`<h3>Buts cumulés</h3>${lineChart([{name:'Buts cumulés',values:cum,color:c1}],logs.map(x=>fmtD(x.t)))}`:''}
   <div class="grid2"><div><h3>Profil (${peers.length} joueurs comparés)</h3>${peers.length>=3?radarChart(FRADP,[{name:p.n,color:c1,vals:rv}],'joueurs du championnat au même poste'):'<p class="mut">Pas assez de joueurs à comparer.</p>'}</div><div><h3>Classement parmi eux</h3><div class="scroll"><table><thead><tr><th class="l">Stat</th><th>Valeur</th><th>Top</th></tr></thead><tbody>${specs.map(([l,fn])=>{ const v=fn(p), vs=peers.map(fn); const top=peers.length?Math.round(100-pctOf(vs,v)+ (100/(2*peers.length))):null; return `<tr><td class="l">${l}</td><td>${v.toFixed(2)}</td><td>${top==null?'–':'Top '+Math.max(1,Math.min(100,top))+' %'}</td></tr>`; }).join('')}</tbody></table></div></div></div>
   <h3>Match par match</h3><div class="scroll"><table><thead><tr><th class="l">Date</th><th class="l">Match</th><th></th><th>B</th><th>PD</th><th>Tirs</th><th>Cart.</th></tr></thead><tbody>${[...logs].reverse().map(x=>`<tr class="click" data-act="fmatch" data-id="${esc(x.mid)}"><td class="l">${fmtD(x.t)}</td><td class="l">${x.home?'vs':'@'} ${esc(x.opp)} <span class="mut">${x.s?'':'(remplaçant)'}</span></td><td><span class="dot ${x.res}">${x.res==='w'?'V':x.res==='l'?'D':'N'}</span></td><td>${x.g||''}</td><td>${x.a||''}</td><td>${x.sh?x.sh+'/'+x.sot:''}</td><td>${x.yc?'🟨':''}${x.rc?'🟥':''}</td></tr>`).join('')}</tbody></table></div>
+  ${footPlayerMinHtml(p)}
   ${noteBox('fplayer:'+p.id,p.n,'Ex. : à surveiller, blessé…')}</div>`;
 }
 
@@ -1969,6 +2128,84 @@ function footRecordsView(){
 /* ---------- Comparer ---------- */
 const FCMP_T=[['Points / match',t=>t.st&&t.st.gp?t.st.pts/t.st.gp:fdiv(3*t.w+t.d,t.g),v=>v.toFixed(2)],['Buts marqués / m',t=>fdiv(t.gf,t.g),f1],['Buts encaissés / m',t=>fdiv(t.ga,t.g),f1,true],['Clean sheets (%)',t=>100*fdiv(t.cs,t.g),v=>Math.round(v)+' %'],['Possession (%)',t=>footTeamAvg(t).poss||0,f1],['Tirs / m',t=>footTeamAvg(t).sh||0,f1],['Cadrés / m',t=>footTeamAvg(t).sot||0,f1],['Corners / m',t=>footTeamAvg(t).cor||0,f1],['Fautes / m',t=>footTeamAvg(t).fl||0,f1,true],['+2,5 buts (%)',t=>100*fdiv(t.o25,t.g),v=>Math.round(v)+' %']];
 const FCMP_P=[['Buts',p=>p.g,v=>v],['Passes D.',p=>p.a,v=>v],['Buts / match',p=>fdiv(p.g,p.gp),v=>v.toFixed(2)],['Tirs / match',p=>fdiv(p.sh,p.gp),v=>v.toFixed(1)],['Cadrés / match',p=>fdiv(p.sot,p.gp),v=>v.toFixed(1)],['Précision (%)',p=>100*fdiv(p.sot,p.sh),v=>Math.round(v)],['Fautes / match',p=>fdiv(p.fc,p.gp),v=>v.toFixed(1),true],['Cartons',p=>p.yc+2*p.rc,v=>v,true]];
+
+/* ================= Multiplex foot ================= */
+function multiAll(){
+  const {mt}=footIdx(), M={};
+  for(const m of mt) M[m.id]={id:m.id,lg:m.lg,d:m.d,hn:m.hn,an:m.an,hid:m.hid,aid:m.aid,hl:m.hl,al:m.al,st:m.done?'post':(m.st||'pre'),hs:m.hs||0,as:m.as||0,txt:'',
+    ev:((m.x&&m.x.ev)||[]).filter(e=>e.t==='g'||e.t==='pg'||e.t==='og'||e.t==='rc').map(e=>({t:e.t,min:e.m,ms:e.ms,p:e.p,s:e.s}))};
+  for(const it of (liveData.items||[])){ if(it.k!=='f') continue;
+    const o=M[it.id]||(M[it.id]={id:it.id,lg:it.lg,d:it.d,hn:it.h.n,an:it.a.n,hid:it.h.id,aid:it.a.id,hl:it.h.l,al:it.a.l,ev:[]});
+    o.st=it.done?'post':it.st; o.hs=it.h.s; o.as=it.a.s; o.txt=it.st==='in'?liveText(it):'';
+    if(it.ev&&it.ev.length) o.ev=it.ev.filter(e=>e.g||e.rc).map(e=>({t:e.rc?'rc':e.og?'og':e.pg?'pg':'g',min:parseInt(e.m)||0,ms:e.m,p:e.p,s:e.s})); }
+  return M;
+}
+function multiDetect(){
+  const now=Date.now(), M=multiAll(), by={}, out=[];
+  for(const m of Object.values(M)){ const t=Date.parse(m.d); if(!t||t<now-3.5*36e5||t>now+36*36e5) continue; (by[m.lg] ||= []).push({...m,t}); }
+  for(const [lg,L] of Object.entries(by)){ L.sort((a,b)=>a.t-b.t);
+    for(let i=0;i<L.length;i++){ const c=L.filter(x=>x.t>=L[i].t&&x.t<=L[i].t+30*6e4); if(c.length>=3){ out.push({lg,start:L[i].t,ms:c}); i+=c.length-1; } } }
+  return out.sort((a,b)=>a.start-b.start);
+}
+const multiLive=lg=>{ try{ return multiDetect().some(d=>d.lg===lg&&d.start<=Date.now()+20*6e4); }catch(e){ return false; } };
+function multiBanner(){
+  const D=multiDetect(); if(!D.length) return '';
+  const today=parisDK(new Date().toISOString());
+  return D.slice(0,2).map(d=>{ const iso=new Date(d.start).toISOString(), live=d.ms.some(m=>m.st==='in'), day=parisDK(iso)===today?'ce soir':'demain';
+    return `<div class="card" style="border-left:4px solid #e04030"><div class="row between"><div>🔥 <b>Multiplex ${esc(footLgName(d.lg))} ${live?'en cours':day}</b> : ${d.ms.length} matchs à ${esc(parisT(iso))}</div><button data-act="multigo" data-lg="${esc(d.lg)}">${live?'Suivre en direct':'Ouvrir'}</button></div></div>`; }).join('');
+}
+function multiSet(lg){
+  const d=multiDetect().find(x=>x.lg===lg); if(d) return d.ms;
+  const now=Date.now(); return Object.values(multiAll()).filter(m=>m.lg===lg&&Date.parse(m.d)>=now-6*36e5&&Date.parse(m.d)<=now+30*36e5).sort((a,b)=>Date.parse(a.d)-Date.parse(b.d));
+}
+function multiTable(lg,ms){
+  const LG=foot.leagues[lg]; if(!LG||!LG.standings.length) return '';
+  const upd=LG.upd||0, rows=LG.standings.map(r=>({...r,np:r.pts,ngd:r.gd,ngf:r.gf,pl:null})), by=Object.fromEntries(rows.map(r=>[r.id,r]));
+  let used=0;
+  for(const m of ms){ if(m.st!=='in'&&m.st!=='post') continue; const tt=Date.parse(m.d); if(m.st==='post'&&upd>=tt+115*6e4) continue; used++;
+    for(const [id,gf,ga] of [[m.hid,m.hs,m.as],[m.aid,m.as,m.hs]]){ const r=by[id]; if(!r) continue; r.np+=gf>ga?3:gf===ga?1:0; r.ngd+=gf-ga; r.ngf+=gf; r.pl=m; } }
+  const zoneAt=LG.standings.map(r=>r.zone), srt=[...rows].sort((a,b)=>b.np-a.np||b.ngd-a.ngd||b.ngf-a.ngf||a.rank-b.rank); srt.forEach((r,i)=>{ r.nr=i+1; });
+  const body=srt.map(r=>{ const mv=r.rank-r.nr, ar=mv>0?`<span style="color:var(--ok)">▲${mv}</span>`:mv<0?`<span style="color:var(--bad)">▼${-mv}</span>`:'<span class="mut">=</span>',
+    z=zoneAt[r.nr-1], z0=r.zone, ch=mv!==0&&z&&(!z0||z.d!==z0.d), tag=ch?` <span style="font-size:11px;color:${esc(z.c||'var(--mut)')}">→ ${esc(z.d)}</span>`:'';
+    const sc=r.pl?` <span class="mut" style="font-size:12px">(${r.pl.hs}-${r.pl.as}${r.pl.st==='in'?' en cours':' terminé'})</span>`:'';
+    return `<tr class="${r.pl?'favrow':''}"><td>${r.nr}</td><td>${ar}</td><td class="l">${footLogo(r.logo,18)}${esc(r.name)}${sc}${tag}</td><td><b>${r.np}</b></td><td>${r.ngd>0?'+':''}${r.ngd}</td></tr>`; }).join('');
+  return `<div class="card"><h2>📈 Classement live <span class="mut" style="font-weight:400;font-size:12px">· projeté avec les scores du moment${used?'':' (aucun match commencé)'}</span></h2><div class="scroll"><table><thead><tr><th>#</th><th></th><th class="l">Club</th><th>Pts</th><th>Diff.</th></tr></thead><tbody>${body}</tbody></table></div><p class="mut" style="font-size:12px;margin:6px 0 0">Basé sur le dernier classement chargé : « ▲▼ » = places gagnées ou perdues si les scores restent ainsi.</p></div>`;
+}
+function multiBilan(ms){
+  const started=ms.filter(m=>m.st==='in'||m.st==='post'); if(!started.length) return '';
+  let goals=0, comeback=null, late=null; const sc={};
+  for(const m of started){ goals+=m.hs+m.as; let h=0,a=0, dh=0, da=0;
+    for(const e of [...m.ev].sort((x,y)=>x.min-y.min)){ if(e.t==='rc') continue;
+      if(e.s==='h') h++; else if(e.s==='a') a++; dh=Math.max(dh,a-h); da=Math.max(da,h-a);
+      if(e.p&&(e.t==='g'||e.t==='pg')) sc[e.p]=(sc[e.p]||0)+1;
+      if(!late||e.min>late.min) late={min:e.min,ms:e.ms,p:e.p,m,og:e.t==='og'}; }
+    if(m.st==='post'){ for(const [side,def] of [['h',dh],['a',da]]){ const my=side==='h'?m.hs:m.as, op=side==='h'?m.as:m.hs; if(def>=1&&my>=op){ const v=def+(my>op?.5:0); if(!comeback||v>comeback.v) comeback={v,def,win:my>op,m,side}; } } } }
+  const top=Object.entries(sc).sort((a,b)=>b[1]-a[1]), best=top.length?top.filter(x=>x[1]===top[0][1]).map(x=>x[0]):[];
+  const li=[];
+  li.push(`⚽ <b>${goals}</b> but${goals>1?'s':''} sur ${started.length} match${started.length>1?'s':''} commencé${started.length>1?'s':''}`);
+  if(comeback){ const m=comeback.m, nm=comeback.side==='h'?m.hn:m.an; li.push(`🔄 <b>Plus gros retournement</b> : ${esc(nm)} était mené de ${comeback.def} but${comeback.def>1?'s':''} et ${comeback.win?'gagne':'égalise'} (${esc(m.hn)} ${m.hs}-${m.as} ${esc(m.an)})`); }
+  if(late&&late.min>0) li.push(`⏱️ <b>But le plus tardif</b> : ${esc(late.p||'?')} à la ${esc(late.ms||late.min+"'")}${late.og?' (csc)':''} (${esc(late.m.hn)} - ${esc(late.m.an)})`);
+  if(best.length&&top[0][1]>=1) li.push(`👑 <b>Meilleur buteur de la soirée</b> : ${best.slice(0,3).map(esc).join(', ')+(best.length>3?' et '+(best.length-3)+' autre(s)':'')} (${top[0][1]} but${top[0][1]>1?'s':''})`);
+  return `<div class="card"><h2>📊 Bilan de la soirée</h2>${li.map(x=>`<p style="margin:6px 0">${x}</p>`).join('')}</div>`;
+}
+function footMultiView(){
+  const now=Date.now(), M=Object.values(multiAll()), det=multiDetect();
+  const avail=FLG.filter(([c])=>det.some(d=>d.lg===c)||M.some(m=>m.lg===c&&Date.parse(m.d)>=now-6*36e5&&Date.parse(m.d)<=now+30*36e5));
+  let lg=ui.fMulti; if(!avail.find(x=>x[0]===lg)) lg=(det[0]&&det[0].lg)||(avail[0]&&avail[0][0])||'';
+  let h=footControls();
+  if(!lg) return h+`<div class="card"><h2>🔥 Multiplex</h2><p class="mut">Aucun match dans les prochaines 30 heures. Quand au moins 3 matchs d'un même championnat commencent à moins de 30 minutes d'écart, Statify te prévient ici et sur l'accueil foot. Actualise les scores (🔄) pour charger le calendrier.</p></div>`;
+  const ms=multiSet(lg), isMx=det.some(d=>d.lg===lg), live=ms.filter(m=>m.st==='in').length;
+  const rank=m=>{ const c=liveMem['f'+m.id]; return (c&&c.chg&&now-c.chg<90000)?0:m.st==='in'?1:m.st==='pre'?2:3; };
+  const sorted=[...ms].sort((a,b)=>rank(a)-rank(b)||(rank(a)===0?liveMem['f'+b.id].chg-liveMem['f'+a.id].chg:rank(a)===3?Date.parse(b.d)-Date.parse(a.d):Date.parse(a.d)-Date.parse(b.d)));
+  const evl=(m,sd)=>m.ev.filter(e=>e.s===sd).sort((x,y)=>x.min-y.min).map(e=>`<div>${e.t==='rc'?'🟥':'⚽'} ${esc(e.p||'?')} ${esc(e.ms||e.min+"'")}${e.t==='og'?' (csc)':e.t==='pg'?' (pen.)':''}</div>`).join('');
+  const card=m=>{ const c=liveMem['f'+m.id], fl=(c&&c.chg&&now-c.chg<30000)?' flash':'', mid=m.st==='pre'?parisT(m.d):m.st==='post'?'Terminé':m.txt||'En cours', mine=ffav.includes(m.hid)||ffav.includes(m.aid);
+    return `<div class="liverow${fl}" data-act="fmatch" data-id="${esc(m.id)}" style="cursor:pointer"><div class="lt">${footLogo(m.hl,22)}<b>${esc(m.hn)}</b>${mine?' ⭐':''}</div><div class="ls">${m.st==='pre'?'<span class="mut">–</span>':m.hs+' - '+m.as}<span class="lm" style="${m.st==='post'?'color:var(--mut)':m.st==='pre'?'color:var(--mut)':''}">${esc(mid)}</span></div><div class="lt r"><b>${esc(m.an)}</b>${footLogo(m.al,22)}</div>${m.ev.length?`<div class="lev"><div>${evl(m,'h')}</div><div style="text-align:right">${evl(m,'a')}</div></div>`:''}</div>`; };
+  const first=ms.length?[...ms].sort((a,b)=>Date.parse(a.d)-Date.parse(b.d))[0]:null;
+  h+=`<div class="card livecard"><div class="row between" style="margin-bottom:6px"><h2 style="margin:0">${live?'<span class="livedot"></span>':''}🔥 ${isMx?'Multiplex':'Soirée'} ${esc(footLgName(lg))}</h2><select id="fMulti">${avail.map(([c,n])=>`<option value="${esc(c)}" ${c===lg?'selected':''}>${esc(n)}</option>`).join('')}</select></div><p class="mut" style="margin:0 0 6px">${ms.length} match${ms.length>1?'s':''}${first?' · premier coup d\'envoi à '+esc(parisT(first.d))+' (heure de Paris)':''}${live?' · '+live+' en cours':''} · le match qui vient de marquer remonte en premier</p>${sorted.map(card).join('')||'<p class="mut">Aucun match.</p>'}</div>`;
+  h+=multiTable(lg,ms)+multiBilan(ms);
+  return h;
+}
+
 function footCompareView(){
   const {T,P,done}=footIdx(), pl=(ui.fCmpMode||'teams')==='players', lg=ui.fLg&&ui.fLg!=='mine'?ui.fLg:'';
   const src=pl?Object.values(P).filter(p=>p.gp>=1&&inLg(p,lg)).sort((a,b)=>(b.g+b.a)-(a.g+a.a)):Object.values(T).filter(t=>t.g>0&&inLg(t,lg)).sort((a,b)=>((a.st?a.st.rank:99)-(b.st?b.st.rank:99))||b.w-a.w);
@@ -1983,6 +2220,7 @@ function footCompareView(){
   h+=specs.map(([l,fn,fm,low])=>{ const x=fn(a),y=fn(b),m=Math.max(Math.abs(x),Math.abs(y))||1, aw=low?x<y:x>y, bw=low?y<x:y>x; return `<div class="cmp"><div class="cv ${aw?'win':''}">${fm(x)}</div><div class="cb l"><i class="${aw?'w':''}" style="width:${Math.max(0,x)/m*100}%;background:${ca}"></i></div><div class="cl" style="font-size:11px">${l}</div><div class="cb r"><i class="${bw?'w':''}" style="width:${Math.max(0,y)/m*100}%;background:${cb}"></i></div><div class="cv ${bw?'win':''}">${fm(y)}</div></div>`; }).join('');
   if(!pl){ h+=`<h3>Profil comparé</h3>${radarChart(FRADT,[{name:a.n,color:ca,vals:footRadarT(T,a)},{name:b.n,color:cb,vals:footRadarT(T,b)}],'clubs')}`;
     const hh=done.filter(m=>(m.hid===a.id&&m.aid===b.id)||(m.hid===b.id&&m.aid===a.id)).sort((x,y)=>Date.parse(y.d)-Date.parse(x.d));
+    h+=cmpExtraFoot(a,b);
     h+=`<h3>Confrontations directes en mémoire</h3>${hh.length?`<div class="scroll"><table><tbody>${hh.map(m=>`<tr class="click" data-act="fmatch" data-id="${esc(m.id)}"><td class="l">${fmtD(m.d)}</td><td class="l">${esc(m.hn)}</td><td><b>${m.hs} - ${m.as}</b></td><td class="l">${esc(m.an)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="mut">Aucune.</p>'}`; }
   else { const pe=Object.values(P).filter(x=>x.lg===a.lg&&x.gp>=2), v=o=>footRadarV(o), all=pe.map(v);
     h+=`<h3>Profil comparé</h3>${pe.length>=3?radarChart(FRADP,[{name:a.n,color:ca,vals:v(a).map((x,i)=>pctOf(all.map(z=>z[i]),x))},{name:b.n,color:cb,vals:v(b).map((x,i)=>pctOf(all.map(z=>z[i]),x))}],'joueurs du championnat'):'<p class="mut">Pas assez de joueurs.</p>'}`;
@@ -2009,7 +2247,7 @@ function footCalView(){
 }
 
 function viewFoot(){
-  const v={home:footHome,matches:footMatchesView,table:footTableView,teams:footTeamsView,players:footPlayersView,records:footRecordsView,compare:footCompareView,cal:footCalView}[ui.ftab]||footHome;
+  const v={home:footHome,multi:footMultiView,matches:footMatchesView,table:footTableView,teams:footTeamsView,players:footPlayersView,records:footRecordsView,compare:footCompareView,cal:footCalView}[ui.ftab]||footHome;
   return v();
 }
 function footModalHtml(){
@@ -2141,8 +2379,14 @@ function toggleFav(type,id,name){
   else if(a==='fmore'){ ui.fLimit=(ui.fLimit||60)+60; render(); }
   else if(a==='fcalmore'){ ui.fCalLimit=(ui.fCalLimit||250)+250; render(); }
   else if(a==='fcsv') footCsv();
+  else if(a==='multigo'){ closeModals(); ui.ftab='multi'; ui.fMulti=el.dataset.lg; render(); window.scrollTo(0,0); }
+  else if(a==='cmpgo'){ closeModals(); if(el.dataset.sp==='foot'){ ui.ftab='compare'; ui.fCmpMode='teams'; ui.fCmpA=el.dataset.a; ui.fCmpB=el.dataset.b; ui.fLg=''; } else { ui.tab='compare'; ui.cmpMode='teams'; ui.cmpA=el.dataset.a; ui.cmpB=el.dataset.b; } render(); window.scrollTo(0,0); }
   else if(a==='cmpopen'){ closeModals(); ui.tab='compare'; ui.cmpMode='players'; ui.cmpA=el.dataset.a; ui.cmpB=el.dataset.b; render(); }
   else if(a==='notiftoggle'){ try{ if(localStorage.getItem(KEYNOT)==='1'){ localStorage.setItem(KEYNOT,'0'); render(); } else Notification.requestPermission().then(r=>{ if(r==='granted'){ localStorage.setItem(KEYNOT,'1'); localStorage.removeItem(KEYNOT+'-day'); } else alert('Notifications refusées par le navigateur.'); render(); }); }catch(e){ alert('Ton navigateur ne permet pas les notifications ici.'); } }
+  else if(a==='fhomeedit'){ ui.fHomeEdit=!ui.fHomeEdit; render(); }
+  else if(a==='fhometoggle'){ const cf=fhomeNorm(), i=cf.hidden.indexOf(id); if(i>=0) cf.hidden.splice(i,1); else cf.hidden.push(id); fhomeCfg=cf; saveJ(KEYFH,fhomeCfg); render(); }
+  else if(a==='fhomemove'){ const cf=fhomeNorm(), i=cf.order.indexOf(id), j=i+(+el.dataset.d); if(i>=0&&j>=0&&j<cf.order.length){ [cf.order[i],cf.order[j]]=[cf.order[j],cf.order[i]]; fhomeCfg=cf; saveJ(KEYFH,fhomeCfg); render(); } }
+  else if(a==='fhomereset'){ fhomeCfg={order:FHOME_BLOCKS.map(b=>b[0]),hidden:[]}; saveJ(KEYFH,fhomeCfg); render(); }
   else if(a==='homeedit'){ ui.homeEdit=!ui.homeEdit; render(); }
   else if(a==='hometoggle'){ const cf=homeCfgNorm(), i=cf.hidden.indexOf(id); if(i>=0) cf.hidden.splice(i,1); else cf.hidden.push(id); homeCfg=cf; saveJ(KEYH,homeCfg); render(); }
   else if(a==='homemove'){ const cf=homeCfgNorm(), i=cf.order.indexOf(id), j=i+(+el.dataset.d); if(i>=0&&j>=0&&j<cf.order.length){ [cf.order[i],cf.order[j]]=[cf.order[j],cf.order[i]]; homeCfg=cf; saveJ(KEYH,homeCfg); render(); } }
@@ -2161,7 +2405,7 @@ $('#view').addEventListener('change',e=>{
   else if(id==='pMin') ui.pMin=+t.value; else if(id==='pFav') ui.pFav=t.checked; else if(id==='confF') ui.confF=t.value;
   else if(id==='recMin') ui.recMin=+t.value; else if(id==='weekMin') ui.weekMin=+t.value; else if(id==='schedFav') ui.schedFav=t.checked; else if(id==='calEarly') ui.calEarly=t.checked; else if(id==='raceF') ui.raceF=t.value;
   else if(id==='fLg'){ ui.fLg=t.value; ui.fpTeam=ui.fTeamF=ui.fCalTeam=''; } else if(id==='fTeamF') ui.fTeamF=t.value; else if(id==='fWhen') ui.fWhen=t.value; else if(id==='fpTeam') ui.fpTeam=t.value; else if(id==='fpPos') ui.fpPos=t.value; else if(id==='fpMin') ui.fpMin=+t.value;
-  else if(id==='fPer') ui.fPer=+t.value; else if(id==='fTMode') ui.fTMode=t.value; else if(id==='fCurveMode'){ if(ui.fCurve) ui.fCurve.mode=t.value; } else if(id==='fCurveAdd'){ if(ui.fCurve&&t.value&&ui.fCurve.sel&&ui.fCurve.sel.length<8) ui.fCurve.sel.push(t.value); } else if(id==='fCmpMode'){ ui.fCmpMode=t.value; ui.fCmpA=''; ui.fCmpB=''; } else if(id==='fCmpA') ui.fCmpA=t.value; else if(id==='fCmpB') ui.fCmpB=t.value;
+  else if(id==='fMulti') ui.fMulti=t.value; else if(id==='fPer') ui.fPer=+t.value; else if(id==='fTMode') ui.fTMode=t.value; else if(id==='fCurveMode'){ if(ui.fCurve) ui.fCurve.mode=t.value; } else if(id==='fCurveAdd'){ if(ui.fCurve&&t.value&&ui.fCurve.sel&&ui.fCurve.sel.length<8) ui.fCurve.sel.push(t.value); } else if(id==='fCmpMode'){ ui.fCmpMode=t.value; ui.fCmpA=''; ui.fCmpB=''; } else if(id==='fCmpA') ui.fCmpA=t.value; else if(id==='fCmpB') ui.fCmpB=t.value;
   else if(id==='fCalWhen') ui.fCalWhen=t.value; else if(id==='fCalTeam') ui.fCalTeam=t.value; else if(id==='fCalMonth') ui.fCalMonth=t.value; else if(id==='calTeam') ui.calTeam=t.value; else if(id==='calWhen') ui.calWhen=t.value; else if(id==='calMonth') ui.calMonth=t.value;
   else if(/^rkT[012]$/.test(id)){ const cur=[0,1,2].map(i=>(document.getElementById('rkT'+i)||{}).value||''); ui.rkT=cur; }
   else if(id==='cmpMode'){ ui.cmpMode=t.value; ui.cmpA=''; ui.cmpB=''; } else if(id==='cmpA') ui.cmpA=t.value; else if(id==='cmpB') ui.cmpB=t.value;
@@ -2210,7 +2454,112 @@ setTimeout(notifyBig,1200);
 setTimeout(()=>showWelcome(false),700);
 $('#welcome').addEventListener('click',e=>{ if(e.target.id==='welcome') closeWelcome(); });
 $('#sportSeg').addEventListener('click',e=>{ const b=e.target.closest('[data-sport]'); if(b){ setSport(b.dataset.sport); closeModals(); render(); } });
+/* ================= Recherche globale ================= */
+const gsNorm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+function gsSearch(q){
+  q=gsNorm(q).trim(); if(q.length<2) return null;
+  const has=(...a)=>a.some(x=>gsNorm(x).includes(q)), out={nba:{p:[],t:[],m:[]},foot:{p:[],t:[],m:[]}};
+  try{
+    const S=buildStats();
+    out.nba.t=Object.keys(TEAMS).filter(k=>has(TEAMS[k][0],k)).slice(0,5).map(k=>({id:k,l:tname(k),s:k}));
+    out.nba.p=Object.values(S.P).filter(p=>has(p.name)).sort((a,b)=>b.pts/b.gp-a.pts/a.gp).slice(0,6).map(p=>({id:p.id,l:p.name,s:p.tri+' · '+f1(p.pts/p.gp)+' pts'}));
+    out.nba.m=Object.values(games).filter(g=>has(g.home.name,g.away.name,g.home.tri,g.away.tri)).sort((a,b)=>Date.parse(b.time)-Date.parse(a.time)).slice(0,5).map(g=>({id:g.id,l:`${g.away.tri} ${g.away.score} - ${g.home.score} ${g.home.tri}`,s:fmtD(g.time)}));
+  }catch(e){}
+  try{
+    const {P,T,mt}=footIdx();
+    out.foot.t=Object.values(T).filter(t=>has(t.n)).slice(0,5).map(t=>({id:t.id,l:t.n,s:footLgName(t.lg)}));
+    out.foot.p=Object.values(P).filter(p=>has(p.n)).sort((a,b)=>b.g-a.g).slice(0,6).map(p=>({id:p.id,l:p.n,s:p.tn+' · '+p.g+' but(s)'}));
+    out.foot.m=mt.filter(m=>has(m.hn,m.an)).sort((a,b)=>Date.parse(b.d)-Date.parse(a.d)).slice(0,5).map(m=>({id:m.id,l:m.done?`${m.hn} ${m.hs}-${m.as} ${m.an}`:`${m.hn} - ${m.an}`,s:fmtD(m.d)+(m.done?'':' · à venir')}));
+  }catch(e){}
+  return out;
+}
+function gsHtml(q){
+  const r=gsSearch(q); if(!r) return '<p class="mut" style="padding:8px 4px">Tape au moins 2 lettres : un joueur, une équipe ou un match (NBA et foot).</p>';
+  const order=ui.sport==='foot'?['foot','nba']:['nba','foot'], N={nba:'🏀 NBA',foot:'⚽ Foot'}, K=[['t','Équipes'],['p','Joueurs'],['m','Matchs']];
+  let h='', any=false;
+  for(const sp of order){ for(const [k,lab] of K){ const L=r[sp][k]; if(!L.length) continue; any=true;
+    h+=`<div class="gsh">${N[sp]} · ${lab}</div>`+L.map(x=>`<div class="gsr" data-gs="${sp}${k}" data-id="${esc(x.id)}"><b>${esc(x.l)}</b><span class="mut">${esc(x.s)}</span></div>`).join(''); } }
+  return any?h:'<p class="mut" style="padding:8px 4px">Aucun résultat.</p>';
+}
+function gsOpen(){ const o=$('#gs'); o.classList.add('on'); const i=$('#gsq'); i.value=''; $('#gsres').innerHTML=gsHtml(''); setTimeout(()=>i.focus(),50); }
+function gsClose(){ $('#gs').classList.remove('on'); }
+$('#btnSearch').addEventListener('click',gsOpen);
+$('#gsq').addEventListener('input',e=>{ $('#gsres').innerHTML=gsHtml(e.target.value); });
+$('#gs').addEventListener('click',e=>{
+  if(e.target.id==='gs'||e.target.id==='gsx'){ gsClose(); return; }
+  const r=e.target.closest('[data-gs]'); if(!r) return;
+  const k=r.dataset.gs, id=r.dataset.id; gsClose(); closeModals();
+  if(k.startsWith('foot')){ setSport('foot'); ui[k==='foott'?'fTeam':k==='footp'?'fPlayer':'fMatch']=id; }
+  else { setSport('nba'); if(k==='nbat') ui.openTeam=id; else if(k==='nbap') ui.openPlayer=id; else ui.openGame=id; }
+  render(); const m=$('#modal'); if(m) m.scrollTop=0;
+});
+
+/* ================= Cloud (GitHub Gist privé) ================= */
+const CLOUD_KEYS=['suivi-nba-v1','suivi-nba-fav','suivi-nba-sched','suivi-nba-notes','suivi-nba-home','suivi-nba-lead','suivi-foot-v1','suivi-foot-fav','suivi-foot-favp','suivi-foot-home','suivi-live-fav'];
+const KEYC='suivi-cloud';
+let cloud=loadJ(KEYC,{tok:'',gid:'',auto:false,last:0,sig:''});
+const cloudSave=()=>{ try{ localStorage.setItem(KEYC,JSON.stringify(cloud)); }catch(e){} };
+const cloudData=()=>{ const o={}; for(const k of CLOUD_KEYS){ try{ const v=localStorage.getItem(k); if(v) o[k+'.json']={content:v}; }catch(e){} } return o; };
+const cloudSig=()=>{ const o=cloudData(); let n=0; for(const k in o){ const c=o[k].content; n+=c.length; for(let i=0;i<c.length;i+=97) n=(n*31+c.charCodeAt(i))|0; } return String(n); };
+async function cloudApi(path,opt={}){
+  const r=await fetch('https://api.github.com'+path,{...opt,headers:{'Accept':'application/vnd.github+json','Authorization':'Bearer '+cloud.tok,'Content-Type':'application/json'}});
+  if(!r.ok){ const t=await r.text().catch(()=>''); throw new Error(r.status===401?'Jeton refusé (vérifie-le)':r.status===404?'Espace cloud introuvable':('Erreur '+r.status+' '+t.slice(0,80))); }
+  return r.json();
+}
+async function cloudPush(){
+  if(!cloud.tok) throw new Error('Ajoute d\'abord ton jeton GitHub');
+  const files=cloudData(); if(!Object.keys(files).length) throw new Error('Rien à envoyer');
+  files['LISEZMOI.txt']={content:'Sauvegarde Statify - ne pas modifier à la main.'};
+  let g;
+  if(cloud.gid) g=await cloudApi('/gists/'+cloud.gid,{method:'PATCH',body:JSON.stringify({files})});
+  else g=await cloudApi('/gists',{method:'POST',body:JSON.stringify({description:'Statify - sauvegarde',public:false,files})});
+  cloud.gid=g.id; cloud.last=Date.now(); cloud.sig=cloudSig(); cloud.remote=g.updated_at; cloudSave(); return g;
+}
+async function cloudPull(){
+  if(!cloud.tok||!cloud.gid) throw new Error('Rien à récupérer : envoie d\'abord depuis l\'autre appareil');
+  const g=await cloudApi('/gists/'+cloud.gid); let n=0;
+  for(const [name,f] of Object.entries(g.files||{})){ const k=name.replace(/\.json$/,''); if(!CLOUD_KEYS.includes(k)) continue;
+    let c=f.content; if(f.truncated||c==null){ const r=await fetch(f.raw_url); c=await r.text(); }
+    if(c){ try{ JSON.parse(c); localStorage.setItem(k,c); n++; }catch(e){} } }
+  cloud.last=Date.now(); cloud.remote=g.updated_at; cloud.sig=cloudSig(); cloudSave(); return n;
+}
+function cloudMsg(t,ok){ const m=$('#cloudmsg'); if(m){ m.textContent=t; m.style.color=ok?'var(--ok)':'var(--bad)'; } }
+function cloudRender(){
+  const b=$('#cloudbody'), when=cloud.last?new Date(cloud.last).toLocaleString('fr-FR'):'jamais';
+  b.innerHTML=`<h2 style="margin-top:0">☁️ Cloud : téléphone et ordinateur synchronisés</h2>
+  <p class="mut">Tes favoris, notes, matchs et réglages sont copiés dans un espace <b>privé</b> de ton compte GitHub (un « Gist »). Sur chaque appareil : colle le même jeton.</p>
+  <ol class="mut" style="padding-left:18px;margin:6px 0 10px"><li>Sur github.com : Settings → Developer settings → Personal access tokens → <i>Tokens (classic)</i> → Generate new token.</li><li>Coche seulement la case <b>gist</b>, valide, copie le jeton.</li><li>Colle-le ci-dessous. Sur le 2<sup>e</sup> appareil, colle le même jeton puis « Récupérer ».</li></ol>
+  <input id="cloudtok" type="password" placeholder="Jeton GitHub (ghp_…)" value="${esc(cloud.tok)}" autocomplete="off" style="width:100%;box-sizing:border-box">
+  <div class="row" style="margin:10px 0"><button id="cloudup">⬆️ Envoyer vers le cloud</button><button class="sec" id="clouddown">⬇️ Récupérer depuis le cloud</button></div>
+  <label class="row" style="gap:8px"><input type="checkbox" id="cloudauto" ${cloud.auto?'checked':''}> Envoi automatique quand mes données changent</label>
+  <p class="mut" style="margin:8px 0 0">Dernière synchro : ${esc(when)}${cloud.gid?'':' · espace pas encore créé'}</p>
+  <p id="cloudmsg" style="margin:6px 0 0;min-height:1.3em"></p>
+  <div class="row" style="justify-content:flex-end"><button class="sec" id="cloudclose">Fermer</button></div>`;
+}
+function cloudOpen(){ cloudRender(); $('#cloud').classList.add('on'); }
+function cloudClose(){ $('#cloud').classList.remove('on'); }
+$('#btnCloud').addEventListener('click',cloudOpen);
+$('#cloud').addEventListener('click',async e=>{
+  const id=e.target.id; if(id==='cloud'||id==='cloudclose'){ cloudClose(); return; }
+  if(id==='cloudup'||id==='clouddown'){
+    cloud.tok=($('#cloudtok').value||'').trim(); cloudSave();
+    try{
+      if(id==='cloudup'){ cloudMsg('Envoi…',true); await cloudPush(); cloudMsg('✓ Envoyé. Colle le même jeton sur ton autre appareil, puis « Récupérer ».',true); }
+      else{ if(!confirm('Remplacer les données de cet appareil par celles du cloud ?')) return; cloudMsg('Récupération…',true); const n=await cloudPull(); cloudMsg('✓ '+n+' élément(s) récupéré(s). Rechargement…',true); setTimeout(()=>location.reload(),900); }
+      if(id==='cloudup') cloudRender(), cloudMsg('✓ Envoyé. Sur ton autre appareil : colle le même jeton, puis « Récupérer ».',true);
+    }catch(err){ cloudMsg('⚠️ '+(err.message==='Failed to fetch'?'Pas de réseau':err.message),false); }
+  }
+});
+$('#cloud').addEventListener('change',e=>{ if(e.target.id==='cloudauto'){ cloud.tok=($('#cloudtok').value||cloud.tok).trim(); cloud.auto=e.target.checked; cloudSave(); } });
+setInterval(()=>{ if(!cloud.auto||!cloud.tok||navigator.onLine===false) return; const sg=cloudSig(); if(sg!==cloud.sig) cloudPush().catch(()=>{}); },60000);
+document.addEventListener('keydown',e=>{
+  const tag=(e.target.tagName||'').toLowerCase(), typing=tag==='input'||tag==='textarea'||tag==='select';
+  if(e.key==='Escape'&&$('#gs').classList.contains('on')){ gsClose(); return; }
+  if(e.key==='/'&&!typing&&!e.ctrlKey&&!e.metaKey){ e.preventDefault(); gsOpen(); }
+});
+
 $('#btnLead').onclick=()=>{ try{ localStorage.setItem('suivi-nba-lead',localStorage.getItem('suivi-nba-lead')==='0'?'1':'0'); }catch(e){} render(); };
+(function(){ const f=()=>document.body.classList.toggle('offline',navigator.onLine===false); window.addEventListener('online',f); window.addEventListener('offline',f); f(); })();
 if('serviceWorker' in navigator&&location.protocol.startsWith('http')&&!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) navigator.serviceWorker.register('sw.js').catch(()=>{});
 function applyTheme(t){ document.documentElement.dataset.theme=t; }
 (function(){
@@ -2247,7 +2596,7 @@ function nLbl(sn,clk,per,det){
   return det||'';
 }
 function liveFavOnly(){ try{ return localStorage.getItem('suivi-live-fav')!=='0'; }catch(e){ return true; } }
-function liveAlertOk(it){ if(!liveFavOnly()||!ffav.length) return true; return ffav.includes(it.h.id)||ffav.includes(it.a.id); }
+function liveAlertOk(it){ if(!liveFavOnly()||!ffav.length) return true; if(multiLive(it.lg)) return true; return ffav.includes(it.h.id)||ffav.includes(it.a.id); }
 let liveData={items:[],t:0,err:'',busy:false}, liveMem={}, liveLast=0, liveSeen=new Set();
 const liveF=t=>new Date(t).toISOString().slice(0,10).replace(/-/g,'');
 function liveItem(kind,lg,e){
@@ -2273,7 +2622,7 @@ function liveText(it){
 }
 function liveRender(){
   const box=document.getElementById('liveBox'); if(!box) return;
-  const want=ui.sport==='foot'?'f':'n', L=(liveData.items||[]).filter(x=>x.st==='in'&&x.k===want); if(!L.length){ box.innerHTML=''; return; }
+  const want=ui.sport==='foot'?'f':'n', L=(liveData.items||[]).filter(x=>x.st==='in'&&x.k===want); if(!L.length||(ui.sport==='foot'&&ui.ftab==='multi')){ box.innerHTML=''; return; }
   const mine=x=>x.k==='n'?(fav.teams.includes(x.h.id)||fav.teams.includes(x.a.id)):(ffav.includes(x.h.id)||ffav.includes(x.a.id));
   L.sort((x,y)=>mine(y)-mine(x));
   const ago=Math.max(0,Math.round((Date.now()-liveData.t)/1000));
