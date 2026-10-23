@@ -6,26 +6,38 @@ import fs from 'node:fs';
 const cfg = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 const STATE = 'state.json';
 
-// Équipes étoilées dans Statify : le robot les lit dans le petit espace public « Statify - alertes » du propriétaire du dépôt.
-// S'il n'existe pas encore (ou est illisible), on garde la liste de config.json.
+let st = {}; try { st = JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch {}
+
+// Équipes étoilées dans Statify : le robot les lit dans le petit espace PUBLIC « Statify - alertes » du propriétaire du dépôt
+// (lecture sans jeton : le jeton interne de GitHub Actions n'a pas le droit de lire les Gists).
+// S'il n'existe pas encore, on garde config.json ; en cas d'erreur passagère, on garde la dernière liste connue.
 async function loadStars() {
   const owner = process.env.GITHUB_REPOSITORY_OWNER; if (!owner) return;
-  const hdr = { Accept: 'application/vnd.github+json', ...(process.env.GH_TOKEN ? { Authorization: `Bearer ${process.env.GH_TOKEN}` } : {}) };
+  const hdr = { Accept: 'application/vnd.github+json', 'User-Agent': 'statify-robot' };
+  const keep = (s, why) => { cfg.nba = s.nba; cfg.foot = { ...(cfg.foot || {}), teams: s.foot.teams, leagues: s.foot.leagues?.length ? s.foot.leagues : (cfg.foot?.leagues || []) };
+    console.log(`${why} : ${cfg.nba.length} NBA, ${cfg.foot.teams.length} foot`); };
   try {
-    const r = await fetch(`https://api.github.com/users/${owner}/gists?per_page=100`, { headers: hdr });
-    if (!r.ok) { console.log(`Espace Statify illisible (${r.status}) : config.json utilisé`); return; }
-    const g = (await r.json()).find(x => x.description === 'Statify - alertes' && x.files && x.files['statify-notif.json']);
-    if (!g) { console.log("Pas encore d'espace « Statify - alertes » : config.json utilisé"); return; }
-    const full = await fetch(`https://api.github.com/gists/${g.id}`, { headers: hdr });
-    if (!full.ok) { console.log(`Espace Statify illisible (${full.status}) : config.json utilisé`); return; }
+    let id = st._cfg?.gist;
+    if (!id) {
+      const r = await fetch(`https://api.github.com/users/${owner}/gists?per_page=100`, { headers: hdr });
+      if (!r.ok) throw new Error('liste ' + r.status);
+      const g = (await r.json()).find(x => x.description === 'Statify - alertes' && x.files && x.files['statify-notif.json']);
+      if (!g) { console.log("Pas encore d'espace « Statify - alertes » : config.json utilisé"); return; }
+      id = g.id;
+    }
+    const full = await fetch(`https://api.github.com/gists/${id}`, { headers: hdr });
+    if (full.status === 404) { delete st._cfg; throw new Error('espace introuvable'); }
+    if (!full.ok) throw new Error('lecture ' + full.status);
     const j = JSON.parse((await full.json()).files['statify-notif.json'].content);
-    cfg.nba = Array.isArray(j.nba) ? j.nba : [];
-    cfg.foot = { ...(cfg.foot || {}), teams: j.foot?.teams || [], leagues: j.foot?.leagues?.length ? j.foot.leagues : (cfg.foot?.leagues || []) };
-    console.log(`Équipes lues depuis Statify : ${cfg.nba.length} NBA, ${cfg.foot.teams.length} foot`);
-  } catch { console.log('Lecture des étoiles impossible : config.json utilisé'); }
+    const stars = { nba: Array.isArray(j.nba) ? j.nba : [], foot: { teams: j.foot?.teams || [], leagues: j.foot?.leagues || [] } };
+    st._cfg = { gist: id, stars, t: Date.now() };
+    keep(stars, 'Équipes lues depuis Statify');
+  } catch (e) {
+    if (st._cfg?.stars) { st._cfg.t = Date.now(); keep(st._cfg.stars, `Espace Statify illisible (${e.message}), dernière liste connue utilisée`); }
+    else console.log(`Espace Statify illisible (${e.message}) : config.json utilisé`);
+  }
 }
 await loadStars();
-let st = {}; try { st = JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch {}
 let now = Date.now(), msgs = [], days = [], blocked = false, act = new Map();
 const day = d => d.toISOString().slice(0, 10).replace(/-/g, '');
 const setDays = () => { now = Date.now(); days = [day(new Date(now - 864e5)), day(new Date(now)), day(new Date(now + 864e5))]; };
