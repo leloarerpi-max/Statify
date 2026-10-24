@@ -1565,6 +1565,22 @@ const KEYFO='suivi-foot-v1', KEYFF='suivi-foot-fav', KEYFP='suivi-foot-favp', KE
 const FLG=[['fra.1','Ligue 1'],['eng.1','Premier League'],['esp.1','Liga'],['ita.1','Serie A'],['ger.1','Bundesliga'],['uefa.champions','Ligue des champions'],['uefa.europa','Europa League'],['uefa.europa.conf','Conférence League']];
 const isEU=lg=>/^uefa\./.test(lg||'');
 const zoneFr=d=>{ const x=String(d||''); const t=[[/champions league.*(qualif|play)/i,'Qualif. Ligue des champions'],[/champions league/i,'Ligue des champions'],[/europa league.*(qualif|play)/i,'Qualif. Europa League'],[/europa league/i,'Europa League'],[/conference league.*(qualif|play)/i,'Qualif. Conférence League'],[/conference league/i,'Conférence League'],[/relegation.*(play|round)/i,'Barrage de relégation'],[/relegation/i,'Relégation'],[/promotion.*(play|round)/i,'Barrage de promotion'],[/promotion/i,'Promotion'],[/round of 16|8th/i,'Qualifié pour les 8es de finale'],[/knockout/i,'Phase à élimination directe'],[/play-?off/i,'Barrages'],[/eliminat/i,'Éliminé']]; for(const [r,f] of t) if(r.test(x)) return f; return x; };
+/* zones (Europe / relégation) : couleurs et libellés identiques pour tous les championnats.
+   On suit les notes d'ESPN quand elles existent ; sinon règles par défaut ci-dessous. */
+const ZK={cl:['#3b82f6','Ligue des champions'],clq:['#7aa7f7','Qualif. Ligue des champions'],el:['#f59e0b','Europa League'],elq:['#f7c35c','Qualif. Europa League'],ecl:['#22c55e','Conférence League'],eclq:['#86d9a6','Qualif. Conférence League'],rpo:['#f29a8a','Barrage de relégation'],rel:['#ef4444','Relégation']};
+const zcat=d=>{ const x=String(d||''), q=/(qualif|play|round)/i.test(x);
+  if(/champions league/i.test(x)) return q?'clq':'cl'; if(/europa league/i.test(x)) return q?'elq':'el'; if(/conference league/i.test(x)) return q?'eclq':'ecl';
+  if(/relegation/i.test(x)) return /(play|round)/i.test(x)?'rpo':'rel'; return ''; };
+const ZDEF={'fra.1':[[1,3,'cl'],[4,4,'clq'],[5,5,'el'],[6,6,'eclq'],[16,16,'rpo'],[17,18,'rel']],
+  'eng.1':[[1,4,'cl'],[5,5,'el'],[6,6,'ecl'],[18,20,'rel']],
+  'esp.1':[[1,4,'cl'],[5,6,'el'],[7,7,'eclq'],[18,20,'rel']],
+  'ita.1':[[1,4,'cl'],[5,5,'el'],[6,6,'eclq'],[18,20,'rel']],
+  'ger.1':[[1,4,'cl'],[5,5,'el'],[6,6,'eclq'],[16,16,'rpo'],[17,18,'rel']]};
+function footZones(lg){ const L=foot.leagues[lg]; if(!L||!L.standings.length) return []; const S=L.standings, hasE=S.some(r=>r.zone&&zcat(r.zone.d));
+  return S.map((r,i)=>{ const rk=i+1;
+    if(r.zone&&r.zone.d){ const k=zcat(r.zone.d); return k?{k,c:ZK[k][0],l:ZK[k][1]}:{k:'x:'+r.zone.d,c:r.zone.c||'#8f9bb8',l:zoneFr(r.zone.d)}; }
+    if(!hasE){ const d=(ZDEF[lg]||[]).find(([a,b])=>rk>=a&&rk<=b&&S.length>=b); if(d) return {k:d[2],c:ZK[d[2]][0],l:ZK[d[2]][1]}; }
+    return null; }); }
 const inLg=(o,lg)=>!lg||lg==='mine'||o.lg===lg||!!(o.comps&&o.comps[lg]);
 const FTABS=[['home','Accueil'],['multi','🔥 Multiplex'],['matches','Matchs'],['table','Classement'],['teams','Équipes'],['players','Joueurs'],['records','Records'],['compare','Comparer'],['cal','Calendrier']];
 let foot=loadJ(KEYFO,{leagues:{}}), ffav=loadJ(KEYFF,[]), ffavP=loadJ(KEYFP,[]);
@@ -2046,8 +2062,8 @@ function footTableView(){
   let body;
   if(mode==='G'){
     if(!L||!L.standings.length) body='<p class="mut">Pas encore de classement : clique sur « Actualiser le foot ».</p>';
-    else { const zl=[...new Map(L.standings.filter(r=>r.zone&&r.zone.d).map(r=>[r.zone.d,r.zone.c])).entries()];
-      body=`<div class="row" style="margin-bottom:8px">${zl.map(([d,c])=>`<span class="zl"><i style="background:${esc(c)}"></i>${esc(zoneFr(d))}</span>`).join('')}</div><div class="scroll"><table class="st"><thead><tr><th>#</th><th class="l">Club</th><th>MJ</th><th>V</th><th>N</th><th>D</th><th>BP</th><th>BC</th><th>Diff.</th><th>Pts</th><th>Forme</th></tr></thead><tbody>${L.standings.map(r=>`<tr><td style="box-shadow:inset 4px 0 ${esc(r.zone?r.zone.c:'transparent')}">${r.rank}</td><td class="l">${fstar(r.id)}${footLogo(r.logo)}${tlink(r.id,r.name)}</td><td>${r.gp}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gf}</td><td>${r.ga}</td><td class="${r.gd>=0?'ok':'err'}">${r.gd>0?'+':''}${r.gd}</td><td><b>${r.pts}</b></td><td>${fdots(r.id)}</td></tr>`).join('')}</tbody></table></div><p class="mut" style="margin:8px 0 0">${esc(L.season||'')} · mis à jour ${L.upd?esc(fmtDT(new Date(L.upd).toISOString())):'–'} · la forme est calculée sur les matchs en mémoire.</p>`; }
+    else { const Z=footZones(lg), zl=[...new Map(Z.filter(Boolean).map(q=>[q.l,q.c])).entries()];
+      body=`<div class="row" style="margin-bottom:8px">${zl.map(([d,c])=>`<span class="zl"><i style="background:${esc(c)}"></i>${esc(d)}</span>`).join('')}</div><div class="scroll"><table class="st"><thead><tr><th>#</th><th class="l">Club</th><th>MJ</th><th>V</th><th>N</th><th>D</th><th>BP</th><th>BC</th><th>Diff.</th><th>Pts</th><th>Forme</th></tr></thead><tbody>${L.standings.map((r,ri)=>`<tr><td style="box-shadow:inset 4px 0 ${esc(Z[ri]?Z[ri].c:'transparent')}">${r.rank}</td><td class="l">${fstar(r.id)}${footLogo(r.logo)}${tlink(r.id,r.name)}</td><td>${r.gp}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gf}</td><td>${r.ga}</td><td class="${r.gd>=0?'ok':'err'}">${r.gd>0?'+':''}${r.gd}</td><td><b>${r.pts}</b></td><td>${fdots(r.id)}</td></tr>`).join('')}</tbody></table></div><p class="mut" style="margin:8px 0 0">${esc(L.season||'')} · mis à jour ${L.upd?esc(fmtDT(new Date(L.upd).toISOString())):'–'} · la forme est calculée sur les matchs en mémoire.</p>`; }
   } else { const rows=footCalcTable(lg,mode);
     body=rows.length?`<div class="scroll"><table class="st"><thead><tr><th>#</th><th class="l">Club</th><th>MJ</th><th>V</th><th>N</th><th>D</th><th>BP</th><th>BC</th><th>Diff.</th><th>Pts</th></tr></thead><tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td class="l">${fstar(r.id)}${footLogo(r.lo)}${tlink(r.id,r.n)}</td><td>${r.g}</td><td>${r.w}</td><td>${r.d}</td><td>${r.ls}</td><td>${r.gf}</td><td>${r.ga}</td><td class="${r.gd>=0?'ok':'err'}">${r.gd>0?'+':''}${r.gd}</td><td><b>${r.pts}</b></td></tr>`).join('')}</tbody></table></div><p class="mut" style="margin:8px 0 0">Calculé sur les matchs en mémoire : charge « Depuis le début de saison » pour un classement complet.</p>`:'<p class="mut">Pas assez de matchs en mémoire.</p>'; }
   return footControls()+`<div class="card">${tabs}${body}</div>`+footCurveCard(lg);
@@ -2211,12 +2227,12 @@ function multiTable(lg,ms){
   let used=0;
   for(const m of ms){ if(m.st!=='in'&&m.st!=='post') continue; const tt=Date.parse(m.d); if(m.st==='post'&&upd>=tt+115*6e4) continue; used++;
     for(const [id,gf,ga] of [[m.hid,m.hs,m.as],[m.aid,m.as,m.hs]]){ const r=by[id]; if(!r) continue; r.np+=gf>ga?3:gf===ga?1:0; r.ngd+=gf-ga; r.ngf+=gf; r.pl=m; r.res=(gf>ga?'gagne ':gf<ga?'perd ':'nul ')+gf+'-'+ga; } }
-  const zoneAt=LG.standings.map(r=>r.zone), srt=[...rows].sort((a,b)=>b.np-a.np||b.ngd-a.ngd||b.ngf-a.ngf||a.rank-b.rank); srt.forEach((r,i)=>{ r.nr=i+1; });
+  const zoneAt=footZones(lg), srt=[...rows].sort((a,b)=>b.np-a.np||b.ngd-a.ngd||b.ngf-a.ngf||a.rank-b.rank); srt.forEach((r,i)=>{ r.nr=i+1; });
   const body=srt.map(r=>{ const mv=r.rank-r.nr, ar=mv>0?`<span style="color:var(--ok)">▲${mv}</span>`:mv<0?`<span style="color:var(--bad)">▼${-mv}</span>`:'<span class="mut">=</span>',
-    z=zoneAt[r.nr-1], z0=r.zone, ch=mv!==0&&z&&(!z0||z.d!==z0.d), tag=ch?`<span style="display:block;font-size:11px;color:${esc(z.c||'var(--mut)')}">→ ${esc(zoneFr(z.d))}</span>`:'';
+    z=zoneAt[r.nr-1], z0=zoneAt[r.rank-1], ch=mv!==0&&z&&(!z0||z.k!==z0.k), tag=ch?`<span style="display:block;font-size:11px;color:${esc(z.c||'var(--mut)')}">→ ${esc(z.l)}</span>`:(mv!==0&&z0&&!z?`<span class="mut" style="display:block;font-size:11px">↘ quitte : ${esc(z0.l)}</span>`:'');
     const sc=r.pl?` <span class="mut" style="font-size:12px">(${r.pl.st==='in'?r.res:r.res.replace(/^gagne/,'a gagné').replace(/^perd/,'a perdu').replace(/^nul/,'nul,')})</span>`:'';
-    return `<tr class="${r.pl?'favrow':''}"><td>${r.nr}</td><td>${ar}</td><td class="l">${footLogo(r.logo,18)}${esc(r.name)}${sc}${tag}</td><td><b>${r.np}</b></td><td>${r.ngd>0?'+':''}${r.ngd}</td></tr>`; }).join('');
-  return `<div class="card"><h2>📈 Classement live <span class="mut" style="font-weight:400;font-size:12px">· projeté avec les scores du moment${used?'':' (aucun match commencé)'}</span></h2><div class="scroll"><table><thead><tr><th>#</th><th></th><th class="l">Club</th><th>Pts</th><th>Diff.</th></tr></thead><tbody>${body}</tbody></table></div><p class="mut" style="font-size:12px;margin:6px 0 0">Basé sur le dernier classement chargé : « ▲▼ » = places gagnées ou perdues si les scores restent ainsi.</p></div>`;
+    return `<tr class="${r.pl?'favrow':''}"><td style="box-shadow:inset 4px 0 ${esc(z?z.c:'transparent')}">${r.nr}</td><td>${ar}</td><td class="l">${footLogo(r.logo,18)}${esc(r.name)}${sc}${tag}</td><td><b>${r.np}</b></td><td>${r.ngd>0?'+':''}${r.ngd}</td></tr>`; }).join('');
+  return `<div class="card"><h2>📈 Classement live <span class="mut" style="font-weight:400;font-size:12px">· projeté avec les scores du moment${used?'':' (aucun match commencé)'}</span></h2><div class="row" style="margin-bottom:8px">${[...new Map(zoneAt.filter(Boolean).map(q=>[q.l,q.c])).entries()].map(([d,c])=>`<span class="zl"><i style="background:${esc(c)}"></i>${esc(d)}</span>`).join('')}</div><div class="scroll"><table><thead><tr><th>#</th><th></th><th class="l">Club</th><th>Pts</th><th>Diff.</th></tr></thead><tbody>${body}</tbody></table></div><p class="mut" style="font-size:12px;margin:6px 0 0">Basé sur le dernier classement chargé : « ▲▼ » = places gagnées ou perdues si les scores restent ainsi.</p></div>`;
 }
 function multiBilan(ms){
   const started=ms.filter(m=>m.st==='in'||m.st==='post'); if(!started.length) return '';
@@ -2259,7 +2275,7 @@ function footMultiView(){
   const dbar=`<div class="row" style="gap:6px;margin:0 0 10px;flex-wrap:wrap;align-items:center">${multiDays().map(d=>`<button class="${d===day?'':'sec'} fbtn" data-act="mday" data-d="${d}">${esc(dayLabel(d))}</button>`).join('')}<button class="sec fbtn" data-act="multiclose" title="Fermer le multiplex" style="margin-left:auto">✕ Fermer</button></div>`;
   const lgs=FLG.filter(([c])=>det.some(d=>d.lg===c)||M.some(m=>m.lg===c&&multiWin(m)));
   const opts=[['all','🌍 Tous les championnats'],['pick','⭐ Ma sélection'],...lgs.map(([c,n])=>[c,(det.some(d=>d.lg===c)?'🔥 ':'')+n])];
-  let lg=ui.fMulti; if(!opts.find(x=>x[0]===lg)) lg=(det[0]&&det[0].lg)||'all';
+  let lg=ui.fMulti; if(!opts.find(x=>x[0]===lg)) lg=(det.some(d=>d.lg==='fra.1')?'fra.1':(det[0]&&det[0].lg))||'all';
   let h=footControls()+dbar;
   if(!lgs.length) return h+`<div class="card"><h2>🔥 Multiplex</h2><p class="mut">Aucun match ${day===todayDK()?'aujourd\'hui':'ce jour-là'}. Quand au moins 3 matchs d'un même championnat commencent à moins de 30 minutes d'écart, Statify te prévient ici et sur l'accueil foot. Actualise les scores (🔄) pour charger le calendrier.</p></div>`;
   const ms=multiSet(lg), mixed=new Set(ms.map(m=>m.lg)).size>1, isMx=det.some(d=>d.lg===lg), live=ms.filter(m=>m.st==='in').length;
@@ -2277,8 +2293,8 @@ function footMultiView(){
   const empty=lg==='all'?`<p class="mut">Aucun match ${day===todayDK()?'aujourd\'hui':'ce jour-là'}.${(()=>{ const nx=M.filter(m=>m.st==='pre'&&Date.parse(m.d)>now).sort((a,b)=>Date.parse(a.d)-Date.parse(b.d))[0]; return nx?' Prochain match : '+esc(parisD(nx.d))+' à '+esc(parisT(nx.d))+'.':''; })()}</p>`:lg==='pick'?'<p class="mut">Aucun match de ta sélection ce jour-là. Choisis « 🌍 Tous les championnats » et touche ☆ sur les matchs que tu veux suivre (les matchs de tes clubs à étoile dorée y sont ajoutés d\'office).</p>':'<p class="mut">Aucun match.</p>';
   h+=`<div class="card livecard"><div class="row between" style="margin-bottom:6px"><h2 style="margin:0">${live?'<span class="livedot"></span>':''}${title}</h2><select id="fMulti">${opts.map(([c,n])=>`<option value="${esc(c)}" ${c===lg?'selected':''}>${esc(n)}</option>`).join('')}</select></div><div class="row" style="margin:0 0 6px"><button class="sec" data-act="sndtoggle">${sndPref()==='0'?'🔇 Son de but : coupé':'🔊 Son de but : activé'}</button></div>${ms.length?`<p class="mut" style="margin:0 0 6px">${ms.length} match${ms.length>1?'s':''}${first?' · premier coup d\'envoi à '+esc(parisT(first.d))+' (heure de Paris)':''}${live?' · '+live+' en cours':''} · touche ☆ pour ajouter un match à ta sélection</p>`:''}${(()=>{ const hid=sorted.filter(m=>m.st==='post').length, shown=ui.fMultiDone?sorted:sorted.filter(m=>m.st!=='post'), tg=hid?`<div style="text-align:center;margin-top:8px"><span class="link" data-act="mdone">${ui.fMultiDone?'Masquer':'Afficher'} les ${hid} match${hid>1?'s':''} terminé${hid>1?'s':''}</span></div>`:''; return (shown.map(card).join('')||(hid?'<p class="mut">Tous les matchs sont terminés.</p>':empty))+tg; })()}</div>`;
   // classement live : un championnat à la fois
-  const tl=[...new Set(ms.map(m=>m.lg))].filter(l=>foot.leagues[l]&&foot.leagues[l].standings.length);
-  if(tl.length){ const liveLg=(ms.find(m=>m.st==='in')||{}).lg; let cur=ui.fMultiT; if(!tl.includes(cur)) cur=tl.includes(liveLg)?liveLg:tl[0];
+  const tl=[...new Set(ms.map(m=>m.lg))].filter(l=>foot.leagues[l]&&foot.leagues[l].standings.length).sort((a,b)=>(b==='fra.1')-(a==='fra.1'));
+  if(tl.length){ const liveLg=(ms.find(m=>m.st==='in')||{}).lg; let cur=ui.fMultiT; if(!tl.includes(cur)) cur=tl.includes('fra.1')?'fra.1':(tl.includes(liveLg)?liveLg:tl[0]);
     let tb=multiTable(cur,ms.filter(m=>m.lg===cur));
     if(tl.length>1) tb=tb.replace('<h2>📈 Classement live',`<div class="row" style="margin-bottom:6px"><select id="fMultiT">${tl.map(l=>`<option value="${esc(l)}" ${l===cur?'selected':''}>${esc(footLgName(l))}</option>`).join('')}</select></div><h2>📈 Classement live`);
     h+=tb; }
