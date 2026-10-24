@@ -9,7 +9,7 @@ Ce petit dossier fait surveiller tes équipes par GitHub (gratuit) et t'envoie u
 
 ## Installation (une seule fois, ~10 minutes)
 
-1. **Sur ton téléphone** : installe l'application gratuite **ntfy** (App Store / Google Play). Ouvre-la, appuie sur « + », et abonne-toi à un nom secret de ton choix, par exemple `statify-leloarer-4829` (invente le tien, long, personne ne doit le deviner).
+1. **Sur ton téléphone** : installe l'application gratuite **ntfy** (App Store / Google Play). Ouvre-la, appuie sur « + », et abonne-toi à un nom secret de ton choix, un nom **long et aléatoire** (20 caractères minimum, ex. `k7Qm2xVd9PzL4aWt8RnB` — n'utilise pas un exemple trouvé en ligne : toute personne qui connaît le nom peut lire tes alertes). Le robot refuse de démarrer si le secret est vide ou trop court.
 2. **Sur github.com** : crée un nouveau dépôt **public** (ex. `statify-notif`) : c'est ce qui rend les minutes d'exécution illimitées et gratuites. Ton nom secret ne sera PAS visible, on le met dans un « secret » (étape 4). Envoie-y tout le contenu de ce dossier (`notify.mjs`, `config.json`, `README.md` **et** le dossier caché `.github/workflows/statify-notif.yml` — avec « Add file → Upload files », glisse le dossier `.github`).
 3. Ouvre `config.json` sur GitHub (icône crayon) :
    - dans `nba` mets les codes de tes équipes (LAL, GSW, BOS…) ;
@@ -32,5 +32,6 @@ Dans `config.json`, la ligne `"live": { "everySeconds": 15, "runMinutes": 9 }` :
 - Un match de tes équipes en cours = un passage continu : ça consomme des minutes GitHub, mais elles sont illimitées sur un dépôt public.
 - Les données viennent d'ESPN (source non officielle) : si ESPN change, il faudra adapter.
 - Gratuit, sans carte bancaire. Seule ta liste d'équipes favorites est visible dans le dépôt public (pas ton nom secret ni tes données). Si tu préfères un dépôt privé, GitHub ne donne que 2000 min/mois : le mode 15 secondes les consommerait vite, garde donc le dépôt public.
-- GitHub peut mettre en pause un dépôt sans activité pendant 60 jours : le petit fichier `state.json` mis à jour par le robot évite en général ça, sinon réactive le workflow dans Actions.
+- GitHub peut mettre en pause un dépôt sans activité pendant 60 jours : le robot ajoute donc un petit fichier `.keepalive` chaque lundi matin pour éviter ça ; sinon réactive le workflow dans Actions.
+- Le robot reconnaît tes clubs par leur identifiant ESPN (envoyé par Statify), plus fiable que le nom. Ouvre Statify une fois après la mise à jour pour qu'il republie tes étoiles.
 - Pour arrêter : désactive le workflow dans l'onglet Actions.
