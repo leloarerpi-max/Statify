@@ -1668,25 +1668,61 @@ function footUrls(per){
   return out;
 }
 async function footGet(u){ let err; for(let k=0;k<3;k++){ try{ const r=await fetch(u); if(!r.ok){ if(r.status===400||r.status===404||r.status===403||r.status===429){ const e=new Error('HTTP '+r.status); e.fatal=1; throw e; } throw new Error('HTTP '+r.status); } return await r.json(); }catch(e){ err=e; if(e.fatal) break; await new Promise(z=>setTimeout(z,400*(k+1))); } } throw err; }
-async function footRefresh(){
-  if(footBusy) return; footBusy=true; try{ render(); }catch(e){}
-  const per=footPeriods()[ui.fPer||0], urls=footUrls(per); let ok=0,ko=0,last='',n=0;
+async function footRefresh(opt){
+  opt=opt||{}; if(footBusy) return; footBusy=true; const _mute=sayMute; if(opt.quiet) sayMute=true; try{ render(); }catch(e){}
+  const per=opt.per||footPeriods()[ui.fPer||0], urls=footUrls(per); let ok=0,ko=0,last='',n=0;
   try{
     say('⏳ ESPN : classements et calendrier…','warn');
     const stop=()=>/HTTP 4(03|29)/.test(last);
-    for(let i=0;i<urls.length;i+=6){ if(stop()) break; if(i%30===0) say(`⏳ ESPN : classements et calendrier ${i}/${urls.length}…`,'warn'); await Promise.all(urls.slice(i,i+6).map(async x=>{ try{ ok+=footIngest({__foot:x.k,league:x.lg,data:await footGet(x.u)}); }catch(e){ ko++; last=e.message||String(e); } })); }
+    for(let i=0;i<urls.length;i+=6){ if(stop()) break; if(i%30===0) say(`⏳ ESPN : classements et calendrier ${i}/${urls.length}…`,'warn'); await Promise.all(urls.slice(i,i+6).map(async x=>{ try{ ok+=footIngest({__foot:x.k,league:x.lg,data:await footGet(x.u)}); }catch(e){
+      const rg=/dates=(\d{8})-(\d{8})/.exec(x.u||'');
+      if(x.k==='scores'&&rg&&/HTTP 400/.test(e.message||'')){   // plage refusée : on lit jour par jour
+        const p=v=>Date.UTC(+v.slice(0,4),+v.slice(4,6)-1,+v.slice(6,8)); let any=0;
+        for(let t=p(rg[1]);t<=p(rg[2]);t+=864e5){ try{ any+=footIngest({__foot:'scores',league:x.lg,data:await footGet(x.u.replace(/dates=\d{8}-\d{8}/,'dates='+new Date(t).toISOString().slice(0,10).replace(/-/g,'')).replace(/&limit=\d+/,''))}); }catch(e2){ last=e2.message||String(e2); } }
+        if(any) ok+=any; else ko++;
+      } else { ko++; last=e.message||String(e); } } })); }
     if(stop()){ saveJ(KEYFO,foot); render(); say('⏸️ ESPN demande de ralentir ('+esc(last)+') : actualisation interrompue pour ne pas être bloqué. Tes données sont gardées, réessaie dans 10-15 minutes.','warn'); return; }
     if(ko>ok){ saveJ(KEYFO,foot); render(); say(`⚠️ ESPN a répondu à ${ok} requête(s) sur ${urls.length} (erreur : ${esc(last)}). Le navigateur bloque la lecture directe depuis ce fichier : utilise le <b>favori foot</b> sur espn.com/soccer, puis Ctrl+V ici.`,'err'); return; }
     if(!ok){ say('ESPN refuse la lecture directe depuis cette page ('+esc(last)+'). Utilise le favori foot sur espn.com/soccer, puis Ctrl+V ici.','err'); return; }
-    const todo=Object.entries(foot.leagues).flatMap(([lg,L])=>Object.values(L.matches).filter(m=>m.done&&((!m.x&&!m.nx)||m.lv)).map(m=>({lg,m}))).sort((a,b)=>Date.parse(b.m.d)-Date.parse(a.m.d)).slice(0,400);
+    const todo=Object.entries(foot.leagues).flatMap(([lg,L])=>Object.values(L.matches).filter(m=>m.done&&((!m.x&&!m.nx)||m.lv)).map(m=>({lg,m}))).sort((a,b)=>Date.parse(b.m.d)-Date.parse(a.m.d)).slice(0,opt.maxDetail||400);
     for(let i=0;i<todo.length;i+=3){ if(stop()) break; say(`⏳ Détails des matchs : ${i}/${todo.length}…`,'warn');
       await Promise.all(todo.slice(i,i+3).map(async t=>{ try{ footIngest({__foot:'summary',league:t.lg,id:t.m.id,data:await footGet(`https://site.api.espn.com/apis/site/v2/sports/soccer/${t.lg}/summary?event=${t.m.id}`)}); n++; }catch(e){ ko++; last=e.message||String(e); } })); }
     const saved=footSave(); render();
     if(stop()){ say(`⏸️ ESPN demande de ralentir : ${ok} lot(s) et ${n} match(s) détaillé(s) enregistrés, le reste a été interrompu pour ne pas être bloqué. Réessaie dans 10-15 minutes.`,'warn'); return; }
     say(`✓ Foot mis à jour : ${ok} lot(s), ${n} match(s) détaillé(s)${ko?`, ${ko} échec(s) (dernière erreur : ${esc(last)})`:''}.${foot.pruned?' Espace presque plein : les détails les plus anciens ont été allégés.':''}${saved?'':' ⚠️ Sauvegarde impossible (espace plein).'}`,saved?'ok':'err');
-  } finally { footBusy=false; try{ render(); }catch(e){} }
+  } finally { footBusy=false; sayMute=_mute; try{ render(); }catch(e){} }
 }
 let footBusy=false;
+/* mise à jour automatique du foot : classements, résultats récents, détails des matchs terminés */
+let _autoT=null;
+async function autoFoot(force){
+  try{
+    if(footBusy||navigator.onLine===false||document.hidden) return;
+    const now=Date.now(), empty=!Object.keys(foot.leagues||{}).length;
+    if(!force&&!empty&&now-(foot.autoT||0)<3*36e5) return;
+    const full=empty||now-(foot.fullT||0)>5*864e5;     // 1re fois, ou rattrapage tous les 5 jours : les 2 dernières semaines
+    foot.autoT=now; if(full) foot.fullT=now;
+    await footRefresh({quiet:true,per:full?footPeriods()[0]:{b:3,f:7},maxDetail:full?150:30});
+  }catch(e){}
+}
+/* NBA : même principe, calendrier et matchs terminés manquants (en silence) */
+async function autoNba(force){
+  try{
+    if(typeof nbaBusy!=='undefined'&&nbaBusy||navigator.onLine===false||document.hidden) return;
+    const now=Date.now(); let last=0; try{ last=+(localStorage.getItem('suivi-nba-auto')||0); }catch(e){}
+    if(!force&&now-last<3*36e5) return;
+    try{ localStorage.setItem('suivi-nba-auto',String(now)); }catch(e){}
+    const _m=sayMute; sayMute=true; try{ await nbaRefresh(); } finally{ sayMute=_m; }
+  }catch(e){}
+}
+setTimeout(()=>{ autoNba(false); },12000);
+/* actus NBA : rafraîchies en silence toutes les 30 min, même hors de la page Accueil */
+setTimeout(()=>{ try{ if(!document.hidden&&Date.now()-(news.t||0)>30*6e4) newsRefresh(true); }catch(e){} },20000);
+setInterval(()=>{ try{ if(!document.hidden&&navigator.onLine!==false&&Date.now()-(news.t||0)>30*6e4) newsRefresh(true); }catch(e){} },5*60e3);
+setInterval(()=>autoNba(false),10*60e3);
+setTimeout(()=>autoFoot(false),6000);
+setInterval(()=>autoFoot(false),10*60e3);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ setTimeout(()=>autoFoot(false),1500); setTimeout(()=>autoNba(false),4000); } });
 
 /* ---- agrégats ---- */
 function footIdx(){
@@ -2854,6 +2890,7 @@ async function liveFetch(manual,only){
     for(const it of items){ if(it.st!=='in') continue; const key=it.k+it.id; cur.add(it.k+':'+it.lg+':'+it.id); const sc=it.h.s+'-'+it.a.s, o=liveMem[key];
       if(!o||o.sc!==sc){ liveMem[key]={sc,chg:o?Date.now():0}; if(o){ changed=true; if(it.k==='f'&&ui.sport==='foot'&&liveAlertOk(it)){ const [oh,oa]=String(o.sc).split('-').map(Number), sd=it.h.s>oh?'h':it.a.s>oa?'a':'', gl=(it.ev||[]).filter(e=>e.g&&e.s===sd), lg=(sd&&gl.length===(sd==='h'?it.h.s:it.a.s))?gl[gl.length-1]:null, tm=sd==='h'?it.h.n:sd==='a'?it.a.n:''; if(sd&&goalSoundOk(it)) playGoal(); say(sd?`⚽ <b>BUT de ${esc(tm)} !</b> ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}${lg&&lg.p?' · '+esc(lg.p)+' '+esc(lg.m)+(lg.og?' (csc)':lg.pg?' (pen.)':''):''}`:`📝 <b>Score modifié</b> (VAR ?) : ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}`,sd?'ok':'warn'); } } } }
     const ended=[...liveSeen].filter(k=>!cur.has(k)); liveSeen=cur;
+    if(ended.some(k=>k.startsWith('f:'))){ clearTimeout(_autoT); _autoT=setTimeout(()=>autoFoot(true),120000); }   // un match foot vient de finir : classements et détails dans 2 min
     liveData.items=items;
     for(const g of ing){ try{ footIngest({__foot:'scores',league:g.lg,data:g.d}); }catch(e){} }
     if(ing.length) footSave();
