@@ -12,7 +12,7 @@ const SETTINGS = {
   multiplexLeagues: ['fra.1', 'uefa.champions'],      // championnats concernés
   alerts: { kickoff: true, score: true, final: true } // types d'alertes
 };
-// Secrets à créer dans Cloudflare : NTFY_TOPIC (nom secret ntfy) et SYNC_KEY (mot de passe partagé avec Statify).
+// Secrets à créer dans Cloudflare : NTFY_TOPIC (nom secret ntfy), SYNC_KEY (mot de passe partagé avec Statify) et NTFY_TOKEN (jeton de ton compte ntfy).
 // Espace de stockage (KV) à lier sous le nom : STATE.
 
 const LGN = { 'fra.1': 'Ligue 1', 'eng.1': 'Premier League', 'esp.1': 'Liga', 'ita.1': 'Serie A', 'ger.1': 'Bundesliga', 'uefa.champions': 'Ligue des champions', 'uefa.europa': 'Europa League', 'uefa.europa.conf': 'Conférence League' };
@@ -64,12 +64,14 @@ export default {
   async scheduled(_ev, env, ctx) { ctx.waitUntil(run(env).catch(e => console.error('Erreur robot :', e && e.stack || e))); }
 };
 
+// Jeton ntfy (secret NTFY_TOKEN, facultatif mais conseillé) : sans lui, ntfy limite les envois venant de Cloudflare (erreur 429)
+const hdrNtfy = env => ({ 'Content-Type': 'application/json', ...((env.NTFY_TOKEN || '').trim() ? { Authorization: 'Bearer ' + env.NTFY_TOKEN.trim() } : {}) });
 async function ntfy(env, title, message) {
   const topic = (env.NTFY_TOPIC || '').trim();
   if (topic.length < 8) { console.error('NTFY_TOPIC manquant ou trop court'); return false; }
   for (let i = 0; i < 3; i++) {
     try {
-      const r = await fetch('https://ntfy.sh/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic, title, message }) });
+      const r = await fetch('https://ntfy.sh/', { method: 'POST', headers: hdrNtfy(env), body: JSON.stringify({ topic, title, message }) });
       if (r.ok) return true;
       console.log('ntfy a répondu', r.status);
     } catch (e) { console.log('ntfy injoignable :', e.message); }
@@ -252,7 +254,7 @@ async function run(env) {
       let ok = false;
       for (let i = 0; i < 3 && !ok && reqs < 48; i++) {
         try {
-          const r = await F('https://ntfy.sh/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic: env.NTFY_TOPIC.trim(), title, message: body }) });
+          const r = await F('https://ntfy.sh/', { method: 'POST', headers: hdrNtfy(env), body: JSON.stringify({ topic: env.NTFY_TOPIC.trim(), title, message: body }) });
           ok = r.ok; if (!ok) console.log('ntfy a répondu', r.status);
         } catch (e) { console.log('ntfy injoignable :', e.message); }
         if (!ok) await sleep(1000);
