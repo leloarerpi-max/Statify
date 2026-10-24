@@ -347,7 +347,10 @@ const HOME_BLOCKS=[['tonight','Ce soir (heure de Paris)'],['kpis','Chiffres clé
 const HOME_FULL=['kpis','alerts','week','favs','notes','news'];
 
 function loadJ(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } }
-function saveJ(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+let gver=0, _saveWarn=0;
+function saveJ(k,v){ if(k===KEY) gver++; try{ localStorage.setItem(k,JSON.stringify(v)); return true; }catch(e){
+  if(Date.now()-_saveWarn>30000){ _saveWarn=Date.now(); try{ say('⚠️ Sauvegarde impossible : l\'espace du navigateur est plein. Fais un export (sauvegarde) et allège les données foot.','err'); }catch(_){} }
+  return false; } }
 let games = loadJ(KEY,{});
 let fav = loadJ(KEYF,{teams:[],players:{}}); if(!fav.teams) fav.teams=[]; if(!fav.players) fav.players={};
 let sched = loadJ(KEYS,[]);
@@ -561,8 +564,19 @@ function gameScore(p){
   const reb=(p.oreb!=null&&p.dreb!=null)?0.7*p.oreb+0.3*p.dreb:0.4*p.reb;
   return p.pts+0.4*p.fgm-0.7*p.fga-0.4*(p.fta-p.ftm)+reb+p.stl+0.7*p.ast+0.7*p.blk-0.4*p.pf-p.to;
 }
+let _bsC=null;
 function buildStats(list){
-  const fin=(list||Object.values(games)).filter(g=>g.status===3).sort((a,b)=>tms(a)-tms(b)||a.id.localeCompare(b.id));
+  if(list) return buildStats0(list);
+  const key=gver+'|'+Object.keys(games).length;
+  if(_bsC&&_bsC.k===key&&_bsC.g===games) return _bsC.v;
+  const v=buildStats0(); _bsC={k:key,g:games,v}; return v;
+}
+function buildStats0(list){
+  let src=list||Object.values(games);
+  // doublons : un match sauvegardé sous l'id 'espn…' puis rechargé sous son vrai id NBA
+  const real=new Set(src.filter(g=>!String(g.id).startsWith('espn')).map(g=>nyDay(g.time)+'|'+g.home.tri+'|'+g.away.tri));
+  src=src.filter(g=>!String(g.id).startsWith('espn')||!real.has(nyDay(g.time)+'|'+g.home.tri+'|'+g.away.tri));
+  const fin=src.filter(g=>g.status===3).sort((a,b)=>tms(a)-tms(b)||a.id.localeCompare(b.id));
   const P={},T={};
   for(const g of fin){
     for(const [me,op,home] of [[g.home,g.away,true],[g.away,g.home,false]]){
@@ -773,7 +787,12 @@ function viewRest(S){
 
 
 /* ---- Flèches de classement (évolution depuis la dernière soirée de matchs) ---- */
+let _psC=null;
 function prevStats(){
+  const k=gver+'|'+Object.keys(games).length; if(_psC&&_psC.k===k&&_psC.g===games) return _psC.v;
+  const v=prevStats0(); _psC={k,g:games,v}; return v;
+}
+function prevStats0(){
   const fin=Object.values(games).filter(g=>g.status===3);
   const days=fin.map(g=>nyDay(g.time)).filter(Boolean).sort();
   if(!days.length) return null;
@@ -1494,7 +1513,7 @@ function renderLeaders(S){
   $('#leaders').innerHTML=L.map((r,i)=>r?`<span class="lchip" style="border-color:${tcolor(r.tri)}" data-act="openteam" data-id="${r.tri}" title="Équipe en tête de la conférence ${i?'Ouest':'Est'}">${teamLogo(r.tri,22)}<b>${i?'Ouest':'Est'}</b> ${esc(r.tri)} ${r.w}-${r.l}</span>`:'').join('');
 }
 function notifyBig(){
-  try{ if(!('Notification' in window)||Notification.permission!=='granted'||localStorage.getItem(KEYN)!=='1') return;
+  try{ if(!('Notification' in window)||Notification.permission!=='granted'||localStorage.getItem(KEYNOT)!=='1') return;
     const b=bigMatches(buildStats()); if(!b||!b.items.length||localStorage.getItem(KEYNOT+'-day')===b.day) return;
     localStorage.setItem(KEYNOT+'-day',b.day);
     new Notification('🏀 À ne pas manquer ce soir',{body:b.items.slice(0,3).map(i=>tname(i.x.a)+' @ '+tname(i.x.h)).join('\n')}); }catch(e){}
@@ -1622,13 +1641,14 @@ function footSave(){
   for(const part of ['pl','ev','ts']){ for(let i=0;i<det.length;i+=40){ det.slice(i,i+40).forEach(m=>{ if(m.x) m.x[part]=part==='ts'?{h:{},a:{}}:(part==='pl'?{h:[],a:[]}:[]); }); foot.pruned=1; if(put()) return true; } }
   return false;
 }
-function footPeriods(){ return [{l:'Rapide : 2 semaines en arrière, 2 en avant (~240 requêtes)',b:14,f:14},{l:'1 mois en arrière, 3 semaines en avant (~420 requêtes)',b:30,f:21},{l:'Depuis le début de saison, 3 semaines en avant (très long)',b:'start',f:21}]; }
+function footPeriods(){ return [{l:'Rapide : 2 semaines en arrière, 2 en avant (~40 requêtes)',b:14,f:14},{l:'1 mois en arrière, 3 semaines en avant (~70 requêtes)',b:30,f:21},{l:'Depuis le début de saison, 3 semaines en avant (très long)',b:'start',f:21}]; }
 function footUrls(per){
   const out=[], day=864e5, now=Date.now(), f=t=>new Date(t).toISOString().slice(0,10).replace(/-/g,'');
   const y=new Date(), sy=y.getMonth()>=6?y.getFullYear():y.getFullYear()-1, start=Date.UTC(sy,7,1), end=Date.UTC(sy+1,5,5);
   const a0=per.b==='start'?Math.floor((start-now)/day):-per.b, a1=per.f==='end'?Math.ceil((end-now)/day):per.f;
   for(const [lg] of FLG){ out.push({k:'standings',lg,u:`https://site.api.espn.com/apis/v2/sports/soccer/${lg}/standings`});
-    for(let a=a0;a<a1;a++){ out.push({k:'scores',lg,u:`https://site.api.espn.com/apis/site/v2/sports/soccer/${lg}/scoreboard?dates=${f(now+a*day)}`}); } }
+    // une plage de 7 jours par requête (au lieu d'un jour) : ~7x moins de requêtes, donc moins de risque de blocage 429
+    for(let a=a0;a<a1;a+=7){ const b=Math.min(a+6,a1-1); out.push({k:'scores',lg,u:`https://site.api.espn.com/apis/site/v2/sports/soccer/${lg}/scoreboard?dates=${f(now+a*day)}-${f(now+b*day)}&limit=400`}); } }
   return out;
 }
 async function footGet(u){ let err; for(let k=0;k<3;k++){ try{ const r=await fetch(u); if(!r.ok){ if(r.status===400||r.status===404||r.status===403||r.status===429){ const e=new Error('HTTP '+r.status); e.fatal=1; throw e; } throw new Error('HTTP '+r.status); } return await r.json(); }catch(e){ err=e; if(e.fatal) break; await new Promise(z=>setTimeout(z,400*(k+1))); } } throw err; }
@@ -2572,7 +2592,8 @@ const KEYC='suivi-cloud';
 let cloud=loadJ(KEYC,{tok:'',gid:'',auto:false,last:0,sig:''});
 const cloudSave=()=>{ try{ localStorage.setItem(KEYC,JSON.stringify(cloud)); }catch(e){} };
 const cloudData=()=>{ const o={}; for(const k of CLOUD_KEYS){ try{ const v=localStorage.getItem(k); if(v) o[k+'.json']={content:v}; }catch(e){} } return o; };
-const cloudSig=()=>{ const o=cloudData(); let n=0; for(const k in o){ const c=o[k].content; n+=c.length; for(let i=0;i<c.length;i++) n=(n*31+c.charCodeAt(i))|0; } return String(n); };
+const cloudSig=()=>{ let n=0; for(const k of CLOUD_KEYS){ try{ const v=localStorage.getItem(k); if(!v) continue; n+=v.length; // longueur + échantillon de caractères (rapide)
+  const st=Math.max(1,v.length>>6); for(let i=0;i<v.length;i+=st) n=(n*31+v.charCodeAt(i))|0; n=(n*31+v.charCodeAt(v.length-1))|0; }catch(e){} } return String(n); };
 async function cloudApi(path,opt={}){
   const r=await fetch('https://api.github.com'+path,{...opt,headers:{'Accept':'application/vnd.github+json','Authorization':'Bearer '+cloud.tok,'Content-Type':'application/json'}});
   if(!r.ok){ const t=await r.text().catch(()=>''); throw new Error(r.status===401?'Jeton refusé (vérifie-le)':r.status===404?'Espace cloud introuvable':('Erreur '+r.status+' '+t.slice(0,80))); }
@@ -2599,13 +2620,14 @@ function notifConfig(){
   const nba=[...new Set(nfav.nba)].filter(t=>TEAMS[t]);
   let T={}; try{ T=footIdx().T; }catch(e){}
   const names=[], lgs=new Set(), unk=[], order=FLG.map(x=>x[0]);
-  for(const id of nfav.foot){ const t=T[id]; if(!t){ unk.push(id); continue; } names.push(t.n); Object.keys(t.comps||{}).forEach(l=>lgs.add(l)); if(t.lg) lgs.add(t.lg); }
+  const ids=[];
+  for(const id of nfav.foot){ const t=T[id]; if(!t){ unk.push(id); continue; } names.push(t.n); ids.push(String(id)); Object.keys(t.comps||{}).forEach(l=>lgs.add(l)); if(t.lg) lgs.add(t.lg); }
   // matchs choisis avec l'étoile dans le multiplex / le calendrier (récents ou à venir seulement)
   const picks=[]; try{ const byId=new Map(footIdx().mt.map(m=>[String(m.id),m])), lim=Date.now()-24*36e5;
     for(const id of Object.keys(mpick||{})){ const m=byId.get(String(id)); if(m&&Date.parse(m.d)>lim){ picks.push(String(m.id)); lgs.add(m.lg); } } }catch(e){}
   let leagues=[...lgs].filter(l=>order.includes(l)).sort((a,b)=>order.indexOf(a)-order.indexOf(b));
   if(!leagues.length&&(names.length||picks.length)) leagues=['fra.1'];
-  const cfg={ntfyTopic:'le-nom-secret-est-dans-le-secret-GitHub-NTFY_TOPIC',nba,foot:{teams:[...new Set(names)],leagues,matches:picks},multiplex:{enabled:true,leagues:['fra.1','uefa.champions']},alerts:{kickoff:true,score:true,final:true},live:{everySeconds:15,runMinutes:9}};
+  const cfg={nba,foot:{teams:[...new Set(names)],ids:[...new Set(ids)],leagues,matches:picks},multiplex:{enabled:true,leagues:['fra.1','uefa.champions']},alerts:{kickoff:true,score:true,final:true},live:{everySeconds:15,runMinutes:9}};
   return {cfg,unk,text:JSON.stringify(cfg,null,2)};
 }
 async function notifSync(force){
