@@ -2609,7 +2609,11 @@ async function cloudPush(){
   cloud.gid=g.id; cloud.last=Date.now(); cloud.sig=cloudSig(); cloud.remote=g.updated_at; cloudSave(); return g;
 }
 async function cloudPull(){
-  if(!cloud.tok||!cloud.gid) throw new Error('Rien à récupérer : envoie d\'abord depuis l\'autre appareil');
+  if(!cloud.tok) throw new Error('Ajoute d\'abord ton jeton GitHub');
+  if(!cloud.gid){ // appareil neuf : on retrouve la sauvegarde dans le compte
+    const L=await cloudApi('/gists?per_page=100'), f=L.find(x=>x.description==='Statify - sauvegarde');
+    if(!f) throw new Error('Aucune sauvegarde trouvée dans ce compte GitHub : envoie d\'abord depuis l\'autre appareil');
+    cloud.gid=f.id; cloudSave(); }
   const g=await cloudApi('/gists/'+cloud.gid); let n=0;
   for(const [name,f] of Object.entries(g.files||{})){ const k=name.replace(/\.json$/,''); if(!CLOUD_KEYS.includes(k)) continue;
     let c=f.content; if(f.truncated||c==null){ const r=await fetch(f.raw_url); c=await r.text(); }
