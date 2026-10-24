@@ -6,26 +6,40 @@ import fs from 'node:fs';
 const cfg = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 const STATE = 'state.json';
 
-// Équipes étoilées dans Statify : le robot les lit dans le petit espace public « Statify - alertes » du propriétaire du dépôt.
-// S'il n'existe pas encore (ou est illisible), on garde la liste de config.json.
+let st = {}; try { st = JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch {}
+
+// Équipes étoilées dans Statify : le robot les lit dans le petit espace PUBLIC « Statify - alertes » du propriétaire du dépôt
+// (lecture sans jeton : le jeton interne de GitHub Actions n'a pas le droit de lire les Gists).
+// S'il n'existe pas encore, on garde config.json ; en cas d'erreur passagère, on garde la dernière liste connue.
 async function loadStars() {
   const owner = process.env.GITHUB_REPOSITORY_OWNER; if (!owner) return;
-  const hdr = { Accept: 'application/vnd.github+json', ...(process.env.GH_TOKEN ? { Authorization: `Bearer ${process.env.GH_TOKEN}` } : {}) };
+  const hdr = { Accept: 'application/vnd.github+json', 'User-Agent': 'statify-robot' };
+  const keep = (s, why) => { cfg.nba = s.nba; cfg.foot = { ...(cfg.foot || {}), teams: s.foot.teams, ids: s.foot.ids || [], matches: s.foot.matches || [], leagues: s.foot.leagues?.length ? s.foot.leagues : (cfg.foot?.leagues || []) };
+    console.log(`${why} : ${cfg.nba.length} NBA, ${cfg.foot.teams.length} foot, ${cfg.foot.matches.length} match(s) choisi(s)`); };
   try {
-    const r = await fetch(`https://api.github.com/users/${owner}/gists?per_page=100`, { headers: hdr });
-    if (!r.ok) { console.log(`Espace Statify illisible (${r.status}) : config.json utilisé`); return; }
-    const g = (await r.json()).find(x => x.description === 'Statify - alertes' && x.files && x.files['statify-notif.json']);
-    if (!g) { console.log("Pas encore d'espace « Statify - alertes » : config.json utilisé"); return; }
-    const full = await fetch(`https://api.github.com/gists/${g.id}`, { headers: hdr });
-    if (!full.ok) { console.log(`Espace Statify illisible (${full.status}) : config.json utilisé`); return; }
-    const j = JSON.parse((await full.json()).files['statify-notif.json'].content);
-    cfg.nba = Array.isArray(j.nba) ? j.nba : [];
-    cfg.foot = { ...(cfg.foot || {}), teams: j.foot?.teams || [], leagues: j.foot?.leagues?.length ? j.foot.leagues : (cfg.foot?.leagues || []) };
-    console.log(`Équipes lues depuis Statify : ${cfg.nba.length} NBA, ${cfg.foot.teams.length} foot`);
-  } catch { console.log('Lecture des étoiles impossible : config.json utilisé'); }
+    let id = st._cfg?.gist;
+    if (!id) {  // découverte de l'identifiant (1 seule fois, ensuite mémorisé)
+      const r = await fetch(`https://api.github.com/users/${owner}/gists?per_page=100`, { headers: hdr });
+      if (!r.ok) throw new Error('liste ' + r.status);
+      const g = (await r.json()).find(x => x.description === 'Statify - alertes' && x.files && x.files['statify-notif.json']);
+      if (!g) { console.log("Pas encore d'espace « Statify - alertes » : config.json utilisé"); return; }
+      id = g.id;
+    }
+    // lecture via l'adresse « raw » (pas de limite de 60 requêtes/h de l'API)
+    const full = await fetch(`https://gist.githubusercontent.com/${owner}/${id}/raw/statify-notif.json?t=${Date.now()}`, { headers: { 'User-Agent': 'statify-robot', 'Cache-Control': 'no-cache' } });
+    if (full.status === 404) { delete st._cfg; throw new Error('espace introuvable'); }
+    if (!full.ok) throw new Error('lecture ' + full.status);
+    const j = await full.json();
+    const stars = { nba: Array.isArray(j.nba) ? j.nba : [], foot: { teams: j.foot?.teams || [], ids: (j.foot?.ids || []).map(String), leagues: j.foot?.leagues || [], matches: (j.foot?.matches || []).map(String) } };
+    // on n'écrit dans state.json que si la liste a changé (sinon un commit toutes les 5 min)
+    if (!st._cfg || st._cfg.gist !== id || JSON.stringify(st._cfg.stars) !== JSON.stringify(stars)) st._cfg = { gist: id, stars, t: Date.now() };
+    keep(stars, 'Équipes lues depuis Statify');
+  } catch (e) {
+    if (st._cfg?.stars) { keep(st._cfg.stars, `Espace Statify illisible (${e.message}), dernière liste connue utilisée`); }
+    else console.log(`Espace Statify illisible (${e.message}) : config.json utilisé`);
+  }
 }
 await loadStars();
-let st = {}; try { st = JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch {}
 let now = Date.now(), msgs = [], days = [], blocked = false, act = new Map();
 const day = d => d.toISOString().slice(0, 10).replace(/-/g, '');
 const setDays = () => { now = Date.now(); days = [day(new Date(now - 864e5)), day(new Date(now)), day(new Date(now + 864e5))]; };
@@ -33,16 +47,19 @@ const ESPN_TRI = { WSH: 'WAS', NO: 'NOP', UTAH: 'UTA', SA: 'SAS', NY: 'NYK', GS:
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const favF = (cfg.foot?.teams || []).map(norm);
+const favIds = new Set((cfg.foot?.ids || []).map(String));      // clubs étoilés par identifiant ESPN (fiable)
+const pickF = new Set((cfg.foot?.matches || []).map(String));   // matchs étoilés dans le multiplex
 const hm = iso => new Date(iso).toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' });
 
-async function board(path, ds) {
+async function board(path, ds, failed) {
   const out = [];
   for (const d of ds || days) {
     try {
       const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard?dates=${d}`);
-      if (r.status === 429 || r.status === 403) blocked = true;
+      if (r.status === 429 || r.status === 403) { blocked = true; failed?.add(d); }
       else if (r.ok) out.push(...((await r.json()).events || []).map(e => { e._d = d; return e; }));
-    } catch {}
+      else failed?.add(d);
+    } catch { failed?.add(d); }
   }
   return [...new Map(out.map(e => [e.id, e])).values()];
 }
@@ -51,7 +68,7 @@ function isMine(e, kind) {
   const [h, a] = ['home', 'away'].map(s => c.competitors.find(x => x.homeAway === s)); if (!h || !a) return false;
   return kind === 'nba'
     ? [h, a].some(t => (cfg.nba || []).includes(ESPN_TRI[t.team.abbreviation] || t.team.abbreviation))
-    : [h, a].some(t => favF.some(f => norm(t.team.displayName).includes(f) || norm(t.team.shortDisplayName).includes(f)));
+    : pickF.has(String(e.id)) || [h, a].some(t => favIds.has(String(t.team.id)) || (!favIds.size && favF.some(f => norm(t.team.displayName) === f || norm(t.team.shortDisplayName) === f || (f.length > 4 && norm(t.team.displayName).includes(f)))));
 }
 // un match est « actif » s'il est en cours ou démarre dans moins de 30 min : le robot reste alors allumé
 function mark(path, e) {
@@ -60,6 +77,7 @@ function mark(path, e) {
     if (!act.has(path)) act.set(path, new Set()); act.get(path).add(e._d);
   }
 }
+const push = (title, body, undo) => msgs.push([title, body, undo]);   // undo : annule la mémoire si l'envoi échoue
 function handle(e, kind, label) {
   const lgName = kind === 'nba' ? 'NBA' : (LGN[label] || label), ico = kind === 'nba' ? '🏀' : '⚽';
   const c = e.competitions?.[0]; if (!c) return;
@@ -71,16 +89,18 @@ function handle(e, kind, label) {
   const score = `${name(h)} ${h.score ?? 0} - ${a.score ?? 0} ${name(a)}`;
   const s = (st[e.id] ||= {});
   if (cfg.alerts?.kickoff && state === 'pre' && !s.k && start - now <= 20 * 60e3 && start - now > -5 * 60e3) {
-    s.k = 1; msgs.push([`⏰ Coup d'envoi à ${hm(e.date)} · ${lgName}`, `${ico} ${name(h)} - ${name(a)}`]);
+    s.k = 1; push(`⏰ Coup d'envoi à ${hm(e.date)} · ${lgName}`, `${ico} ${name(h)} - ${name(a)}`, () => { delete s.k; });
   }
-  const inMx = mx.enabled && (mx.leagues || cfg.foot?.leagues || []).includes(label) && Object.keys(st).some(k => k.startsWith(`mx:${label}:`) && now - Number(k.split(':')[2]) < 3.5 * 3600e3 && now >= Number(k.split(':')[2]) - 5 * 60e3);
+  // le multiplex ne couvre que les matchs de son groupe (st[mx:..].ids) : les autres matchs de mes clubs gardent leur alerte « BUT ! »
+  const inMx = mx.enabled && (mx.leagues || cfg.foot?.leagues || []).includes(label) && Object.keys(st).some(k => k.startsWith(`mx:${label}:`) && (st[k].ids || []).includes(String(e.id)) && now - Number(k.split(':')[2]) < 3.5 * 3600e3 && now >= Number(k.split(':')[2]) - 5 * 60e3);
   if (cfg.alerts?.score && kind === 'foot' && state === 'in' && !inMx) {
     const sc = `${h.score}-${a.score}`;
-    if (s.sc !== undefined && s.sc !== sc) msgs.push([`⚽ BUT ! · ${lgName}`, `${score}${e.status?.displayClock ? ` (${e.status.displayClock})` : ''}`]);
+    const old = s.sc;
+    if (old !== undefined && old !== sc) push(`⚽ BUT ! · ${lgName}`, `${score}${e.status?.displayClock ? ` (${e.status.displayClock})` : ''}`, () => { s.sc = old; });
     s.sc = sc;
   }
   if (cfg.alerts?.final && state === 'post' && !s.f && now - start < 8 * 3600e3) {
-    s.f = 1; msgs.push([`🏁 Terminé · ${lgName}`, `${ico} ${score}`]);
+    s.f = 1; push(`🏁 Terminé · ${lgName}`, `${ico} ${score}`, () => { delete s.f; });
   }
 }
 const LGN = { 'fra.1': 'Ligue 1', 'eng.1': 'Premier League', 'esp.1': 'Liga', 'ita.1': 'Serie A', 'ger.1': 'Bundesliga', 'uefa.champions': 'Ligue des champions', 'uefa.europa': 'Europa League', 'uefa.europa.conf': 'Conférence League' };
@@ -116,8 +136,9 @@ async function multiplexAlerts(lg, evs) {
   const label = LGN[lg] || lg;
   for (const c of cl) {
     const key = `mx:${lg}:${c.start}`, s = (st[key] ||= {});
+    s.ids = c.evs.map(e => String(e.id));      // les matchs couverts par ce multiplex
     if (!s.k && c.start - now <= 25 * 60e3 && c.start - now > -5 * 60e3) {
-      s.k = 1; msgs.push([`🔥 Multiplex ${label} dans ${Math.max(0, Math.round((c.start - now) / 60e3))} min`, `${c.evs.length} matchs à ${hm(c.evs[0].date)} : ` + c.evs.map(e => { const [h, a] = sides(e) || []; return h && a ? `${h.team.shortDisplayName || h.team.displayName}-${a.team.shortDisplayName || a.team.displayName}` : ''; }).join(', ')]);
+      s.k = 1; push(`🔥 Multiplex ${label} dans ${Math.max(0, Math.round((c.start - now) / 60e3))} min`, `${c.evs.length} matchs à ${hm(c.evs[0].date)} : ` + c.evs.map(e => { const [h, a] = sides(e) || []; return h && a ? `${h.team.shortDisplayName || h.team.displayName}-${a.team.shortDisplayName || a.team.displayName}` : ''; }).join(', '), () => { delete s.k; });
     }
     // pendant le multiplex : chaque but de TOUS les matchs, avec l'évolution au classement
     if (now >= c.start - 5 * 60e3 && now <= c.start + 3.5 * 3600e3) {
@@ -132,7 +153,8 @@ async function multiplexAlerts(lg, evs) {
         if (base && base.length) { const before = project(base, [e], { [e.id]: p }), after = project(base, [e]), id = String(scorer.team.id);
           const o = n => n === 1 ? '1er' : n + 'e';
           if (before[id] && after[id]) rk = before[id].nr !== after[id].nr ? ` · ${nm(scorer)} ${after[id].nr < before[id].nr ? 'passe' : 'tombe'} ${o(before[id].nr)} → ${o(after[id].nr)}` : ` · ${nm(scorer)} ${o(after[id].nr)}`; }
-        msgs.push([`🚨 But à ${nm(scorer)} (${label})`, `${nm(h)} ${cur[0]} - ${cur[1]} ${nm(a)}${e.status?.displayClock ? ` (${e.status.displayClock})` : ''}${rk}`]);
+        const sPrev = s.prev;
+        push(`🚨 But à ${nm(scorer)} (${label})`, `${nm(h)} ${cur[0]} - ${cur[1]} ${nm(a)}${e.status?.displayClock ? ` (${e.status.displayClock})` : ''}${rk}`, () => { sPrev[e.id] = p; });
       }
       for (const e of live) { const [h, a] = sides(e) || []; if (h && a) prev[e.id] = [+h.score || 0, +a.score || 0]; }
     }
@@ -149,26 +171,36 @@ async function pass(prevAct) {
   setDays(); msgs = []; act = new Map();
   const plan = prevAct ? PATHS.filter(p => prevAct.has(p.path)).map(p => ({ ...p, ds: [...prevAct.get(p.path)] })) : PATHS;
   await Promise.all(plan.map(async p => {
-    const ev = await board(p.path, p.ds);
+    const failed = new Set(), ev = await board(p.path, p.ds, failed);
+    // requête en échec : on garde ce chemin actif pour réessayer, au lieu d'arrêter le suivi en plein match
+    if (failed.size && prevAct?.has(p.path)) { if (!act.has(p.path)) act.set(p.path, new Set()); failed.forEach(d => act.get(p.path).add(d)); }
     if (p.foot) ev.forEach(e => handle(e, p.kind, p.code));
     if (p.mx) await multiplexAlerts(p.code, ev);
     ev.forEach(e => { if ((p.foot && isMine(e, p.kind)) || p.mx) mark(p.path, e); });
   }));
 }
 
-const topic = process.env.NTFY_TOPIC || cfg.ntfyTopic;
+const topic = (process.env.NTFY_TOPIC || '').trim();
+if (topic.length < 8) { console.error("NTFY_TOPIC manquant ou trop court : crée le secret NTFY_TOPIC dans Settings → Secrets and variables → Actions."); process.exit(1); }
 async function flush() {
-  for (const [title, body] of msgs) {
-    await fetch('https://ntfy.sh/', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic, title, message: body })
-    }).catch(() => {});
-    console.log('envoyé :', title, '|', body);
+  let sent = 0;
+  for (const [title, body, undo] of msgs) {
+    let ok = false;
+    for (let i = 0; i < 3 && !ok; i++) {
+      try {
+        const r = await fetch('https://ntfy.sh/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic, title, message: body }) });
+        ok = r.ok; if (!ok) console.log('ntfy a répondu', r.status);
+      } catch (e) { console.log('ntfy injoignable :', e.message); }
+      if (!ok) await sleep(1500);
+    }
+    if (ok) { sent++; console.log('envoyé :', title, '|', body); }
+    else { undo?.(); console.log('NON envoyé (sera retenté) :', title); }   // on oublie qu'on l'a envoyé → nouvelle tentative au prochain passage
   }
+  return sent;
 }
 function save() {
   // on oublie les vieux matchs
-  for (const k of Object.keys(st)) { if (!st[k].t) st[k].t = now; if (now - st[k].t > 3 * 864e5) delete st[k]; }
+  for (const k of Object.keys(st)) { if (k.startsWith('_')) continue; if (!st[k].t) st[k].t = now; if (now - st[k].t > 3 * 864e5) delete st[k]; }
   fs.writeFileSync(STATE, JSON.stringify(st));
 }
 
@@ -178,7 +210,7 @@ const t0 = Date.now();
 let prevAct = null, total = 0, again = false;
 for (;;) {
   await pass(prevAct);
-  await flush(); total += msgs.length; save();
+  total += await flush(); save();
   if (blocked) { console.log('ESPN limite les requêtes : on arrête ce tour, nouvel essai au prochain passage'); break; }
   prevAct = act;
   if (!prevAct.size) break;                                // plus rien d'actif : on s'arrête
