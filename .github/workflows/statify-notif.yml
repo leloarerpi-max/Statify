@@ -14,9 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 14
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
       - id: run
         run: node notify.mjs
         env:
@@ -26,6 +26,8 @@ jobs:
         run: |
           git config user.name statify-bot
           git config user.email bot@users.noreply.github.com
+          # petit battement hebdomadaire : GitHub coupe les workflows planifiés après 60 jours sans activité
+          if [ "$(date +%u)" = "1" ] && [ "$(date +%H)" = "06" ]; then date -u +%F > .keepalive; git add .keepalive; fi
           git add state.json
           git diff --cached --quiet || (git commit -m "etat" && git pull --rebase -q && git push)
       - name: Relancer si un match est encore en cours
