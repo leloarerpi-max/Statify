@@ -2627,20 +2627,23 @@ function notifConfig(){
     for(const id of Object.keys(mpick||{})){ const m=byId.get(String(id)); if(m&&Date.parse(m.d)>lim){ picks.push(String(m.id)); lgs.add(m.lg); } } }catch(e){}
   let leagues=[...lgs].filter(l=>order.includes(l)).sort((a,b)=>order.indexOf(a)-order.indexOf(b));
   if(!leagues.length&&(names.length||picks.length)) leagues=['fra.1'];
-  const cfg={nba,foot:{teams:[...new Set(names)],ids:[...new Set(ids)],leagues,matches:picks},multiplex:{enabled:true,leagues:['fra.1','uefa.champions']},alerts:{kickoff:true,score:true,final:true},live:{everySeconds:15,runMinutes:9}};
-  return {cfg,unk,text:JSON.stringify(cfg,null,2)};
+  const cfg={nba,foot:{teams:[...new Set(names)],ids:[...new Set(ids)],leagues,matches:picks}};
+  return {cfg,unk};
+}
+async function robotCall(path,body){
+  if(!cloud.wurl||!cloud.wkey) throw new Error('Renseigne l\'adresse et la clé du robot');
+  const r=await fetch(cloud.wurl.replace(/\/+$/,'')+path,{method:body?'POST':'GET',headers:{'x-key':cloud.wkey,...(body?{'content-type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});
+  if(r.status===401) throw new Error('Clé refusée : vérifie SYNC_KEY');
+  if(!r.ok) throw new Error('Le robot a répondu '+r.status);
+  return r.json();
 }
 async function notifSync(force){
-  if(!cloud.tok) throw new Error('Ajoute d\'abord ton jeton GitHub');
   const n=notifConfig();
   if(n.unk.length) throw new Error('Un club étoilé n\'est pas chargé : ouvre l\'onglet Foot, actualise (🔄), puis réessaie');
-  const core=JSON.stringify({nba:n.cfg.nba,foot:n.cfg.foot});
+  const core=JSON.stringify(n.cfg);
   if(!force&&cloud.nsig===core) return false;
-  const files={'statify-notif.json':{content:JSON.stringify({v:1,nba:n.cfg.nba,foot:n.cfg.foot,maj:new Date().toISOString()},null,1)}};
-  let g=null;
-  if(cloud.nid){ try{ g=await cloudApi('/gists/'+cloud.nid,{method:'PATCH',body:JSON.stringify({files})}); }catch(e){ if(/introuvable/.test(e.message)) cloud.nid=''; else throw e; } }
-  if(!g) g=await cloudApi('/gists',{method:'POST',body:JSON.stringify({description:'Statify - alertes',public:true,files})});
-  cloud.nid=g.id; cloud.nsig=core; cloud.nlast=Date.now(); cloudSave(); return true;
+  await robotCall('/sync',n.cfg);
+  cloud.nsig=core; cloud.nlast=Date.now(); cloudSave(); return true;
 }
 function cloudMsg(t,ok){ const m=$('#cloudmsg'); if(m){ m.textContent=t; m.style.color=ok?'var(--ok)':'var(--bad)'; } }
 function cloudRender(){
@@ -2653,19 +2656,18 @@ function cloudRender(){
   <label style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;cursor:pointer"><input type="checkbox" id="cloudauto" style="width:auto;flex:none" ${cloud.auto?'checked':''}><span>Envoi automatique quand mes données changent</span></label>
   <p class="mut" style="margin:8px 0 0">Dernière synchro : ${esc(when)}${cloud.gid?'':' · espace pas encore créé'}</p>
   <p id="cloudmsg" style="margin:6px 0 0;min-height:1.3em"></p>
-  ${(()=>{ const n=notifConfig(), none=!n.cfg.nba.length&&!n.cfg.foot.teams.length&&!n.cfg.foot.matches.length, on=!!cloud.nid, when=cloud.nlast?new Date(cloud.nlast).toLocaleString('fr-FR'):'';
+  ${(()=>{ const n=notifConfig(), none=!n.cfg.nba.length&&!n.cfg.foot.teams.length&&!n.cfg.foot.matches.length, on=!!(cloud.wurl&&cloud.nlast), when=cloud.nlast?new Date(cloud.nlast).toLocaleString('fr-FR'):'';
     return `<hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
   <h3 style="margin:0 0 6px">🔔 Alertes quand l'appli est fermée</h3>
-  <p class="mut" style="margin:0 0 6px">Le robot GitHub lit tes équipes à <b style="color:#f0b010">étoile dorée</b> (<b>${n.cfg.nba.length} en NBA, ${n.cfg.foot.teams.length} en foot, ${n.cfg.foot.matches.length} match(s) choisi(s) dans le multiplex</b>) dans un petit espace « Statify - alertes » de ton compte. Il est <b>public</b> mais ne contient que les noms de tes équipes.</p>
-  ${none?'<p class="mut"><b>Aucune équipe à étoile dorée pour l\'instant.</b> Touche la ☆ dorée à côté d\'une équipe ou d\'un club (la bleue sert aux favoris), puis reviens ici.</p>':''}
+  <p class="mut" style="margin:0 0 6px">Le robot (Cloudflare) suit tes équipes à <b style="color:#f0b010">étoile dorée</b> : <b>${n.cfg.nba.length} en NBA, ${n.cfg.foot.teams.length} en foot, ${n.cfg.foot.matches.length} match(s) choisi(s) dans le multiplex</b>.</p>
+  ${none?'<p class="mut"><b>Aucune équipe à étoile dorée pour l\'instant.</b> Touche la ☆ dorée à côté d\'une équipe ou d\'un club (la bleue sert aux favoris).</p>':''}
   ${n.unk.length?`<p class="mut">⚠️ ${n.unk.length} club(s) à étoile dorée non chargé(s) : ouvre l'onglet Foot, actualise (🔄), puis reviens ici.</p>`:''}
-  <div class="row" style="margin:8px 0 0"><button id="nsend">🔔 ${on?'Mettre à jour maintenant':'Activer les alertes'}</button></div>
+  <input id="wurl" placeholder="Adresse du robot (https://….workers.dev)" value="${esc(cloud.wurl||'')}" autocomplete="off" style="width:100%;box-sizing:border-box;margin-bottom:6px">
+  <input id="wkey" type="password" placeholder="Clé (SYNC_KEY)" value="${esc(cloud.wkey||'')}" autocomplete="off" style="width:100%;box-sizing:border-box">
+  <div class="row" style="margin:8px 0 0"><button id="nsend">🔔 ${on?'Mettre à jour maintenant':'Activer les alertes'}</button><button class="sec" id="ntest">📨 Envoyer une alerte test</button></div>
   <div class="row" style="margin:8px 0 0"><button class="sec" id="nall">★ Tout mettre en doré</button><button class="sec" id="nnone">☆ Tout retirer</button></div>
-  <p class="mut" style="margin:6px 0 0">${on?`✓ Actif${when?' · dernier envoi : '+esc(when):''}. Ensuite c'est automatique : ajoute ou retire une ☆, et le robot suit (Statify doit être ouvert au moment où tu changes tes étoiles).`:'Colle d\'abord ton jeton GitHub dans la zone plus haut, puis touche ce bouton.'}</p>
-  <p id="nmsg" style="margin:6px 0 0;min-height:1.3em"></p>
-  <details style="margin-top:6px"><summary class="mut" style="cursor:pointer">Secours : copier la config à la main</summary>
-  <textarea id="ncfg" readonly rows="9" style="width:100%;box-sizing:border-box;font:16px/1.3 ui-monospace,Menlo,monospace;white-space:pre;margin-top:6px">${esc(n.text)}</textarea>
-  <div class="row" style="margin:8px 0 0"><button class="sec" id="ncopy">📋 Copier ma config</button></div></details>`; })()}
+  <p class="mut" style="margin:6px 0 0">${on?`✓ Actif${when?' · dernier envoi : '+esc(when):''}. Ensuite c'est automatique : ajoute ou retire une ☆ et le robot suit (Statify doit être ouvert au moment où tu changes tes étoiles).`:'Renseigne l\'adresse et la clé de ton robot (voir le guide), puis touche « Activer les alertes ».'}</p>
+  <p id="nmsg" style="margin:6px 0 0;min-height:1.3em"></p>`; })()}
   <div class="row" style="justify-content:flex-end"><button class="sec" id="cloudclose">Fermer</button></div>`;
 }
 function cloudOpen(){ cloudRender(); $('#cloud').classList.add('on'); }
@@ -2677,20 +2679,17 @@ $('#cloud').addEventListener('click',async e=>{
     let nb=0; try{ nb=Object.keys(footIdx().T).length; }catch(e){}
     if(id==='nall'){ if(!confirm('Mettre en étoile dorée les 30 équipes NBA et '+nb+' clubs de foot ?\n\nTu recevras les notifications de TOUS leurs matchs (coup d\'envoi, buts, score final) : cela peut faire beaucoup d\'alertes par jour.')) return; nfavAll(); }
     else { if(!confirm('Retirer toutes les étoiles dorées ? Tu ne recevras plus aucune notification (les étoiles bleues ne changent pas).')) return; nfavNone(); }
-    if(cloud.tok&&cloud.nid) notifSync(false).catch(()=>{});
-    render(); cloudRender(); const m=$('#nmsg'); if(m){ m.textContent=id==='nall'?'✓ Tous les clubs sont en doré. Touche « Mettre à jour maintenant » pour prévenir le robot tout de suite.':'✓ Étoiles dorées retirées.'; m.style.color='var(--ok)'; }
+    if(cloud.wurl) notifSync(false).catch(()=>{});
+    render(); cloudRender(); const m=$('#nmsg'); if(m){ m.textContent=id==='nall'?'✓ Tous les clubs sont en doré. Touche « Mettre à jour maintenant » pour prévenir le robot.':'✓ Étoiles dorées retirées.'; m.style.color='var(--ok)'; }
     return; }
-  if(id==='nsend'){
-    const tk=($('#cloudtok').value||'').trim(); if(tk){ cloud.tok=tk; cloudSave(); }
-    const m=$('#nmsg'), say=(t,ok)=>{ if(m){ m.textContent=t; m.style.color=ok?'var(--ok)':'var(--bad)'; } };
-    say('Envoi…',true);
-    try{ await notifSync(true); say('✓ Alertes activées : le robot suit maintenant tes équipes étoilées.',true); }
-    catch(err){ say('⚠️ '+(err.message==='Failed to fetch'?'Pas de réseau':err.message),false); }
-    return; }
-  if(id==='ncopy'){
-    const ta=$('#ncfg'), m=$('#nmsg'), ok=()=>{ if(m){ m.textContent='✓ Copié. Colle-le dans config.json sur GitHub.'; m.style.color='var(--ok)'; } };
-    const fb=()=>{ try{ ta.focus(); ta.select(); ta.setSelectionRange(0,ta.value.length); if(document.execCommand('copy')) ok(); else if(m){ m.textContent='Sélectionne le texte et copie-le à la main.'; m.style.color='var(--bad)'; } }catch(err){ if(m){ m.textContent='Sélectionne le texte et copie-le à la main.'; m.style.color='var(--bad)'; } } };
-    try{ navigator.clipboard.writeText(ta.value).then(ok,fb); }catch(err){ fb(); }
+  if(id==='nsend'||id==='ntest'){
+    const u=($('#wurl').value||'').trim(), k=($('#wkey').value||'').trim(); cloud.wurl=u; cloud.wkey=k; cloudSave();
+    const m=$('#nmsg'), out=(t,ok)=>{ if(m){ m.textContent=t; m.style.color=ok?'var(--ok)':'var(--bad)'; } };
+    out('Envoi…',true);
+    try{
+      if(id==='ntest'){ await robotCall('/test',{}); out('✓ Alerte test envoyée : regarde ton téléphone.',true); }
+      else{ await notifSync(true); cloudRender(); const m2=$('#nmsg'); if(m2){ m2.textContent='✓ Alertes activées : le robot suit maintenant tes équipes étoilées.'; m2.style.color='var(--ok)'; } }
+    }catch(err){ out('⚠️ '+(err.message==='Failed to fetch'?'Robot injoignable (vérifie l\'adresse)':err.message),false); }
     return; }
   if(id==='cloudup'||id==='clouddown'){
     cloud.tok=($('#cloudtok').value||'').trim(); cloudSave();
@@ -2702,8 +2701,8 @@ $('#cloud').addEventListener('click',async e=>{
   }
 });
 $('#cloud').addEventListener('change',e=>{ if(e.target.id==='cloudauto'){ cloud.tok=($('#cloudtok').value||cloud.tok).trim(); cloud.auto=e.target.checked; cloudSave(); } });
-setInterval(()=>{ if(!cloud.tok||!cloud.nid||navigator.onLine===false) return; notifSync(false).catch(()=>{}); },60000);
-setTimeout(()=>{ if(cloud.tok&&cloud.nid&&navigator.onLine!==false) notifSync(false).catch(()=>{}); },8000);
+setInterval(()=>{ if(!cloud.wurl||!cloud.wkey||navigator.onLine===false) return; notifSync(false).catch(()=>{}); },60000);
+setTimeout(()=>{ if(cloud.wurl&&cloud.wkey&&navigator.onLine!==false) notifSync(false).catch(()=>{}); },8000);
 setInterval(()=>{ if(!cloud.auto||!cloud.tok||navigator.onLine===false) return; const sg=cloudSig(); if(sg!==cloud.sig) cloudPush().catch(()=>{}); },60000);
 document.addEventListener('keydown',e=>{
   const tag=(e.target.tagName||'').toLowerCase(), typing=tag==='input'||tag==='textarea'||tag==='select';
