@@ -301,6 +301,42 @@
   .mxsc{font-size:28px;font-weight:900;font-variant-numeric:tabular-nums;letter-spacing:.02em}.mxsc small{opacity:.4;margin:0 4px}
   .mxb{height:4px;background:var(--line);border-radius:9px;margin-top:12px}.mxb div{height:100%;background:linear-gradient(90deg,var(--acc),#6ee08a);border-radius:9px}
   .mxe{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;font-size:12px;border-top:1px dashed var(--line);padding-top:8px}.mxe span{color:var(--mut)}
+
+  .fal-list{display:grid;gap:10px;margin-top:12px}
+  .fal{background:var(--field);border-radius:16px;padding:10px 12px}
+  .fal-h{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:2px}.fal-h>b{font-size:15px}.fal-lg img{margin:0!important;display:block}
+  .fal-ch{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+  .fal-c{font-size:11px;font-weight:800;border-radius:99px;padding:3px 9px;white-space:nowrap}.fal-c.w{background:#34e07a30;color:var(--ok)}.fal-c.l{background:#ff5a4530;color:var(--bad)}
+  .fal-i{display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:13.5px;border-top:1px solid var(--line)}.fal-h+.fal-i{margin-top:6px}.fal-i>span{flex:none;width:20px;text-align:center}.fal-i b{font-weight:700}
+
+  /* ===== Classement, buteurs, fiche match ===== */
+  .cls-r{display:grid;grid-template-columns:30px 1fr auto 34px;align-items:center;gap:10px;padding:10px 0}.cls-r+.cls-r{border-top:1px solid var(--line)}
+  .cls-rk{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;font-weight:800;font-size:13px;color:var(--z);background:color-mix(in srgb,var(--z) 18%,transparent)}
+  .cls-c{min-width:0}.cls-n{display:flex;align-items:center;gap:6px;font-weight:700;font-size:14.5px}.cls-n>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.cls-n img{margin:0!important;flex:none}
+  .cls-s{font-size:11.5px;color:var(--mut);margin-top:2px;font-variant-numeric:tabular-nums}.cls-f{display:flex;gap:3px}.cls-f .dot{width:9px;height:9px;font-size:0;border-radius:50%;margin:0}
+  .cls-p{text-align:right;font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
+  .scl-r{display:grid;grid-template-columns:18px 38px 1fr auto;align-items:center;gap:10px;padding:10px 0}.scl-r+.scl-r{border-top:1px solid var(--line)}
+  .scl-n{font-weight:800;color:var(--mut);font-size:13px}.scl-i{min-width:0}.scl-i b{display:block;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.scl-i>span{font-size:12px}
+  .scl-b{height:5px;background:var(--field);border-radius:9px;margin-top:6px;border:1px solid var(--line)}.scl-b div{height:100%;border-radius:9px;background:linear-gradient(90deg,var(--acc),#6ee08a)}
+  .scl-v{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;text-align:right;line-height:1}.scl-v small{display:block;font-size:10px;color:var(--mut);font-weight:600}
+  .scl-r:first-child .scl-v{color:var(--ok)}
+  .tlm{display:inline-block;background:var(--txt);color:var(--bg);font-weight:800;font-size:11.5px;border-radius:99px;padding:2px 9px}
+  .cmp .cb{height:8px;border-radius:9px}.cmp .cb i{border-radius:9px}
+
+  .hero a,.hero .link{color:#fff!important;text-decoration:none!important}
+  .cls-n button.star,.scl-i button.star,.fal-h button.star{min-height:0;padding:0 1px}
+  .cls-n .stars{display:inline-flex;gap:0;flex:none}
+  .card>.row:has(>button[data-act=footlg]){flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:4px}
+  .card>.row:has(>button[data-act=footlg])::-webkit-scrollbar{display:none}
+  .card>.row:has(>button[data-act=footlg])>*{flex:none}
+
+  .bxh-q{display:grid;gap:4px;margin-top:14px;background:#ffffff22;border-radius:14px;padding:8px 10px;font-size:12px;text-align:center;font-variant-numeric:tabular-nums}.bxh-q .h{opacity:.75}.bxh-q .l{text-align:left;font-weight:700}.bxh-q b{font-weight:800}
+  .bx-tops{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.bx-tp{background:var(--field);border-radius:16px;padding:10px 6px;text-align:center;display:flex;flex-direction:column;gap:3px;align-items:center;min-width:0}.bx-tp b{font-size:12px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bx-av .av{margin:0!important}
+  .bx-tp{position:relative}.bx-tp .ddb{position:absolute;top:6px;right:6px}
+  .bx-big{font-size:26px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}.bx-big small{font-size:10px;color:var(--mut);margin-left:2px;font-weight:600}
+  .ddb{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.03em;border-radius:6px;padding:1px 5px;background:#4a9bff30;color:#2a7fe0;vertical-align:middle}.ddb.td{background:#f0b01040;color:#b07a00}
+  :root:not([data-theme=light]) .ddb{color:#8cc4ff}:root:not([data-theme=light]) .ddb.td{color:#ffd24a}
+  .pcb{display:block;height:3px;background:var(--line);border-radius:9px;margin-top:3px;position:relative}.pcb:after{content:'';position:absolute;left:0;top:0;bottom:0;width:var(--w);background:var(--acc);border-radius:9px}
 </style>
 </head>
 <body>
@@ -1204,16 +1240,27 @@ function nbaRecapHtml(g){
     :`<p class="mut" style="margin:6px 0">${news.items&&news.items.length?(newsBusy?'⏳ Recherche du résumé dans les derniers articles…':'Pas encore d\'article trouvé pour ce match dans les derniers articles.'):'Actus pas encore chargées.'} <span class="link" data-act="newsrefresh">🔄 Chercher</span></p>`;
   return `<div class="card" style="background:var(--field);margin:10px 0"><h3 style="margin:0 0 6px">📰 Le match vu par la presse française</h3>${body}<p class="mut" style="margin:6px 0 0;font-size:12px">Chercher le résumé complet : ${links}</p></div>`;
 }
+const ddBadge=p=>{ const n=[p.pts,p.reb,p.ast,p.stl,p.blk].filter(v=>v>=10).length; return n>=3?' <span class="ddb td" title="Triple-double">TD</span>':n===2?' <span class="ddb" title="Double-double">DD</span>':''; };
+function bxHero(g){
+  const aw=+g.away.score>+g.home.score, col=tcolor(aw?g.away.tri:g.home.tri), a=g.away.q||[], h=g.home.q||[], n=Math.max(a.length,h.length), lab=i=>i<4?'Q'+(i+1):'OT'+(i-3);
+  const qt=n?`<div class="bxh-q" style="grid-template-columns:54px repeat(${n},1fr) 40px"><span></span>${Array.from({length:n},(_,i)=>`<span class="h">${lab(i)}</span>`).join('')}<span class="h">T</span><span class="l">${esc(g.away.tri)}</span>${Array.from({length:n},(_,i)=>`<span>${a[i]??'–'}</span>`).join('')}<b>${g.away.score}</b><span class="l">${esc(g.home.tri)}</span>${Array.from({length:n},(_,i)=>`<span>${h[i]??'–'}</span>`).join('')}<b>${g.home.score}</b></div>`:'';
+  return `<div class="hero" style="--tc:${col};cursor:default"><div class="hero-eb">${esc(gameDate(g))} · ${g.status===3?'Final':esc(g.statusText||'')}</div><div class="hero-row"><div class="hero-t"><span class="hero-lg">${teamLogo(g.away.tri,44)}</span><b>${esc(NICK[g.away.tri]||g.away.name||g.away.tri)}</b></div><div class="hero-s">${g.away.score}<small>–</small>${g.home.score}</div><div class="hero-t"><span class="hero-lg">${teamLogo(g.home.tri,44)}</span><b>${esc(NICK[g.home.tri]||g.home.name||g.home.tri)}</b></div></div>${qt}</div>`;
+}
+function bxTops(g){
+  const one=t=>{ const ps=[...t.players].filter(p=>p.min>0).sort((a,b)=>b.pts-a.pts||b.min-a.min).slice(0,3); if(!ps.length) return '';
+    return `<div class="card"><h3 style="margin:0 0 10px;display:flex;align-items:center;gap:8px">⭐ Les meilleurs · ${teamLogo(t.tri,22)}${esc(t.name||t.tri)}</h3><div class="bx-tops">${ps.map(p=>`<div class="bx-tp"><span class="bx-av">${avatar(p.id,p.name,p.tri,42)}</span><b>${esc(p.name)}</b>${ddBadge(p)}<div class="bx-big">${p.pts}<small>pts</small></div><span class="mut" style="font-size:11px">${p.reb} reb · ${p.ast} pas</span></div>`).join('')}</div></div>`; };
+  return one(g.away)+one(g.home);
+}
 function boxScore(g){
   const other=t=>t===g.home?g.away:g.home;
   const tbl=t=>{
     const ps=t.players.filter(p=>p.min>0).sort((a,b)=>b.pts-a.pts||b.min-a.min), s=t.st||{}, top=ps.length?ps[0].pts:0, won=+t.score>+other(t).score;
     const pm=v=>`<span class="${v>0?'pmp':v<0?'pmn':'mut'}">${v>0?'+':''}${v}</span>`;
     return `<div class="bx"><div class="bx-head" style="--tc:${tcolor(t.tri)}">${teamLogo(t.tri,34)}<div class="bx-name">${esc(t.name)}<span class="mut">${won?'Victoire':'Défaite'}</span></div><div class="bx-score ${won?'':'lose'}">${t.score}</div></div><div class="scroll"><table class="bxt"><thead><tr><th class="l">Joueur</th><th class="pt">PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>FG</th><th>3P</th><th>LF</th><th>MIN</th><th>+/-</th></tr></thead><tbody>
-    ${ps.map(p=>`<tr><td class="l bxp">${star('player',p.id,p.name)}${avatar(p.id,p.name,p.tri,24)}${playerLink(p.id,p.name)} <span class="mut">${esc(p.pos)}</span></td><td class="pt"><b class="${p.pts===top&&top>0?'best':''}">${p.pts}</b></td><td>${p.reb}</td><td>${p.ast}</td><td>${p.stl}</td><td>${p.blk}</td><td>${p.to}</td><td>${p.fgm}/${p.fga}</td><td>${p.tpm}/${p.tpa}</td><td>${p.ftm}/${p.fta}</td><td class="mut">${Math.round(p.min)}</td><td>${pm(p.pm)}</td></tr>`).join('')}
+    ${ps.map(p=>`<tr><td class="l bxp">${star('player',p.id,p.name)}${avatar(p.id,p.name,p.tri,24)}${playerLink(p.id,p.name)} <span class="mut">${esc(p.pos)}</span>${ddBadge(p)}</td><td class="pt"><b class="${p.pts===top&&top>0?'best':''}">${p.pts}</b></td><td>${p.reb}</td><td>${p.ast}</td><td>${p.stl}</td><td>${p.blk}</td><td>${p.to}</td><td>${p.fgm}/${p.fga}<i class="pcb" style="--w:${p.fga?Math.round(p.fgm/p.fga*100):0}%"></i></td><td>${p.tpm}/${p.tpa}</td><td>${p.ftm}/${p.fta}</td><td class="mut">${Math.round(p.min)}</td><td>${pm(p.pm)}</td></tr>`).join('')}
     <tr class="bx-tot"><td class="l">Total équipe</td><td class="pt"><b>${t.score}</b></td><td>${s.reb??''}</td><td>${s.ast??''}</td><td>${s.stl??''}</td><td>${s.blk??''}</td><td>${s.to??''}</td><td>${s.fgm??''}/${s.fga??''}</td><td>${s.tpm??''}/${s.tpa??''}</td><td>${s.ftm??''}/${s.fta??''}</td><td></td><td></td></tr></tbody></table></div></div>`;
   };
-  return `<div class="card print-target"><div class="row between"><h2 style="margin:0">Box score — ${esc(g.away.tri)} @ ${esc(g.home.tri)} · ${gameDate(g)}</h2><div class="row"><button class="sec" data-act="print">Imprimer / PDF</button><button class="sec" data-act="closegame">Fermer</button></div></div>${nbaRecapHtml(g)}<h3>Score par quart-temps</h3>${lineScore(g)}${tbl(g.away)}${tbl(g.home)}${noteBox('game:'+g.id,g.away.tri+' @ '+g.home.tri,'Note sur ce match…')}</div>`;
+  return `<div class="card print-target"><div class="row between"><h2 style="margin:0">Box score — ${esc(g.away.tri)} @ ${esc(g.home.tri)} · ${gameDate(g)}</h2><div class="row"><button class="sec" data-act="print">Imprimer / PDF</button><button class="sec" data-act="closegame">Fermer</button></div></div>${bxHero(g)}${nbaRecapHtml(g)}${bxTops(g)}${tbl(g.away)}${tbl(g.home)}${noteBox('game:'+g.id,g.away.tri+' @ '+g.home.tri,'Note sur ce match…')}</div>`;
 }
 
 /* --- Joueurs --- */
@@ -1857,22 +1904,36 @@ function footCalcTable(lg,mode){
 }
 
 /* ---- alertes ---- */
-function footAlerts(){
+function footAlertItems(){
   const out=[], lim=Date.now()-8*864e5, {done,T,P}=footIdx();
+  const add=(tid,name,k,icon,full,short,extra)=>out.push({tid,name,k,icon,full,short,...(extra||{})});
   for(const m of done){ if(Date.parse(m.d)<lim) continue;
     const sc=mlink(m,`${m.hs}-${m.as}`);
     for(const s of ['h','a']){ const tid=s==='h'?m.hid:m.aid, mine=ffav.includes(tid), gf=s==='h'?m.hs:m.as, ga=s==='h'?m.as:m.hs, me=s==='h'?m.hn:m.an, op=s==='h'?m.an:m.hn;
-      if(mine){ if(gf-ga>=3) out.push(`💥 ${tlink(tid,me)} a <b>écrasé</b> ${esc(op)} (${sc}).`); if(m.x&&m.x.ts[s].rc>0) out.push(`🟥 ${tlink(tid,me)} : <b>${m.x.ts[s].rc>1?m.x.ts[s].rc+' cartons rouges':'un carton rouge'}</b> contre ${esc(op)} (${sc}).`); }
+      if(mine){ if(gf-ga>=3) add(tid,me,'crush','💥',`${tlink(tid,me)} a <b>écrasé</b> ${esc(op)} (${sc}).`,`${esc(op)} (${sc})`);
+        if(m.x&&m.x.ts[s].rc>0){ const r=m.x.ts[s].rc; add(tid,me,'rc','🟥',`${tlink(tid,me)} : <b>${r>1?r+' cartons rouges':'un carton rouge'}</b> contre ${esc(op)} (${sc}).`,`<b>${r>1?r+' cartons rouges':'Carton rouge'}</b> contre ${esc(op)} (${sc})`); } }
       if(m.x) for(const p of m.x.pl[s]){ const fav=ffavP.includes(p.id);
-        if(p.g>=3&&(mine||fav)) out.push(`🎩 ${plink(p.id,p.n)} (${esc(me)}) a signé un <b>triplé</b> contre ${esc(op)} !`);
-        else if(p.g>0&&fav) out.push(`⚽ ${plink(p.id,p.n)} (${esc(me)}) a marqué ${p.g>1?'<b>'+p.g+' buts</b>':'un but'} contre ${esc(op)} (${sc}).`);
-        else if(p.a>=2&&fav) out.push(`🅰️ ${plink(p.id,p.n)} (${esc(me)}) : <b>${p.a} passes décisives</b> contre ${esc(op)}.`); } }
+        if(p.g>=3&&(mine||fav)) add(tid,me,'hat','🎩',`${plink(p.id,p.n)} (${esc(me)}) a signé un <b>triplé</b> contre ${esc(op)} !`,`${plink(p.id,p.n)} : <b>triplé</b> contre ${esc(op)}`);
+        else if(p.g>0&&fav) add(tid,me,'goal','⚽',`${plink(p.id,p.n)} (${esc(me)}) a marqué ${p.g>1?'<b>'+p.g+' buts</b>':'un but'} contre ${esc(op)} (${sc}).`,`${plink(p.id,p.n)} : ${p.g>1?'<b>'+p.g+' buts</b>':'un but'} contre ${esc(op)} (${sc})`);
+        else if(p.a>=2&&fav) add(tid,me,'ast','🅰️',`${plink(p.id,p.n)} (${esc(me)}) : <b>${p.a} passes décisives</b> contre ${esc(op)}.`,`${plink(p.id,p.n)} : <b>${p.a} passes décisives</b> contre ${esc(op)}`); } }
   }
   for(const id of ffav){ const t=T[id]; if(!t||!t.log.length) continue; const l=t.log; let n=0,u=0,d=0;
     for(let i=l.length-1;i>=0&&l[i].res==='w';i--) n++; for(let i=l.length-1;i>=0&&l[i].res!=='l';i--) u++; for(let i=l.length-1;i>=0&&l[i].res==='l';i--) d++;
-    if(n>=4) out.push(`🏆 ${tlink(id,t.n)} : <b>${n} victoires</b> de suite.`); else if(u>=6) out.push(`🛡️ ${tlink(id,t.n)} : <b>${u} matchs sans défaite</b>.`);
-    if(d>=3) out.push(`⚠️ ${tlink(id,t.n)} : <b>${d} défaites</b> de suite.`); }
+    if(n>=4) add(id,t.n,'streak','🏆',`${tlink(id,t.n)} : <b>${n} victoires</b> de suite.`,`${n} victoires de suite`,{chip:'w'}); else if(u>=6) add(id,t.n,'streak','🛡️',`${tlink(id,t.n)} : <b>${u} matchs sans défaite</b>.`,`${u} matchs sans défaite`,{chip:'w'});
+    if(d>=3) add(id,t.n,'streak','⚠️',`${tlink(id,t.n)} : <b>${d} défaites</b> de suite.`,`${d} défaites de suite`,{chip:'l'}); }
   return out;
+}
+function footAlerts(){ return footAlertItems().map(i=>`${i.icon} ${i.full}`); }
+/* carte « Alertes foot » : une ligne par club, plus de doublons */
+function footAlertsCard(){
+  const items=footAlertItems(); if(!items.length) return '';
+  const {T}=footIdx(), G=new Map();
+  for(const i of items){ if(!G.has(i.tid)) G.set(i.tid,{tid:i.tid,name:i.name,chips:[],lines:[],crush:[]}); const g=G.get(i.tid);
+    if(i.chip) g.chips.push(i); else if(i.k==='crush') g.crush.push(i.short); else g.lines.push(i); }
+  const rows=[...G.values()].map(g=>{ const t=T[g.tid], lo=t?footLogo(t.lo,30):'';
+    const lines=(g.crush.length?[`<div class="fal-i"><span>💥</span><div>A écrasé ${g.crush.join(' et ')}</div></div>`]:[]).concat(g.lines.map(i=>`<div class="fal-i"><span>${i.icon}</span><div>${i.short}</div></div>`));
+    return `<div class="fal"><div class="fal-h"><span class="fal-lg">${lo}</span><b>${tlink(g.tid,g.name)}</b><span class="fal-ch">${g.chips.map(c=>`<span class="fal-c ${c.chip}">${c.icon} ${esc(c.short)}</span>`).join('')}</span></div>${lines.join('')}</div>`; }).join('');
+  return `<div class="card"><div class="row between"><h2 style="margin:0">🔔 Alertes foot <span class="mut" style="font-size:13px;font-weight:400">· ${items.length} · ${G.size} club${G.size>1?'s':''}</span></h2><button class="sec" data-act="welcome">🎉 Plein écran</button></div><div class="fal-list">${rows}</div></div>`;
 }
 
 /* ---- gros matchs foot ---- */
@@ -1916,7 +1977,8 @@ function footFavCards(){
 }
 function footScorersTable(pl,key,lab,n=8){
   const top=pl.filter(p=>p[key]>0).sort((a,b)=>b[key]-a[key]||b.gp-a.gp).slice(0,n);
-  return top.length?`<table><tbody>${top.map((p,i)=>`<tr><td class="l">${i+1}. ${footAv(p.id,p.n,p.tco,22)}${plink(p.id,p.n)} <span class="mut">${esc(p.tn)}</span></td><td><b>${p[key]}</b> <span class="mut">${p[key]>1?lab:lab.replace(/s$/,'')}</span></td></tr>`).join('')}</tbody></table>`:'<p class="mut">–</p>';
+  const mx=top.length?top[0][key]:1;
+  return top.length?`<div class="scl">${top.map((p,i)=>`<div class="scl-r"><span class="scl-n">${i+1}</span>${footAv(p.id,p.n,p.tco,38)}<div class="scl-i"><b>${plink(p.id,p.n)}</b><span class="mut">${esc(p.tn)}</span><div class="scl-b"><div style="width:${Math.round(p[key]/mx*100)}%"></div></div></div><span class="scl-v">${p[key]}<small>${p[key]>1?lab:lab.replace(/s$/,'')}</small></span></div>`).join('')}</div>`:'<p class="mut">–</p>';
 }
 function footLeadersFallback(lg){
   const L=foot.leagues[lg]; if(!L) return '';
@@ -1940,7 +2002,7 @@ function footHome(){
   let h=footControls(`${cfg.hidden.length?`<span class="mut">${cfg.hidden.length} bloc${cfg.hidden.length>1?'s':''} masqué${cfg.hidden.length>1?'s':''} · </span>`:''}<button class="sec fbtn" data-act="fhomeedit" title="Personnaliser l'accueil">⚙<span class="hide-m"> Personnaliser</span></button>`); const FB={};
   h+=multiBanner();
   if(!mt.length) return h;
-  const al=footAlerts(); if(al.length) FB.alerts=`<div class="card"><div class="row between"><h2 style="margin:0">🔔 Alertes foot</h2><button class="sec" data-act="welcome">🎉 Revoir en plein écran</button></div>${al.map(x=>`<div class="alert">${x}</div>`).join('')}</div>`;
+  { const ac=footAlertsCard(); if(ac) FB.alerts=ac; }
   const nw=footNews(3); if(nw.length) FB.news=`<div class="card"><h2>📰 À la une</h2>${nw.map(n=>`<div class="alert"><b>${mlink(n.m,esc(n.r.title))}</b> <span class="mut" style="font-size:12px">· ${esc(footLgName(n.m.lg))} · ${n.age<1?'aujourd\'hui':n.age<2?'hier':'il y a '+Math.floor(n.age)+' j'}</span><div class="mut" style="margin-top:3px">${(()=>{ const t=n.r.paras[1]||n.r.paras[0]; if(t.length<=230) return t; const c=t.slice(0,230), i=c.lastIndexOf(' ; '); return (i>60?c.slice(0,i):c.replace(/\s+\S*$/,''))+' … <span class="link" data-act="fmatch" data-id="'+esc(n.m.id)+'">lire la suite</span>'; })()}</div></div>`).join('')}</div>`;
   const goals=done.reduce((s,m)=>s+m.hs+m.as,0);
   FB.kpis=`<div class="grid"><div class="kpi"><span class="mut">Matchs joués</span><b>${done.length}</b></div><div class="kpi"><span class="mut">Buts / match</span><b>${f1(fdiv(goals,done.length))}</b></div><div class="kpi"><span class="mut">Championnats</span><b>${Object.keys(foot.leagues).length}</b></div><div class="kpi"><span class="mut">Joueurs suivis</span><b>${pl.length}</b></div></div>`;
@@ -2089,7 +2151,7 @@ function footTimeline(m){
   const x=m.x; if(!x||!x.ev.length) return '';
   const ic={g:'⚽',pg:'⚽ (pen.)',og:'⚽ (c.s.c.)',yc:'🟨',rc:'🟥',sub:'🔁'};
   return `<h3>Déroulé du match</h3><div class="scroll"><table><tbody>${x.ev.map(e=>{ const txt=e.t==='sub'?esc(e.p?`${e.p}${e.p2?' ↔ '+e.p2:''}`:e.tx):`<b>${esc(e.p||e.tx)}</b>${e.t==='g'&&e.p2?` <span class="mut">(passe : ${esc(e.p2)})</span>`:''}`, cell=`${ic[e.t]} ${txt}`;
-    return `<tr><td class="l" style="width:46%;text-align:right">${e.s==='h'?cell:''}</td><td style="width:8%"><span class="mut">${esc(e.ms||e.m+"'")}</span></td><td class="l" style="width:46%">${e.s==='a'?cell:''}</td></tr>`; }).join('')}</tbody></table></div>`;
+    return `<tr><td class="l" style="width:46%;text-align:right">${e.s==='h'?cell:''}</td><td style="width:8%"><span class="tlm">${esc(e.ms||e.m+"'")}</span></td><td class="l" style="width:46%">${e.s==='a'?cell:''}</td></tr>`; }).join('')}</tbody></table></div>`;
 }
 function footLineup(m,s){
   const pl=(m.x&&m.x.pl[s])||[]; if(!pl.length) return '';
@@ -2101,9 +2163,10 @@ function footLineup(m,s){
 function footMatchModal(m){
   const {mt}=footIdx(), h2h=mt.filter(x=>x.done&&x.id!==m.id&&((x.hid===m.hid&&x.aid===m.aid)||(x.hid===m.aid&&x.aid===m.hid))).sort((a,b)=>Date.parse(b.d)-Date.parse(a.d));
   const live=m.st==='in', pre=!m.done&&!live, [ca]=pickColors([fcol(m.hc)]);
-  return `<div class="card print-target" style="border-left:4px solid ${ca}">
-  <div class="row between"><span class="mut">${esc(footLgName(m.lg))} · ${esc(fmtDT(m.d))}${m.ven||(m.x&&m.x.ven)?' · '+esc(m.ven||m.x.ven):''}${m.x&&m.x.att?' · '+m.x.att.toLocaleString('fr-FR')+' spectateurs':''}</span><div class="row"><button class="sec" data-act="print">Imprimer / PDF</button><button class="sec" data-act="fclose">Fermer</button></div></div>
-  <div class="row between" style="margin:14px 0"><div class="row" style="font-size:20px">${footLogo(m.hl,44)}<b>${tlink(m.hid,m.hn)}</b></div><div style="font-size:34px;font-weight:800">${pre?'–':`${m.hs} - ${m.as}`}<div class="mut" style="font-size:12px;text-align:center;font-weight:400">${live?'🔴 '+esc(fLbl(m.sn,m.clk,m.per,m.det)||'En cours'):pre?'À venir':esc(m.det||'Terminé')}</div></div><div class="row" style="font-size:20px"><b>${tlink(m.aid,m.an)}</b>${footLogo(m.al,44)}</div></div>
+  const stTxt=live?'🔴 '+esc(fLbl(m.sn,m.clk,m.per,m.det)||'En cours'):pre?'À venir':esc(m.det||'Terminé');
+  return `<div class="card print-target">
+  <div class="row between" style="margin-bottom:10px"><span class="mut" style="font-size:12px">${esc(footLgName(m.lg))}${m.ven||(m.x&&m.x.ven)?' · '+esc(m.ven||m.x.ven):''}${m.x&&m.x.att?' · '+m.x.att.toLocaleString('fr-FR')+' spectateurs':''}</span><div class="row"><button class="sec" data-act="print">Imprimer / PDF</button><button class="sec" data-act="fclose">Fermer</button></div></div>
+  <div class="hero" style="--tc:${ca};cursor:default"><div class="hero-eb">${esc(footLgName(m.lg))} · ${esc(fmtDT(m.d))}</div><div class="hero-row"><div class="hero-t"><span class="hero-lg">${footLogo(m.hl,44)}</span><b>${tlink(m.hid,m.hn)}</b></div><div class="hero-s">${pre?'–':`${m.hs}<small>–</small>${m.as}`}</div><div class="hero-t"><span class="hero-lg">${footLogo(m.al,44)}</span><b>${tlink(m.aid,m.an)}</b></div></div><div class="hero-ft" style="justify-content:center"><span>${stTxt}</span></div></div>
   ${live?'<div class="mut" style="font-size:12px;margin-bottom:6px">🔴 Match en cours : score, buts, stats et compositions se mettent à jour automatiquement.</div>':''}${footRecapHtml(m)}
    ${m.x?'':(m.done?`<p class="mut">${m.nx?'ESPN n\'a pas fourni de détails pour ce match.':'Détails non chargés : clique sur « 🔄 Actualiser le foot ».'}</p>`:'')}
   ${footFrise(m)}${footTimeline(m)}${footStatBars(m)}
@@ -2162,7 +2225,9 @@ function footTableView(){
   if(mode==='G'){
     if(!L||!L.standings.length) body='<p class="mut">Pas encore de classement : clique sur « Actualiser le foot ».</p>';
     else { const zl=[...new Map(L.standings.filter(r=>r.zone&&r.zone.d).map(r=>[r.zone.d,r.zone.c])).entries()];
-      body=`<div class="row" style="margin-bottom:8px">${zl.map(([d,c])=>`<span class="zl"><i style="background:${esc(c)}"></i>${esc(zoneFr(d))}</span>`).join('')}</div><div class="scroll"><table class="st"><thead><tr><th>#</th><th class="l">Club</th><th>MJ</th><th>V</th><th>N</th><th>D</th><th>BP</th><th>BC</th><th>Diff.</th><th>Pts</th><th>Forme</th></tr></thead><tbody>${L.standings.map(r=>`<tr><td style="box-shadow:inset 4px 0 ${esc(r.zone?r.zone.c:'transparent')}">${r.rank}</td><td class="l">${fstar(r.id)}${footLogo(r.logo)}${tlink(r.id,r.name)}</td><td>${r.gp}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gf}</td><td>${r.ga}</td><td class="${r.gd>=0?'ok':'err'}">${r.gd>0?'+':''}${r.gd}</td><td><b>${r.pts}</b></td><td>${fdots(r.id)}</td></tr>`).join('')}</tbody></table></div><p class="mut" style="margin:8px 0 0">${esc(L.season||'')} · mis à jour ${L.upd?esc(fmtDT(new Date(L.upd).toISOString())):'–'} · la forme est calculée sur les matchs en mémoire.</p>`; }
+      const rowsH=L.standings.map(r=>{ const zc=r.zone&&r.zone.c?r.zone.c:'#8aa0b8';
+        return `<div class="cls-r"><span class="cls-rk" style="--z:${esc(zc)}">${r.rank}</span><div class="cls-c"><div class="cls-n">${fstar(r.id)}${footLogo(r.logo,24)}<span>${tlink(r.id,r.name)}</span></div><div class="cls-s">${r.gp} J · ${r.w}V ${r.d}N ${r.l}D · ${r.gf}-${r.ga} <b class="${r.gd>=0?'ok':'err'}">${r.gd>0?'+':''}${r.gd}</b></div></div><span class="cls-f">${fdots(r.id)}</span><b class="cls-p">${r.pts}</b></div>`; }).join('');
+      body=`<div class="cls">${rowsH}</div><div class="row" style="margin:12px 0 4px;gap:14px">${zl.map(([d,c])=>`<span class="zl"><i style="background:${esc(c)}"></i>${esc(zoneFr(d))}</span>`).join('')}</div><p class="mut" style="margin:8px 0 0">${esc(L.season||'')} · mis à jour ${L.upd?esc(fmtDT(new Date(L.upd).toISOString())):'–'} · la forme est calculée sur les matchs en mémoire.</p>`; }
   } else { const rows=footCalcTable(lg,mode);
     body=rows.length?`<div class="scroll"><table class="st"><thead><tr><th>#</th><th class="l">Club</th><th>MJ</th><th>V</th><th>N</th><th>D</th><th>BP</th><th>BC</th><th>Diff.</th><th>Pts</th></tr></thead><tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td class="l">${fstar(r.id)}${footLogo(r.lo)}${tlink(r.id,r.n)}</td><td>${r.g}</td><td>${r.w}</td><td>${r.d}</td><td>${r.ls}</td><td>${r.gf}</td><td>${r.ga}</td><td class="${r.gd>=0?'ok':'err'}">${r.gd>0?'+':''}${r.gd}</td><td><b>${r.pts}</b></td></tr>`).join('')}</tbody></table></div><p class="mut" style="margin:8px 0 0">Calculé sur les matchs en mémoire : charge « Depuis le début de saison » pour un classement complet.</p>`:'<p class="mut">Pas assez de matchs en mémoire.</p>'; }
   return footControls()+`<div class="card">${tabs}${body}</div>`+footCurveCard(lg);
