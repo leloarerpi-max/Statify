@@ -352,6 +352,61 @@
   .ai-card p{font-size:14.5px;line-height:1.6;margin:0 0 10px}.ai-ft{display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:10px;margin-top:4px;font-size:11.5px;color:var(--mut)}.ai-ft button{min-height:0;padding:6px 11px;border-radius:99px;font-size:12px;white-space:nowrap}
   .ai-key{border:2px dashed color-mix(in srgb,var(--mut) 45%,transparent)}.ai-key input{width:100%}
   .ai-ld{font-size:14px;font-weight:700;margin-bottom:6px}.ai-sk{height:11px;border-radius:9px;background:var(--hover);margin:9px 0;animation:aisk 1.2s ease-in-out infinite alternate}@keyframes aisk{to{opacity:.45}}
+
+  body.ttk-on{overflow:hidden}body.ttk-on .gbanner{left:calc(50% - min(50vw,28.125vh));right:calc(50% - min(50vw,28.125vh));top:14vh}body.ttk-on #msg,body.ttk-on #fmsg,body.ttk-on nav#tabs{display:none!important}
+  #ttk{position:fixed;inset:0;z-index:9000;background:#050b16;display:flex;justify-content:center;align-items:center;color:#fff;font-family:inherit}
+  .ttk-f{position:relative;height:100vh;height:100dvh;width:min(100vw,56.25vh);width:min(100vw,56.25dvh);overflow:hidden;display:flex;flex-direction:column;padding:0 4.5% 0;container-type:inline-size;
+    background:radial-gradient(90% 40% at 100% 0,#e0303a55,transparent 70%),radial-gradient(80% 40% at 0 30%,#1f6fff40,transparent 70%),radial-gradient(90% 45% at 50% 110%,#2fc15a33,transparent 70%),#08111f}
+  .ttk-top{height:7%;min-height:34px;display:flex;align-items:flex-end;justify-content:space-between;font-weight:900;letter-spacing:.25em;font-size:2.6cqw;opacity:.55}
+  .ttk-gear{background:#ffffff14!important;border:0!important;color:#fff!important;min-height:0!important;width:8cqw;height:8cqw;border-radius:50%!important;padding:0!important;font-size:4cqw;opacity:.7}
+  .ttk-head{display:flex;gap:3cqw;align-items:flex-start;margin:2cqw 0 2.6cqw;flex:none}.ttk-hl{flex:1;min-width:0}
+  .ttk-live{display:inline-flex;align-items:center;gap:2cqw;background:linear-gradient(135deg,#ff3b4a,#d4142a);font-weight:900;font-size:4.1cqw;letter-spacing:.04em;padding:1.6cqw 3.4cqw;border-radius:99px;box-shadow:0 6px 22px #ff3b4a66}
+  .ttk-live i{width:2.4cqw;height:2.4cqw;border-radius:50%;background:#fff;animation:livepulse 1.2s infinite}.ttk-live.pre{background:linear-gradient(135deg,#1f6fff,#1246b8);box-shadow:0 6px 22px #1f6fff55}.ttk-live.post{background:#ffffff22;box-shadow:none}
+  .ttk-sub{font-size:5.6cqw;font-weight:900;margin-top:2.4cqw;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ttk-sub2{font-size:3.3cqw;opacity:.75;margin-top:1cqw}.ttk-sub2 b{color:#ff6b6b}
+  .ttk-cam{width:22cqw;aspect-ratio:3/4;border:2px dashed #ffffff55;border-radius:4cqw;display:grid;place-items:center;text-align:center;font-size:3cqw;opacity:.7;flex:none;background:#ffffff08}
+  .ttk-list{flex:1 1 auto;min-height:0;overflow:hidden;padding:4px;margin:-4px}.ttk-f::after{content:'';flex:none;height:25%}.ttk-rows{display:flex;flex-direction:column;gap:2cqw}
+  .ttk-r{background:#ffffff10;border:1px solid #ffffff1a;border-radius:4.5cqw;padding:2.4cqw 3.4cqw;position:relative;overflow:hidden;backdrop-filter:blur(6px)}
+  .ttk-r.in{background:linear-gradient(90deg,#ff3b4a1f,#ffffff0d 40%);border-color:#ff3b4a55}
+  .ttk-r.gl{border-color:#2fc15a;background:linear-gradient(90deg,#2fc15a55,#2fc15a1a);box-shadow:0 0 0 2px #2fc15a,0 0 28px #2fc15a88;animation:ttkgl 1s ease-in-out infinite alternate}@keyframes ttkgl{to{box-shadow:0 0 0 2px #2fc15a,0 0 8px #2fc15a44}}
+  .ttk-bt{background:#2fc15a;color:#fff;font-weight:900;border-radius:99px;padding:.4cqw 2.4cqw}
+  .ttk-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:2cqw}.ttk-t{display:flex;align-items:center;gap:1.8cqw;min-width:0}.ttk-t.r{justify-content:flex-end;text-align:right}
+  .ttk-t b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:4cqw}.ttk-t img{width:7cqw!important;height:7cqw!important;margin:0!important;flex:none}
+  .ttk-sc{font-weight:900;font-size:7cqw;font-variant-numeric:tabular-nums;letter-spacing:.02em;min-width:17cqw;text-align:center}.ttk-sc i{font-style:normal;opacity:.5;margin:0 1cqw}.ttk-r.pre .ttk-sc i{font-size:4cqw}
+  .ttk-meta{display:flex;justify-content:center;align-items:center;gap:2.4cqw;margin-top:1cqw;font-size:3cqw;opacity:.9}.ttk-p{font-weight:900;border-radius:99px;padding:.4cqw 2.4cqw}.ttk-p.live{background:#ff3b4a;color:#fff}.ttk-p.pre{background:#1f6fff;color:#fff}.ttk-p.fin{background:#ffffff26}
+  .ttk-rows.xl .ttk-r{padding:3.4cqw 3.6cqw}.ttk-rows.xl .ttk-sc{font-size:9cqw}.ttk-rows.xl .ttk-t b{font-size:4.6cqw}.ttk-rows.xl .ttk-t img{width:9cqw!important;height:9cqw!important}
+  .ttk-rows.s{gap:1cqw}.ttk-rows.s .ttk-r{padding:1.2cqw 3cqw;border-radius:3.4cqw}.ttk-rows.s .ttk-sc{font-size:5cqw}.ttk-rows.s .ttk-t b{font-size:3.3cqw}.ttk-rows.s .ttk-t img{width:5.6cqw!important;height:5.6cqw!important}.ttk-rows.s .ttk-meta{margin-top:0;font-size:2.5cqw}
+  .ttk-rows.m{gap:1.4cqw}.ttk-rows.m .ttk-r{padding:1.6cqw 3cqw}.ttk-rows.m .ttk-sc{font-size:5.6cqw}.ttk-rows.m .ttk-t b{font-size:3.5cqw}.ttk-rows.m .ttk-meta{margin-top:.4cqw;font-size:2.7cqw}
+  .ttk-cd{text-align:center;background:linear-gradient(135deg,#1f6fff33,#ffffff0a);border:1px solid #1f6fff66;border-radius:5cqw;padding:3cqw;margin-bottom:2.4cqw;display:flex;flex-direction:column;gap:.6cqw}.ttk-cd b{font-size:12cqw;line-height:1;font-variant-numeric:tabular-nums}.ttk-cd span{font-size:3.4cqw;opacity:.85}
+  .ttk-empty{text-align:center;opacity:.7;padding:8cqw 0;font-size:4.4cqw}
+  .ttk-proj,.ttk-ask,.ttk-tick{flex:none}.ttk-proj:not(:empty){margin-top:2.6cqw;background:#ffffff0d;border-radius:4cqw;padding:2.2cqw 3.4cqw}.ttk-pt{font-weight:900;font-size:3.4cqw;margin-bottom:1cqw}.ttk-pr{display:grid;grid-template-columns:auto 1fr auto auto;gap:2cqw;align-items:center;font-size:3.3cqw;padding:.6cqw 0}.ttk-pr img{margin:0!important}.ttk-pr .up{color:#5dff8f;font-weight:900}.ttk-pr .dn{color:#ff6b6b;font-weight:900}
+  .ttk-ask{margin-top:2.6cqw}.ttk-q{background:linear-gradient(135deg,#ffcc33,#ff9f1a);color:#1b1300;font-weight:900;font-size:4.4cqw;line-height:1.25;text-align:center;border-radius:4.5cqw;padding:2.6cqw 3cqw;animation:ttkq .5s ease-out}.ttk-q small{font-weight:700;font-size:3.3cqw}@keyframes ttkq{from{transform:scale(.92);opacity:0}}
+  .ttk-tick{margin:2.6cqw -4.8% 0;background:#ffffff12;border-top:1px solid #ffffff1a;border-bottom:1px solid #ffffff1a;overflow:hidden;white-space:nowrap;font-size:3.4cqw;font-weight:700;padding:1.8cqw 0}
+  .ttk-tk{display:inline-flex;animation:ttktk linear infinite}.ttk-tk span{padding-right:6cqw}.ttk-tk i{font-style:normal;opacity:.45;margin:0 3cqw}@keyframes ttktk{to{transform:translateX(-50%)}}
+  .ttk-chat,.ttk-side{position:absolute;pointer-events:none;display:none;border:2px dashed #ffcc33;color:#ffcc33;border-radius:3cqw;font-size:3cqw;font-weight:800;text-align:center;place-items:center;background:#ffcc3314}
+  .ttk-chat{left:3%;bottom:2%;width:70%;height:23%}.ttk-side{right:2%;bottom:2%;width:14%;height:23%}#ttk.guide .ttk-chat,#ttk.guide .ttk-side{display:grid}
+  .ttk-ctl{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);transform:translateX(-50%);display:none;flex-wrap:wrap;justify-content:center;gap:6px;max-width:94vw;background:#0d1a2ee6;border:1px solid #ffffff22;border-radius:18px;padding:8px;z-index:9001;backdrop-filter:blur(10px)}
+  #ttk.ctl .ttk-ctl{display:flex}.ttk-ctl button{min-height:0!important;padding:8px 12px!important;font-size:13px!important;background:#ffffff1a!important;color:#fff!important;border:0!important;border-radius:12px!important}.ttk-ctl select{font-size:13px;padding:6px;border-radius:12px;max-width:200px}
+  @media (prefers-reduced-motion:reduce){.ttk-tk,.ttk-r.gl,.ttk-q{animation:none}}
+
+  .gbanner.k-rc{background:linear-gradient(100deg,#c4102a,#5a0712)!important}.gbanner.k-var{background:linear-gradient(100deg,#6a3fd1,#2a1a63)!important}
+  .ttk-top span b{opacity:1;letter-spacing:.06em;color:#fff}.ttk-r{cursor:pointer}.ttk-p.ht{background:#1f6fff;color:#fff}
+  .ttk-z{background:#ffffff10;border:1px solid #ffffff22;border-radius:5cqw;padding:3.4cqw;display:flex;flex-direction:column;gap:2.6cqw}
+  .ttk-zh{display:flex;align-items:center;justify-content:space-between;gap:2cqw;font-size:3.2cqw;opacity:.95}.ttk-zh button{min-height:0!important;padding:1.2cqw 2.6cqw!important;font-size:3cqw!important;background:#ffffff1f!important;color:#fff!important;border:0!important;border-radius:99px!important}
+  .ttk-zm{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:2cqw;text-align:center}.ttk-zt2{display:flex;flex-direction:column;align-items:center;gap:1.6cqw;min-width:0}.ttk-zt2 img{width:15cqw!important;height:15cqw!important;margin:0!important}.ttk-zt2 b{font-size:4.4cqw;line-height:1.1}
+  .ttk-zsc{font-size:14cqw;font-weight:900;font-variant-numeric:tabular-nums}.ttk-zsc i{font-style:normal;opacity:.45;margin:0 1.4cqw}
+  .ttk-ze{display:grid;grid-template-columns:1fr 1fr;gap:3cqw;font-size:3.3cqw;line-height:1.5}.ttk-ze .r{text-align:right}.ttk-ze span{opacity:.7}.ttk-ze.sm{font-size:2.8cqw;margin-top:.6cqw}
+  .ttk-zst{display:flex;flex-direction:column;gap:1.4cqw}.ttk-zs{display:grid;grid-template-columns:9cqw 1fr 9cqw;align-items:center;gap:2cqw;font-size:3.2cqw}.ttk-zs b{text-align:center}.ttk-zs span{display:block;text-align:center;font-size:2.7cqw;opacity:.7;margin-bottom:.6cqw}
+  .ttk-zb{display:flex;height:1.6cqw;border-radius:9px;overflow:hidden;gap:2px}.ttk-zb i:first-child{background:#ff3b4a}.ttk-zb i:last-child{background:#1f6fff}
+  .ttk-zr{background:#ffffff0d;border-radius:4cqw;padding:2.6cqw 3cqw;font-size:3.2cqw;line-height:1.45}.ttk-zr p{margin:1.2cqw 0 0}.ttk-zt{font-weight:900;font-size:3.7cqw}.ttk-zr button{width:100%;min-height:0!important;padding:2cqw!important;font-size:3.4cqw!important}
+  .ttk-big{text-align:center;border-radius:5cqw;padding:3.4cqw;margin-bottom:2.4cqw}.ttk-big.ht{background:linear-gradient(135deg,#1f6fff,#1246b8)}.ttk-big.end{background:linear-gradient(135deg,#ff3b4a,#8a1020)}.ttk-bt2{font-size:8cqw;font-weight:900;line-height:1}.ttk-bs{font-size:3.4cqw;opacity:.9;margin-top:1.2cqw}
+  .ttk-hl2{display:flex;flex-direction:column;gap:1.4cqw}.ttk-hr{background:#ffffff10;border-radius:3.6cqw;padding:1.6cqw 3cqw}.ttk-hr .ttk-sc{font-size:5.4cqw}.ttk-hr .ttk-t b{font-size:3.4cqw}.ttk-hr .ttk-t img{width:5.6cqw!important;height:5.6cqw!important}
+  .ttk-res{background:#ffffff10;border-radius:4cqw;padding:1.6cqw 3cqw;display:flex;flex-direction:column;gap:.6cqw;margin-bottom:2cqw}.ttk-row.sm .ttk-sc{font-size:4.6cqw;min-width:13cqw}.ttk-row.sm .ttk-t b{font-size:3.2cqw}.ttk-row.sm .ttk-t img{width:5cqw!important;height:5cqw!important}
+  .ttk-tag{background:#ffffff10;border-radius:3.6cqw;padding:1.8cqw 3cqw;font-size:3.3cqw;margin-bottom:1.6cqw}
+  .ttk-vote{background:#ffffff10;border:1px solid #ffcc3366;border-radius:4.5cqw;padding:1.8cqw 3cqw}.ttk-vq{font-weight:900;font-size:3.7cqw;text-align:center;color:#ffd24a}.ttk-vq small{display:block;font-size:2.8cqw;font-weight:700;color:#fff;opacity:.8;margin-top:.4cqw}
+  .ttk-vbs{display:grid;grid-template-columns:1fr .8fr 1fr;gap:1.6cqw;margin-top:1.4cqw}.ttk-vb{position:relative;overflow:hidden;min-height:0!important;padding:1.1cqw 1cqw!important;border-radius:3cqw!important;background:#ffffff14!important;color:#fff!important;border:1px solid #ffffff26!important;display:flex!important;flex-direction:column;align-items:center;gap:.4cqw}
+  .ttk-vb b{position:relative;font-size:3cqw;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ttk-vb em{position:relative;font-style:normal;font-weight:900;font-size:4cqw}.ttk-vf{position:absolute;left:0;top:0;bottom:0;transition:width .4s}.ttk-vb.h .ttk-vf{background:#ff3b4a88}.ttk-vb.a .ttk-vf{background:#1f6fff88}.ttk-vb.n .ttk-vf{background:#ffffff33}
+  .ttk-vt{display:flex;justify-content:space-between;font-size:2.7cqw;opacity:.75;margin-top:1cqw}.ttk-vt .link{color:#fff!important}.ttk-vres{background:#2fc15a;border-radius:3.4cqw;padding:1.6cqw 3cqw;font-size:3.4cqw;text-align:center;margin-bottom:1.6cqw;animation:ttkq .5s ease-out}
+  .ttk-ctl input{font-size:13px;padding:7px 10px;border-radius:12px;width:170px;min-height:0}.ttk-hint{color:#fff;opacity:.6;font-size:12px;align-self:center}
 </style>
 </head>
 <body>
@@ -1773,7 +1828,7 @@ const FLG=[['fra.1','Ligue 1'],['eng.1','Premier League'],['esp.1','Liga'],['ita
 const isEU=lg=>/^uefa\./.test(lg||'');
 const zoneFr=d=>{ const x=String(d||''); const t=[[/champions league.*(qualif|play)/i,'Qualif. Ligue des champions'],[/champions league/i,'Ligue des champions'],[/europa league.*(qualif|play)/i,'Qualif. Europa League'],[/europa league/i,'Europa League'],[/conference league.*(qualif|play)/i,'Qualif. Conférence League'],[/conference league/i,'Conférence League'],[/relegation.*(play|round)/i,'Barrage de relégation'],[/relegation/i,'Relégation'],[/promotion.*(play|round)/i,'Barrage de promotion'],[/promotion/i,'Promotion'],[/round of 16|8th/i,'Qualifié pour les 8es de finale'],[/knockout/i,'Phase à élimination directe'],[/play-?off/i,'Barrages'],[/eliminat/i,'Éliminé']]; for(const [r,f] of t) if(r.test(x)) return f; return x; };
 const inLg=(o,lg)=>!lg||lg==='mine'||o.lg===lg||!!(o.comps&&o.comps[lg]);
-const FTABS=[['home','Accueil'],['multi','🔥 Multiplex'],['matches','Matchs'],['table','Classement'],['teams','Équipes'],['players','Joueurs'],['records','Records'],['compare','Comparer'],['cal','Calendrier']];
+const FTABS=[['home','Accueil'],['multi','🔥 Multiplex'],['matches','Matchs'],['table','Classement'],['teams','Équipes'],['players','Joueurs'],['records','Records'],['compare','Comparer'],['cal','Calendrier'],['tiktok','Live TikTok']];
 let foot=loadJ(KEYFO,{leagues:{}}), ffav=loadJ(KEYFF,[]), ffavP=loadJ(KEYFP,[]);
 // étoile DORÉE = notifications / multiplex ; étoile BLEUE = favoris (suivi, accueil, stats)
 const KEYNF='suivi-notif-fav'; let nfav=loadJ(KEYNF,null);
@@ -2620,7 +2675,7 @@ function footMultiView(){
   const goals=ms.reduce((n,m)=>n+(m.st==='pre'?0:(+m.hs||0)+(+m.as||0)),0), dd=new Date(Date.parse(first?first.d:Date.now())).toLocaleDateString('fr-FR',{...PARIS,weekday:'long',day:'numeric',month:'long'});
   h+=`<div class="mxhero"><div class="row between" style="gap:10px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:0"><h2 style="margin:0">${live?'<span class="livedot"></span>':''}${title}</h2><div class="mut" style="font-size:12px;margin-top:2px;text-transform:capitalize">${esc(dd)} · heure de Paris</div></div><select id="fMulti" style="max-width:100%">${opts.map(([c,n])=>`<option value="${esc(c)}" ${c===lg?'selected':''}>${esc(n)}</option>`).join('')}</select></div>
   <div class="mxchips"><div><b>${ms.length}</b><span>Matchs</span></div><div><b class="${live?'err':''}">${live}</b><span>En cours</span></div><div><b>${goals}</b><span>Buts</span></div></div>
-  <div class="row" style="margin-top:12px;gap:8px"><button class="sec" data-act="sndtoggle">${sndPref()==='0'?'🔇 Son de but : coupé':'🔊 Son de but : activé'}</button><button class="sec" data-act="gbtest">▶ Tester le bandeau</button></div>
+  <div class="row" style="margin-top:12px;gap:8px"><button class="sec" data-act="sndtoggle">${sndPref()==='0'?'🔇 Son de but : coupé':'🔊 Son de but : activé'}</button><button class="sec" data-act="gbtest">▶ Tester le bandeau</button><button class="sec" data-act="ttkopen">📱 Live TikTok</button></div>
   ${ms.length?`<p class="mut" style="margin:10px 0 0;font-size:12px">${first?'Premier coup d\'envoi à '+esc(parisT(first.d))+' · ':''}touche ☆ pour ajouter un match à ta sélection</p>`:''}</div>${secHtml||`<div class="card">${empty}</div>`}`;
   // classement live : un championnat à la fois
   const tl=[...new Set(ms.map(m=>m.lg))].filter(l=>foot.leagues[l]&&foot.leagues[l].standings.length);
@@ -2672,8 +2727,141 @@ function footCalView(){
   return footControls()+`<div class="card"><div class="row" style="margin-bottom:10px">${footLgSel('fLg',ui.fLg,true,true)}<select id="fCalWhen">${opt('up','Matchs à venir',w)}${opt('past','Matchs joués',w)}${opt('all','Toute la saison',w)}</select><select id="fCalTeam">${opt('','Tous les clubs',ui.fCalTeam||'')}${teams.map(([id,n])=>opt(id,n,ui.fCalTeam||'')).join('')}</select><select id="fCalMonth">${opt('','Tous les mois',ui.fCalMonth||'')}${months.map(m=>opt(m,new Date(m+'-15').toLocaleDateString('fr-FR',{month:'long',year:'numeric'}),ui.fCalMonth||'')).join('')}</select></div><p class="mut" style="margin:0 0 8px">${ms.length} match(s) · heures dans ton fuseau · 🔥 = à ne pas manquer · ☆ = ajouter le match à ton multiplex · ligne colorée = un de tes clubs · pour tout le calendrier : « Toute la saison » dans le menu d'actualisation</p><div class="scroll"><table><tbody>${rows||'<tr><td class="empty" colspan="5">Aucun match.</td></tr>'}</tbody></table></div>${ms.length>(ui.fCalLimit||250)?`<div style="margin-top:8px"><button class="sec" data-act="fcalmore">Afficher plus</button></div>`:''}</div>`;
 }
 
+
+/* ---------- Mode « Live TikTok » : multiplex plein écran au format vertical 9:16 ---------- */
+const KEYTT='suivi-ttk'; const ttk={on:false,timer:null,cache:{},wl:null,ctl:false,focus:null,votes:null,voteRes:null,cam:true,guide:false,lg:'all',handle:'',...loadJ(KEYTT,{})};
+const ttkSave=()=>saveJ(KEYTT,{cam:ttk.cam,guide:ttk.guide,lg:ttk.lg,handle:ttk.handle});
+function ttkSet(){ const lg=ttk.lg||'all'; return multiSet(lg==='pick'||lg==='all'||foot.leagues[lg]?lg:'all'); }
+const ttkShows=it=>{ try{ return ttk.on&&ttkSet().some(m=>String(m.id)===String(it.id)); }catch(e){ return false; } };
+const ttkHT=m=>m.st==='in'&&/mi-?temps|half/i.test(String(m.txt||''));
+function ttkProj(ms){
+  const out=[];
+  for(const lg of [...new Set(ms.filter(m=>m.st==='in').map(m=>m.lg))]){ const LG=foot.leagues[lg]; if(!LG||!LG.standings.length) continue;
+    const rows=LG.standings.map(r=>({...r,np:r.pts,ngd:r.gd,ngf:r.gf,live:0})), by=Object.fromEntries(rows.map(r=>[r.id,r]));
+    for(const m of ms.filter(x=>x.lg===lg&&x.st==='in')) for(const [id,gf,ga] of [[m.hid,m.hs,m.as],[m.aid,m.as,m.hs]]){ const r=by[id]; if(!r) continue; r.np+=gf>ga?3:gf===ga?1:0; r.ngd+=gf-ga; r.ngf+=gf; r.live=1; }
+    const srt=[...rows].sort((a,b)=>b.np-a.np||b.ngd-a.ngd||b.ngf-a.ngf||a.rank-b.rank); srt.forEach((r,i)=>{ r.nr=i+1; });
+    for(const r of srt) if(r.live&&r.nr!==r.rank) out.push({r,mv:r.rank-r.nr,lg}); }
+  return out.sort((a,b)=>a.r.nr-b.r.nr).slice(0,4);
+}
+function ttkSec(el,key,html){ if(!el||ttk.cache[key]===html) return; ttk.cache[key]=html; el.innerHTML=html; }
+const ttkEvs=(m,sd)=>m.ev.filter(e=>e.s===sd).sort((x,y)=>x.min-y.min).map(e=>`<div>${e.t==='rc'?'🟥':'⚽'} ${esc(e.p||'?')} <span>${esc(e.ms||e.min+"'")}${e.t==='og'?' (csc)':e.t==='pg'?' (pen.)':''}</span></div>`).join('');
+const ttkPill=m=>m.st==='pre'?`<span class="ttk-p pre">${esc(parisT(m.d))}</span>`:m.st==='post'?'<span class="ttk-p fin">FIN</span>':ttkHT(m)?'<span class="ttk-p ht">MI-TEMPS</span>':`<span class="ttk-p live">${esc(m.txt||'LIVE')}</span>`;
+// ---- zoom sur un match ----
+function ttkFocusHtml(m){
+  const fm=footIdx().mt.find(x=>String(x.id)===String(m.id)), x=fm&&fm.x, ts=x&&x.ts&&x.ts.h&&Object.keys(x.ts.h).length?x.ts:null;
+  const SN=[['poss','Possession',1],['sh','Tirs'],['sot','Tirs cadrés'],['cor','Corners'],['fl','Fautes'],['yc','Cartons jaunes']];
+  const bars=ts?SN.filter(([k])=>ts.h[k]!=null&&ts.a[k]!=null).map(([k,l,pc])=>{ const a=+ts.h[k]||0, b=+ts.a[k]||0, t=a+b||1; return `<div class="ttk-zs"><b>${a}${pc?'%':''}</b><div><span>${l}</span><div class="ttk-zb"><i style="width:${a/t*100}%"></i><i style="width:${b/t*100}%"></i></div></div><b>${b}${pc?'%':''}</b></div>`; }).join(''):'';
+  const r=m.st==='post'?resumes[String(m.id)]:null;
+  const res=m.st==='post'?(r?`<div class="ttk-zr"><div class="ttk-zt">📰 ${resMd(r.t)}</div>${r.p.slice(0,2).map(t=>`<p>${resMd(t)}</p>`).join('')}</div>`:aiKey?`<div class="ttk-zr"><button data-act="ttkres" data-id="${esc(m.id)}">${resBusy[String(m.id)]?'✍️ Rédaction du résumé…':'✍️ Afficher le résumé IA'}</button></div>`:''):'';
+  return `<div class="ttk-z"><div class="ttk-zh"><span>${esc(footLgName(m.lg))}</span>${ttkPill(m)}<button data-act="ttkfocus" data-id="">✕ Multiplex</button></div>
+  <div class="ttk-zm"><div class="ttk-zt2">${footLogo(m.hl,64)}<b>${esc(m.hn)}</b></div><div class="ttk-zsc">${m.st==='pre'?'<i>vs</i>':`${m.hs}<i>-</i>${m.as}`}</div><div class="ttk-zt2">${footLogo(m.al,64)}<b>${esc(m.an)}</b></div></div>
+  ${m.ev.length?`<div class="ttk-ze"><div>${ttkEvs(m,'h')}</div><div class="r">${ttkEvs(m,'a')}</div></div>`:''}${bars?`<div class="ttk-zst">${bars}</div>`:''}${res}</div>`;
+}
+// ---- écran de mi-temps ----
+function ttkHalf(ms){
+  return `<div class="ttk-big ht"><div class="ttk-bt2">⏸ MI-TEMPS</div><div class="ttk-bs">Le point à la pause</div></div><div class="ttk-hl2">${ms.filter(m=>m.st!=='pre').map(m=>`<div class="ttk-hr"><div class="ttk-row"><span class="ttk-t">${footLogo(m.hl,24)}<b>${esc(m.hn)}</b></span><span class="ttk-sc">${m.hs}<i>-</i>${m.as}</span><span class="ttk-t r"><b>${esc(m.an)}</b>${footLogo(m.al,24)}</span></div>${m.ev.length?`<div class="ttk-ze sm"><div>${ttkEvs(m,'h')}</div><div class="r">${ttkEvs(m,'a')}</div></div>`:''}</div>`).join('')}</div>`;
+}
+// ---- écran de fin de soirée ----
+function ttkEnd(ms){
+  const sc={}; let goals=0, best=null;
+  for(const m of ms){ goals+=(+m.hs||0)+(+m.as||0); for(const e of m.ev) if(e.p&&(e.t==='g'||e.t==='pg')) sc[e.p]=(sc[e.p]||0)+1; if(!best||m.hs+m.as>best.hs+best.as) best=m; }
+  const top=Object.entries(sc).sort((a,b)=>b[1]-a[1]), tb=top.length?top.filter(x=>x[1]===top[0][1]).map(x=>x[0]).slice(0,3):[];
+  const withRes=ms.filter(m=>resumes[String(m.id)]).sort((a,b)=>(b.hs+b.as)-(a.hs+a.as))[0], r=withRes&&resumes[String(withRes.id)];
+  return `<div class="ttk-big end"><div class="ttk-bt2">🏁 FIN DU MULTIPLEX</div><div class="ttk-bs">${ms.length} matchs · ${goals} buts</div></div>
+  <div class="ttk-res">${ms.map(m=>`<div class="ttk-row sm"><span class="ttk-t">${footLogo(m.hl,20)}<b>${esc(m.hn)}</b></span><span class="ttk-sc">${m.hs}<i>-</i>${m.as}</span><span class="ttk-t r"><b>${esc(m.an)}</b>${footLogo(m.al,20)}</span></div>`).join('')}</div>
+  ${tb.length?`<div class="ttk-tag">👑 Meilleur buteur : <b>${tb.map(esc).join(', ')}</b> (${top[0][1]} but${top[0][1]>1?'s':''})</div>`:''}${best&&best.hs+best.as>=3?`<div class="ttk-tag">🔥 Match le plus fou : <b>${esc(best.hn)} ${best.hs}-${best.as} ${esc(best.an)}</b></div>`:''}
+  ${r?`<div class="ttk-zr"><div class="ttk-zt">📰 ${resMd(r.t)}</div><p>${resMd(r.c||r.p[0])}</p></div>`:''}`;
+}
+// ---- votes « Prochain but ? » ----
+function ttkVoteHtml(m){
+  const VB=(ttk.vby ||= {}), v=ttk.votes=VB[String(m.id)] ||= {mid:String(m.id),h:0,a:0,n:0,sc:m.hs+'-'+m.as};
+  const t=v.h+v.a+v.n, pc=k=>t?Math.round(v[k]/t*100):0;
+  const res=ttk.voteRes&&Date.now()-ttk.voteRes.t<25000?`<div class="ttk-vres">🎉 Bravo à ceux qui avaient dit <b>${esc(ttk.voteRes.who)}</b> !</div>`:'';
+  const b=(k,l)=>`<button class="ttk-vb ${k}" data-act="ttkvote" data-k="${k}"><span class="ttk-vf" style="width:${pc(k)}%"></span><b>${esc(l)}</b><em>${pc(k)}%</em></button>`;
+  return `${res}<div class="ttk-vote"><div class="ttk-vq">⚽ Qui marque le prochain but ?<small>${esc(m.hn)} – ${esc(m.an)} · vote dans le chat !</small></div><div class="ttk-vbs">${b('h',m.hn)}${b('n','Personne')}${b('a',m.an)}</div><div class="ttk-vt"><span>${t} vote${t>1?'s':''}</span><span class="link" data-act="ttkvreset">↺ Remettre à zéro</span></div></div>`;
+}
+function ttkVoteCheck(ms){
+  for(const v of Object.values(ttk.vby||{})){ const m=ms.find(x=>String(x.id)===v.mid); if(!m) continue;
+    const sc=m.hs+'-'+m.as; if(sc===v.sc) continue;
+    const [oh,oa]=v.sc.split('-').map(Number); const sd=m.hs>oh?'h':m.as>oa?'a':'';
+    if(sd&&(v.h+v.a+v.n)>0) ttk.voteRes={who:sd==='h'?m.hn:m.an,t:Date.now()};
+    v.h=v.a=v.n=0; v.sc=sc; }
+}
+function ttkDraw(){
+  const R=document.getElementById('ttk'); if(!R||!ttk.on) return;
+  const now=Date.now(), ms=ttkSet(), live=ms.filter(m=>m.st==='in'), pre=ms.filter(m=>m.st==='pre').sort((a,b)=>Date.parse(a.d)-Date.parse(b.d)), post=ms.filter(m=>m.st==='post');
+  const lgs=[...new Set(ms.map(m=>m.lg))].map(footLgName), lgTxt=ttk.lg==='pick'?'Ma sélection':lgs.length>2?lgs.slice(0,2).join(' · ')+' …':lgs.join(' · ')||'Foot';
+  const clock=new Date().toLocaleTimeString('fr-FR',{...PARIS,hour:'2-digit',minute:'2-digit'});
+  const allHT=live.length>0&&live.every(ttkHT), state=live.length?(allHT?'ht':'live'):pre.length?'pre':post.length?'post':'none';
+  const fm=ttk.focus?ms.find(m=>String(m.id)===String(ttk.focus)):null; if(ttk.focus&&!fm) ttk.focus=null;
+  ttkVoteCheck(ms);
+  const badge=state==='live'?'<span class="ttk-live"><i></i>MULTIPLEX EN DIRECT</span>':state==='ht'?'<span class="ttk-live pre">MULTIPLEX · MI-TEMPS</span>':state==='pre'?'<span class="ttk-live pre">MULTIPLEX · BIENTÔT</span>':state==='post'?'<span class="ttk-live post">MULTIPLEX · TERMINÉ</span>':'<span class="ttk-live post">MULTIPLEX STATIFY</span>';
+  ttkSec(R.querySelector('.ttk-top span'),'brand',`STATIFY${ttk.handle?` <b>· @${esc(ttk.handle.replace(/^@/,''))}</b>`:''}`);
+  ttkSec(R.querySelector('.ttk-head'),'head',`<div class="ttk-hl">${badge}<div class="ttk-sub">${esc(lgTxt)}</div><div class="ttk-sub2">${ms.length} match${ms.length>1?'s':''}${live.length?` · <b>${live.length}</b> en cours`:''} · ${ms.reduce((n,m)=>n+(m.st==='pre'?0:(+m.hs||0)+(+m.as||0)),0)} buts · ${esc(clock)}</div></div>${ttk.cam?'<div class="ttk-cam"><span>📷<br>Ta caméra ici</span></div>':''}`);
+  let main;
+  if(fm) main=ttkFocusHtml(fm);
+  else if(state==='ht') main=ttkHalf(ms);
+  else if(state==='post') main=ttkEnd(ms);
+  else {
+    let cd=''; if(!live.length&&pre.length){ const t=Date.parse(pre[0].d)-now; if(t>0&&t<24*36e5){ const h=Math.floor(t/36e5), mn=Math.floor(t%36e5/6e4), sc=Math.floor(t%6e4/1e3), k=pre.filter(x=>x.d===pre[0].d).length; cd=`<div class="ttk-cd"><span>Coup d'envoi dans</span><b>${h?h+':':''}${String(mn).padStart(h?2:1,'0')}:${String(sc).padStart(2,'0')}</b><span>${esc(pre[0].hn)} – ${esc(pre[0].an)}${k>1?' et '+(k-1)+' autre'+(k>2?'s':''):''}</span></div>`; } }
+    const rank=m=>{ const c=liveMem['f'+m.id]; return (c&&c.chg&&now-c.chg<90000)?0:m.st==='in'?1:m.st==='pre'?2:3; };
+    const L=[...ms].sort((a,b)=>rank(a)-rank(b)||(rank(a)===3?Date.parse(b.d)-Date.parse(a.d):Date.parse(a.d)-Date.parse(b.d))).slice(0,cd?5:8);
+    const n=L.length+(cd?2:0)+(live.length?2:0), sz=n<=3?'xl':n<=4?'l':n<=6?'m':'s';
+    const row=m=>{ const c=liveMem['f'+m.id], gl=c&&c.chg&&now-c.chg<90000, last=[...m.ev].filter(e=>e.t!=='rc').sort((x,y)=>y.min-x.min)[0];
+      return `<div class="ttk-r ${m.st}${gl?' gl':''}" data-act="ttkfocus" data-id="${esc(m.id)}"><div class="ttk-row"><span class="ttk-t">${footLogo(m.hl,30)}<b>${esc(m.hn)}</b></span><span class="ttk-sc">${m.st==='pre'?'<i>vs</i>':`${m.hs}<i>-</i>${m.as}`}</span><span class="ttk-t r"><b>${esc(m.an)}</b>${footLogo(m.al,30)}</span></div><div class="ttk-meta">${gl?'<span class="ttk-bt">⚽ BUT !</span>':''}${ttkPill(m)}${last&&m.st!=='pre'?`<span>⚽ ${esc(last.p||'?')} ${esc(last.ms||last.min+"'")}</span>`:''}${m.ev.some(e=>e.t==='rc')?'<span>🟥</span>':''}</div></div>`; };
+    main=cd+`<div class="ttk-rows ${sz}">${L.map(row).join('')||'<div class="ttk-empty">Aucun match aujourd\'hui</div>'}</div>`;
+  }
+  ttkSec(R.querySelector('.ttk-list'),'list',main);
+  const P=fm||state==='post'?[]:ttkProj(ms);
+  ttkSec(R.querySelector('.ttk-proj'),'proj',P.length?`<div class="ttk-pt">📈 Si ça reste comme ça…</div>${P.map(x=>`<div class="ttk-pr">${footLogo(x.r.logo,18)}<b>${esc(x.r.name)}</b><span class="${x.mv>0?'up':'dn'}">${x.mv>0?'▲':'▼'}${Math.abs(x.mv)}</span><span>${x.r.nr}${x.r.nr===1?'er':'e'}</span></div>`).join('')}`:'');
+  // votes pendant le direct, sinon question pour le chat (change toutes les 12 s)
+  const vm=(fm&&fm.st==='in')?fm:live.find(m=>!ttkHT(m))||null;
+  if(vm&&state==='live') ttkSec(R.querySelector('.ttk-ask'),'ask',ttkVoteHtml(vm));
+  else { const Q=[];
+    if(state==='ht') Q.push('☕ C\'est la pause !<br><small>Ton meilleur joueur de la 1re période ?</small>');
+    if(state==='post') Q.push('🏁 Ton homme du match ce soir ?<br><small>Dis-le dans le chat</small>','➕ Abonne-toi<br><small>pour le prochain multiplex</small>');
+    if(pre.length&&state!=='post') Q.push(`🎯 Ton prono pour<br><b>${esc(pre[0].hn)} – ${esc(pre[0].an)}</b> ?`);
+    if(state!=='post') Q.push('🔥 C\'est quoi TON match ce soir ?<br><small>Dis-le dans le chat</small>','➕ Abonne-toi<br><small>pour le multiplex de chaque week-end</small>');
+    ttkSec(R.querySelector('.ttk-ask'),'ask',`<div class="ttk-q">${Q[Math.floor(now/12000)%Q.length]}</div>`); }
+  // bandeau défilant
+  const ev=[]; for(const m of ms) for(const e of m.ev) ev.push({m,e}); ev.sort((a,b)=>(b.m.st==='in')-(a.m.st==='in')||b.e.min-a.e.min);
+  const items=ev.slice(0,10).map(({m,e})=>`${e.t==='rc'?'🟥':'⚽'} ${esc(e.ms||e.min+"'")} ${esc(e.p||'?')} · ${esc(m.hn)} ${m.hs}-${m.as} ${esc(m.an)}`);
+  if(!items.length) items.push('Bienvenue sur le multiplex Statify','Scores en direct','Classement live','Pose ta question dans le chat');
+  const tx=items.join('<i>•</i>');
+  ttkSec(R.querySelector('.ttk-tick'),'tick',`<div class="ttk-tk" style="animation-duration:${Math.max(18,items.length*7)}s"><span>${tx}</span><span>${tx}</span></div>`);
+  ttkSec(R.querySelector('.ttk-ctl'),'ctl',`<button data-act="ttkx">✕ Quitter</button><button data-act="ttkcam">${ttk.cam?'📷 Caméra : oui':'📷 Caméra : non'}</button><button data-act="ttkguide">${ttk.guide?'🧭 Repères : oui':'🧭 Repères : non'}</button><button data-act="ttkfs">⛶ Plein écran</button><select id="ttkLg">${[['all','🌍 Tous les championnats'],['pick','⭐ Ma sélection'],...FLG].map(([c,n])=>`<option value="${esc(c)}" ${c===(ttk.lg||'all')?'selected':''}>${esc(n)}</option>`).join('')}</select><input id="ttkHandle" placeholder="@ton pseudo TikTok" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="ttk-hint">Touche un match pour le zoomer</span>`);
+  const hi=R.querySelector('#ttkHandle'); if(hi&&document.activeElement!==hi) hi.value=ttk.handle||'';
+  R.classList.toggle('guide',!!ttk.guide); R.classList.toggle('ctl',!!ttk.ctl);
+}
+function ttkOpen(){
+  if(ttk.on) return; ttk.on=true; ttk.cache={}; ttk.ctl=true; ttk.focus=null; document.body.classList.add('ttk-on');
+  const R=document.createElement('div'); R.id='ttk';
+  R.innerHTML=`<div class="ttk-f"><div class="ttk-top"><span>STATIFY</span><button class="ttk-gear" data-act="ttkctl" title="Réglages">⚙</button></div><div class="ttk-head"></div><div class="ttk-list"></div><div class="ttk-proj"></div><div class="ttk-ask"></div><div class="ttk-tick"></div><div class="ttk-chat"><span>Zone des commentaires TikTok<br><small>(rien d'important ici)</small></span></div><div class="ttk-side"><span>Boutons TikTok</span></div></div><div class="ttk-ctl"></div>`;
+  document.body.appendChild(R); ttkDraw(); clearInterval(ttk.timer); ttk.timer=setInterval(ttkDraw,1000);
+  try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').then(w=>{ ttk.wl=w; }).catch(()=>{}); }catch(e){}
+  setTimeout(()=>{ if(ttk.on&&!(document.activeElement&&document.activeElement.id==='ttkHandle')){ ttk.ctl=false; ttkDraw(); } },6000);
+}
+function ttkClose(){ ttk.on=false; clearInterval(ttk.timer); const R=document.getElementById('ttk'); if(R) R.remove(); document.body.classList.remove('ttk-on'); try{ if(ttk.wl) ttk.wl.release(); }catch(e){} ttk.wl=null; try{ if(document.fullscreenElement) document.exitFullscreen(); }catch(e){} }
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&ttk.on&&navigator.wakeLock) navigator.wakeLock.request('screen').then(w=>{ ttk.wl=w; }).catch(()=>{}); });
+document.addEventListener('click',e=>{ const b=e.target.closest('#ttk [data-act]'); if(!b){ if(e.target.closest('#ttk')&&!e.target.closest('.ttk-ctl')){ ttk.ctl=!ttk.ctl; ttkDraw(); } return; } e.stopPropagation(); const a=b.dataset.act;
+  if(a==='ttkx') ttkClose(); else if(a==='ttkctl'){ ttk.ctl=!ttk.ctl; ttkDraw(); }
+  else if(a==='ttkcam'){ ttk.cam=!ttk.cam; ttkSave(); ttkDraw(); } else if(a==='ttkguide'){ ttk.guide=!ttk.guide; ttkSave(); ttkDraw(); }
+  else if(a==='ttkfs'){ try{ document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen(); }catch(err){} }
+  else if(a==='ttkfocus'){ ttk.focus=b.dataset.id||null; if(ttk.focus) setTimeout(()=>{ try{ liveDetail(ttk.focus); }catch(err){} },50); ttkDraw(); }
+  else if(a==='ttkvote'){ if(ttk.votes){ ttk.votes[b.dataset.k]++; ttkDraw(); } }
+  else if(a==='ttkvreset'){ if(ttk.votes){ ttk.votes.h=ttk.votes.a=ttk.votes.n=0; ttkDraw(); } }
+  else if(a==='ttkres'){ const m=footIdx().mt.find(z=>String(z.id)===String(b.dataset.id)); if(m) resGen(m); setTimeout(ttkDraw,50); } },true);
+document.addEventListener('change',e=>{ if(e.target&&e.target.id==='ttkLg'){ ttk.lg=e.target.value; ttk.focus=null; ttkSave(); ttk.cache={}; ttkDraw(); } });
+document.addEventListener('input',e=>{ if(e.target&&e.target.id==='ttkHandle'){ ttk.handle=e.target.value.trim(); ttkSave(); ttkDraw(); } });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&ttk.on){ if(ttk.focus){ ttk.focus=null; ttkDraw(); } else ttkClose(); } });
+function footTiktokView(){
+  return `<div class="card"><h2>📱 Live TikTok</h2><p>Un écran vertical (9:16) prévu pour diffuser le multiplex en live sur TikTok : scores en direct, bandeau « BUT ! » avec son et confettis, classement « si ça reste comme ça », questions pour le chat et bandeau défilant.</p><button data-act="ttkopen" style="width:100%;font-size:16px;padding:14px">▶ Lancer le mode Live TikTok</button>
+  <h3 style="margin-top:16px">Comment diffuser</h3><ol style="padding-left:20px;line-height:1.55;margin:0"><li>Sur ton ordinateur, ouvre Statify dans le navigateur et lance ce mode (bouton ⛶ pour le plein écran).</li><li>Dans <b>TikTok LIVE Studio</b>, ajoute une source « Capture de fenêtre » sur le navigateur, puis ta webcam dans le cadre « Ta caméra ici ».</li><li>Touche l'écran (ou ⚙) pour afficher les réglages : championnats, caméra oui/non, repères.</li><li>Active <b>🧭 Repères</b> pour voir où TikTok place les commentaires et ses boutons, puis coupe-les avant de lancer le live.</li></ol>
+  <h3 style="margin-top:16px">Pendant le live</h3><ul style="padding-left:20px;line-height:1.55;margin:0"><li><b>Zoom</b> : touche un match pour l'afficher en grand (buteurs, stats, résumé IA s'il est terminé). « ✕ Multiplex » pour revenir.</li><li><b>Votes « Prochain but ? »</b> : tape sur l'équipe à chaque vote du chat. Quand un but tombe, l'écran félicite les bons pronostics et les votes repartent à zéro. Le vote porte sur le match zoomé, sinon sur le premier match en cours.</li><li><b>Mi-temps</b> et <b>fin du multiplex</b> : écrans automatiques avec le bilan.</li><li><b>Bandeaux télé</b> : but, but sur penalty, carton rouge et but refusé (VAR).</li><li>Ton <b>@pseudo TikTok</b> se règle dans la barre des réglages (⚙).</li></ul>
+  <p class="mut" style="font-size:12.5px;margin:12px 0 0">L'écran reste allumé tant que le mode est ouvert. Échap : sortir du zoom, puis du mode.</p></div>`;
+}
 function viewFoot(){
-  const v={home:footHome,multi:footMultiView,matches:footMatchesView,table:footTableView,teams:footTeamsView,players:footPlayersView,records:footRecordsView,compare:footCompareView,cal:footCalView}[ui.ftab]||footHome;
+  const v={home:footHome,multi:footMultiView,matches:footMatchesView,table:footTableView,teams:footTeamsView,players:footPlayersView,records:footRecordsView,compare:footCompareView,cal:footCalView,tiktok:footTiktokView}[ui.ftab]||footHome;
   return v();
 }
 function footModalHtml(){
@@ -2703,7 +2891,7 @@ function render(){
     const FT=ui.sport==='foot', TT=FT?FTABS:TABS, cur=FT?ui.ftab:ui.tab;
     document.body.classList.toggle('sport-foot',FT);
     document.querySelectorAll('#sportSeg button').forEach(b=>b.classList.toggle('on',b.dataset.sport===ui.sport));
-    { const ICO={home:'🏠',games:'📋',matches:'📋',players:'👤',teams:'🛡️',standings:'📊',table:'📊',multi:'🔥',race:'🎯',records:'🏅',compare:'⚖️',rest:'😴',cal:'📅'}, cl=l=>l.replace(/^🔥\s*/,'');
+    { const ICO={home:'🏠',games:'📋',matches:'📋',players:'👤',teams:'🛡️',standings:'📊',table:'📊',multi:'🔥',race:'🎯',records:'🏅',compare:'⚖️',rest:'😴',cal:'📅',tiktok:'📱'}, cl=l=>l.replace(/^🔥\s*/,'');
       const PRI=FT?['home','multi','matches','table']:['home','games','players','teams'], pri=TT.filter(([k])=>PRI.includes(k)), rest=TT.filter(([k])=>!PRI.includes(k)), inRest=rest.some(([k])=>k===cur);
       const tb=([k,l])=>`<button data-act="tab" data-t="${k}" class="${cur===k?'on':''}"><i>${ICO[k]||'•'}</i><span>${esc(cl(l))}</span></button>`;
       $('#tabs').innerHTML=pri.map(tb).join('')+`<button data-act="tabmore" class="${inRest||ui.tabMore?'on':''}"><i>⋯</i><span>Plus</span></button>`+(ui.tabMore?`<div class="tabsheet">${rest.map(tb).join('')}</div>`:''); }
@@ -2789,6 +2977,7 @@ function toggleFav(type,id,name){
   else if(a==='favplayer') toggleFav('player',id,el.dataset.name);
   else if(a==='opengame'){ closeModals(); ui.openGame=id; $('#modal').scrollTop=0; render(); }
   else if(a==='closegame'){ ui.openGame=null; render(); }
+  else if(a==='ttkopen'){ ttkOpen(); }
   else if(a==='aikeysave'){ const v=((document.getElementById('aiKeyIn')||{}).value||'').trim().replace(/\s+/g,''); if(v.length<20){ say('⚠️ Cette clé paraît incomplète : copie-la en entier depuis Google AI Studio.','err'); return; } aiKey=v; aiDraft=''; aiModels=null; try{ localStorage.setItem(KEYAI,v); }catch(e){} for(const k in resErr) delete resErr[k]; say('✓ Clé Gemini enregistrée. Le résumé est en cours de rédaction…','ok'); render(); }
   else if(a==='aikeyreset'){ aiKey=''; aiModels=null; try{ localStorage.removeItem(KEYAI); }catch(e){} for(const k in resErr) delete resErr[k]; render(); }
   else if(a==='resgen'){ const m=footIdx().mt.find(z=>String(z.id)===String(id)); if(m){ delete resumes[String(id)]; resSave(); delete resErr[String(id)]; resGen(m); } }
@@ -3120,20 +3309,20 @@ const goalSoundOk=it=>{ try{ return multiLive(it.lg)||!!mpick[it.id]||nfav.foot.
 /* ---- Bandeau « BUT ! » façon télé (appli ouverte) ---- */
 const gbQ=[]; let gbBusy=false;
 const gbReduce=()=>{ try{ return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){ return false; } };
-function goalBanner(it,sd,lg){
+function goalBanner(it,sd,lg,kind='goal'){
   try{ if(!sd||!document.body.animate) return; if(gbQ.length>=4) gbQ.shift();
-    gbQ.push({tm:sd==='h'?it.h.n:it.a.n,logo:sd==='h'?it.h.l:it.a.l,h:it.h.n,a:it.a.n,hs:it.h.s,as:it.a.s,p:lg&&lg.p?lg.p:'',m:lg&&lg.m?lg.m:(()=>{ try{ return liveText(it); }catch(e){ return ''; } })(),og:!!(lg&&lg.og),pg:!!(lg&&lg.pg),sd});
+    gbQ.push({kind,tm:sd==='h'?it.h.n:it.a.n,logo:sd==='h'?it.h.l:it.a.l,h:it.h.n,a:it.a.n,hs:it.h.s,as:it.a.s,p:lg&&lg.p?lg.p:'',m:lg&&lg.m?lg.m:(()=>{ try{ return liveText(it); }catch(e){ return ''; } })(),og:!!(lg&&lg.og),pg:!!(lg&&lg.pg),sd});
     if(!gbBusy) gbNext(); }catch(e){}
 }
 async function gbNext(){
   const g=gbQ.shift(); if(!g){ gbBusy=false; return; } gbBusy=true;
   const quick=gbQ.length>0, rd=gbReduce();
-  const el=document.createElement('div'); el.className='gbanner';
-  el.innerHTML=`<div class="gb-logo">${footLogo(g.logo,34)}</div><div class="gb-tx"><div class="gb-t">BUT !</div><div class="gb-s"><b>${esc(g.p||g.tm)}</b>${g.p?' · '+esc(g.tm):''}${g.m?' · '+esc(g.m):''}${g.og?' (csc)':g.pg?' (pen.)':''}</div></div><div class="gb-sc"><span class="${g.sd==='h'?'hit':''}">${esc(g.h)}</span> <b>${g.hs} - ${g.as}</b> <span class="${g.sd==='a'?'hit':''}">${esc(g.a)}</span></div>`;
+  const el=document.createElement('div'); el.className='gbanner k-'+(g.kind||'goal'); const TT={goal:g.pg?'BUT SUR PENALTY !':'BUT !',rc:'CARTON ROUGE',var:'BUT REFUSÉ'};
+  el.innerHTML=`<div class="gb-logo">${footLogo(g.logo,34)}</div><div class="gb-tx"><div class="gb-t">${TT[g.kind||'goal']}</div><div class="gb-s"><b>${esc(g.p||g.tm)}</b>${g.p?' · '+esc(g.tm):''}${g.m?' · '+esc(g.m):''}${g.og?' (csc)':g.pg?' (pen.)':''}</div></div><div class="gb-sc"><span class="${g.sd==='h'?'hit':''}">${esc(g.h)}</span> <b>${g.hs} - ${g.as}</b> <span class="${g.sd==='a'?'hit':''}">${esc(g.a)}</span></div>`;
   document.body.appendChild(el);
   try{
     await el.animate(rd?[{opacity:0},{opacity:1}]:[{transform:'translateX(-110%)'},{transform:'translateX(0)'}],{duration:rd?150:380,easing:'cubic-bezier(.2,.9,.3,1)',fill:'forwards'}).finished;
-    if(!rd) gbConfetti(el);
+    if(!rd&&(g.kind||'goal')==='goal') gbConfetti(el);
     await new Promise(r=>setTimeout(r,quick?1600:3600));
     await el.animate(rd?[{opacity:1},{opacity:0}]:[{transform:'translateX(0)'},{transform:'translateX(110%)'}],{duration:rd?150:320,easing:'ease-in',fill:'forwards'}).finished;
   }catch(e){}
@@ -3213,7 +3402,8 @@ async function liveFetch(manual,only){
     // changements de score
     const cur=new Set(); let changed=false;
     for(const it of items){ if(it.st!=='in') continue; const key=it.k+it.id; cur.add(it.k+':'+it.lg+':'+it.id); const sc=it.h.s+'-'+it.a.s, o=liveMem[key];
-      if(!o||o.sc!==sc){ liveMem[key]={sc,chg:o?Date.now():0}; if(o){ changed=true; if(it.k==='f'&&ui.sport==='foot'&&liveAlertOk(it)){ const [oh,oa]=String(o.sc).split('-').map(Number), sd=it.h.s>oh?'h':it.a.s>oa?'a':'', gl=(it.ev||[]).filter(e=>e.g&&e.s===sd), lg=(sd&&gl.length===(sd==='h'?it.h.s:it.a.s))?gl[gl.length-1]:null, tm=sd==='h'?it.h.n:sd==='a'?it.a.n:''; if(sd&&goalSoundOk(it)){ playGoal(); goalBanner(it,sd,lg); } say(sd?`⚽ <b>BUT de ${esc(tm)} !</b> ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}${lg&&lg.p?' · '+esc(lg.p)+' '+esc(lg.m)+(lg.og?' (csc)':lg.pg?' (pen.)':''):''}`:`📝 <b>Score modifié</b> (VAR ?) : ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}`,sd?'ok':'warn'); } } } }
+      if(it.k==='f'){ const rcs=(it.ev||[]).filter(e=>e.rc), rk='r'+it.id, pr=liveMem[rk]; liveMem[rk]=rcs.length; if(pr!=null&&rcs.length>pr&&ttkShows(it)){ const e=rcs[rcs.length-1]; goalBanner(it,e.s,{p:e.p,m:e.m},'rc'); } }
+      if(!o||o.sc!==sc){ liveMem[key]={sc,chg:o?Date.now():0}; if(o){ changed=true; if(it.k==='f'&&((ttk.on&&ttkShows(it))||(ui.sport==='foot'&&liveAlertOk(it)))){ const [oh,oa]=String(o.sc).split('-').map(Number), sd=it.h.s>oh?'h':it.a.s>oa?'a':'', gl=(it.ev||[]).filter(e=>e.g&&e.s===sd), lg=(sd&&gl.length===(sd==='h'?it.h.s:it.a.s))?gl[gl.length-1]:null, tm=sd==='h'?it.h.n:sd==='a'?it.a.n:''; if(sd&&(goalSoundOk(it)||ttkShows(it))){ playGoal(); goalBanner(it,sd,lg); } else if(!sd&&ttkShows(it)){ const vs=it.h.s<oh?'h':it.a.s<oa?'a':''; if(vs) goalBanner(it,vs,null,'var'); } say(sd?`⚽ <b>BUT de ${esc(tm)} !</b> ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}${lg&&lg.p?' · '+esc(lg.p)+' '+esc(lg.m)+(lg.og?' (csc)':lg.pg?' (pen.)':''):''}`:`📝 <b>Score modifié</b> (VAR ?) : ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}`,sd?'ok':'warn'); } } } }
     const ended=[...liveSeen].filter(k=>!cur.has(k)); liveSeen=cur;
     liveData.items=items;
     for(const g of ing){ try{ footIngest({__foot:'scores',league:g.lg,data:g.d}); }catch(e){} }
@@ -3224,6 +3414,7 @@ async function liveFetch(manual,only){
     if(!changed&&items.some(x=>x.st==='in')&&Date.now()-liveRen>6e4) changed=true;
     liveRender(); if(changed&&!document.querySelector('input:focus')){ liveRen=Date.now(); render(); }
     if(ui.fMatch) await liveDetail(ui.fMatch);
+    if(ttk.on&&ttk.focus&&ttk.focus!==ui.fMatch) await liveDetail(ttk.focus);
     // fins de match : on complète les détails
     for(const k of ended){ const [kind,lg,id]=k.split(':'); const it=items.find(x=>x.k===kind&&x.id===id&&x.lg===lg);
       if(!it||!it.done) continue;
