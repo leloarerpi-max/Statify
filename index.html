@@ -2374,7 +2374,7 @@ function footMultiView(){
   const dbar=`<div class="row" style="gap:6px;margin:0 0 10px;flex-wrap:wrap;align-items:center">${multiDays().map(d=>`<button class="${d===day?'':'sec'} fbtn" data-act="mday" data-d="${d}">${esc(dayLabel(d))}</button>`).join('')}<button class="sec fbtn" data-act="multiclose" title="Fermer le multiplex" style="margin-left:auto">✕ Fermer</button></div>`;
   const lgs=FLG.filter(([c])=>det.some(d=>d.lg===c)||M.some(m=>m.lg===c&&multiWin(m)));
   const opts=[['all','🌍 Tous les championnats'],['pick','⭐ Ma sélection'],...lgs.map(([c,n])=>[c,(det.some(d=>d.lg===c)?'🔥 ':'')+n])];
-  let lg=ui.fMulti; if(!opts.find(x=>x[0]===lg)) lg=(det[0]&&det[0].lg)||'all';
+  let lg=ui.fMulti; if(!opts.find(x=>x[0]===lg)) lg='all';
   let h=footControls()+dbar;
   if(!lgs.length) return h+`<div class="card"><h2>🔥 Multiplex</h2><p class="mut">Aucun match ${day===todayDK()?'aujourd\'hui':'ce jour-là'}. Quand au moins 3 matchs d'un même championnat commencent à moins de 30 minutes d'écart, Statify te prévient ici et sur l'accueil foot. Actualise les scores (🔄) pour charger le calendrier.</p></div>`;
   const ms=multiSet(lg), mixed=new Set(ms.map(m=>m.lg)).size>1, isMx=det.some(d=>d.lg===lg), live=ms.filter(m=>m.st==='in').length;
@@ -2388,7 +2388,9 @@ function footMultiView(){
     const pr=lv?prog(m):0, sc=m.st==='pre'?'<span class="mut">–</span>':`${m.hs}<small>:</small>${m.as}`;
     return `<div class="mxc${fv?' fv':''}${recent?' gl':''}" data-act="fmatch" data-id="${esc(m.id)}">${recent?`<div class="mxg">⚽ BUT ! · il y a ${Math.max(1,Math.round((now-c.chg)/1000))} s</div>`:''}<div class="mxh"><span class="mut">${mixed?esc(footLgName(m.lg)):''}</span>${pill}<span class="mxs">${mpickStar(m)}</span></div><div class="mxr"><div class="mxt">${footLogo(m.hl,28)}<b>${esc(m.hn)}</b></div><div class="mxsc">${sc}</div><div class="mxt r"><b>${esc(m.an)}</b>${footLogo(m.al,28)}</div></div>${pr?`<div class="mxb"><div style="width:${pr}%"></div></div>`:''}${m.ev.length?`<div class="mxe"><div>${evl2(m,'h')}</div><div style="text-align:right">${evl2(m,'a')}</div></div>`:''}</div>`; };
   const SEC=[[0,'⚡ Ça vient de bouger'],[1,'🔴 En cours'],[2,'⏰ À venir'],[3,'🏁 Terminés']];
-  const secHtml=SEC.map(([r,t])=>{ const L=sorted.filter(m=>rank(m)===r); return L.length?`<div class="mxl">${t}</div>${L.map(card).join('')}`:''; }).join('');
+  const onlyLive=live>0&&!ui.mxAll, hid=onlyLive?sorted.filter(m=>rank(m)>=2).length:0;
+  const secHtml=SEC.filter(([r])=>!onlyLive||r<=1).map(([r,t])=>{ const L=sorted.filter(m=>rank(m)===r); return L.length?`<div class="mxl">${t}</div>${L.map(card).join('')}`:''; }).join('')
+    +(live>0&&(hid||ui.mxAll)?`<div style="text-align:center;margin:8px 0"><button class="sec" data-act="mxall">${ui.mxAll?'Masquer les matchs à venir et terminés':'Voir aussi les '+hid+' autre'+(hid>1?'s':'')+' match'+(hid>1?'s':'')+' (à venir / terminés)'}</button></div>`:'');
   const first=ms.length?ms[0]:null, title=lg==='all'?'🌍 Multiplex tous championnats':lg==='pick'?'⭐ Mon multiplex':`🔥 ${isMx?'Multiplex':'Soirée'} ${esc(footLgName(lg))}`;
   const empty=lg==='all'?`<p class="mut">Aucun match ${day===todayDK()?'aujourd\'hui':'ce jour-là'}.${(()=>{ const nx=M.filter(m=>m.st==='pre'&&Date.parse(m.d)>now).sort((a,b)=>Date.parse(a.d)-Date.parse(b.d))[0]; return nx?' Prochain match : '+esc(parisD(nx.d))+' à '+esc(parisT(nx.d))+'.':''; })()}</p>`:lg==='pick'?'<p class="mut">Aucun match de ta sélection ce jour-là. Choisis « 🌍 Tous les championnats » et touche ☆ sur les matchs que tu veux suivre (les matchs de tes clubs à étoile dorée y sont ajoutés d\'office).</p>':'<p class="mut">Aucun match.</p>';
   const goals=ms.reduce((n,m)=>n+(m.st==='pre'?0:(+m.hs||0)+(+m.as||0)),0), dd=new Date(Date.parse(first?first.d:Date.now())).toLocaleDateString('fr-FR',{...PARIS,weekday:'long',day:'numeric',month:'long'});
@@ -2585,6 +2587,7 @@ function toggleFav(type,id,name){
   else if(a==='footmenu'){ ui.fMenu=!ui.fMenu; render(); }
   else if(a==='footper'){ ui.fPer=+el.dataset.i; ui.fMenu=false; render(); footRefresh(); }
   else if(a==='nbarefresh') nbaRefresh();
+  else if(a==='mxall'){ ui.mxAll=!ui.mxAll; render(); }
   else if(a==='gbtest'){ sndUnlock(); playGoal(); goalBanner({h:{n:'Lens',s:2,l:''},a:{n:'Nantes',s:1,l:''},lg:'fra.1',id:'demo'},'h',{p:'Sotoca',m:"68'"}); }
   else if(a==='sndtoggle'){ const off=sndPref()!=='0'; try{ localStorage.setItem('suivi-snd',off?'0':'1'); }catch(e){} if(!off){ sndUnlock(); playGoal(true); } render(); }
   else if(a==='nbell'){ nfavToggle(el.dataset.k,id); }
