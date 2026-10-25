@@ -4527,6 +4527,173 @@ document.addEventListener('click',e=>{ const b=e.target.closest('.stu [data-act]
   else if(a==='stutodo'){ if(sp==='foot'){ S.tplF=b.dataset.t; if(b.dataset.lg) S.lg=b.dataset.lg; } else S.tplN=b.dataset.t; render(); } },true);
 document.addEventListener('change',e=>{ const t=e.target; if(!t) return; if(t.id==='stuPk'||t.id==='stuPk2'){ stuS().pick[t.dataset.k]=t.value; stuDraw(); } });
 document.addEventListener('input',e=>{ const t=e.target; if(t&&t.id==='stuTags'){ stuS().tags=t.value; stuPrefSave(); clearTimeout(window.__stuTg); window.__stuTg=setTimeout(()=>stuDraw(),400); } });
+
+/* ===== STUDIO : PATCH v3 =====
+   Il redéfinit / enveloppe les fonctions du Studio (v1 + v2) sans les supprimer. */
+(function(){
+/* ---------- libellés de période : plus de « week-end » un lundi ---------- */
+const JR=['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
+const WD={Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6};
+const dayIdx=iso=>WD[new Date(iso).toLocaleDateString('en-US',{timeZone:'Europe/Paris',weekday:'short'})];
+function spanLabel(isos,future){
+  const ok=isos.filter(Boolean), keys=[...new Set(ok.map(i=>parisDK(i)))];
+  if(!keys.length) return future?'des prochains jours':'de la journée';
+  const days=[...new Set(ok.map(dayIdx))];
+  if(keys.length===1) return future?'de '+JR[days[0]]:'de la journée';
+  const wk=days.every(d=>d===5||d===6||d===0||d===1)&&(days.includes(6)||days.includes(0));
+  if(wk) return 'du week-end';
+  return future?'des prochains jours':'de la période';
+}
+STU_TPL_F=STU_TPL_F.map(([k,n,b])=>[k,k==='fprog'?'Programme à venir':k==='fweek'?'Le joueur de la journée':n,b]);
+
+/* ---------- dates NBA : « nuit du 24 au 25 octobre » ---------- */
+stuNbaDate=day=>{ const a=new Date(day+'T12:00:00Z'), b=new Date(a.getTime()+864e5), f=(d,o)=>d.toLocaleDateString('fr-FR',{timeZone:'UTC',...o});
+  return a.getUTCMonth()===b.getUTCMonth()?`${a.getUTCDate()} au ${f(b,{day:'numeric',month:'long'})}`:`${f(a,{day:'numeric',month:'long'})} au ${f(b,{day:'numeric',month:'long'})}`; };
+
+/* ---------- « Classique » : plus de faux positifs (Paris FC, Inter Miami…) ---------- */
+stuClassic=function(a,b){
+  const bad=/paris fc|inter miami|castilla|\bii\b/;
+  const m=(n,p)=>{ const s=stuN(n); if(bad.test(s)) return false; return p.split('|').some(q=>new RegExp('(^|[^a-z])'+stuN(q)+'([^a-z]|$)').test(s)); };
+  return STU_CLASSICS.some(([x,y])=>(m(a,x)&&m(b,y))||(m(a,y)&&m(b,x)));
+};
+
+/* ---------- pseudo propre au Studio (n'écrase plus celui du Live TikTok) ---------- */
+const HK='suivi-stu-handle';
+const loadH=()=>{ try{ return localStorage.getItem(HK); }catch(e){ return null; } };
+const handleVal=()=>{ const S=stuS(); if(S.handle===undefined) S.handle=loadH(); return S.handle||(typeof ttk!=='undefined'&&ttk.handle)||''; };
+stuHandle=function(){ const h=handleVal(); return h?'@'+String(h).replace(/^@/,''):'@statify'; };
+window.addEventListener('input',e=>{ const t=e.target; if(t&&t.id==='stuHandle'){ e.stopImmediatePropagation(); const v=t.value.trim().replace(/^@/,''); stuS().handle=v; try{ localStorage.setItem(HK,v); }catch(x){} stuDraw(); } },true);
+
+/* ---------- logos : nouvel essai via proxy, échecs non définitifs ---------- */
+stuImg=function(url){
+  const S=stuS(); if(!url||S.noImg) return Promise.resolve(null);
+  if(S.img[url]) return Promise.resolve(S.img[url]);
+  const fl=(S.imgFail||(S.imgFail={})); if(fl[url]&&Date.now()-fl[url]<60000) return Promise.resolve(null);
+  const load=u=>new Promise(res=>{ const im=new Image(); im.crossOrigin='anonymous'; const to=setTimeout(()=>res(null),4000); im.onload=()=>{ clearTimeout(to); res(im); }; im.onerror=()=>{ clearTimeout(to); res(null); }; im.src=u; });
+  return load(url).then(im=>im||(/^https?:/.test(url)?load('https://corsproxy.io/?url='+encodeURIComponent(url)):null)).then(im=>{ if(im) S.img[url]=im; else fl[url]=Date.now(); return im; });
+};
+
+/* ---------- NBA : « @ » (visiteur @ domicile) à la place de « – » / « VS » ---------- */
+const stuAt=(fn,test)=>function(c,d,...r){
+  if(!test(d)) return fn.call(this,c,d,...r);
+  const ox=cvTx; cvTx=function(c2,t,x,y,o){ return ox(c2,(t==='–'||t==='VS')?'@':t,x,y,o); };
+  try{ return fn.call(this,c,d,...r); } finally{ cvTx=ox; }
+};
+stuProg=stuAt(stuProg,p=>(p.rows||[]).some(r=>r.htri)||(p.big||[]).some(b=>b.htri));
+stuPre=stuAt(stuPre,p=>!!p.nba);
+stuPoll=stuAt(stuPoll,p=>!!p.htri);
+
+/* ---------- thème « Couleurs du club » : fonctionne sur tous les modèles ---------- */
+const _theme=stuTheme;
+stuTheme=function(D){
+  const S=stuS();
+  if(S.theme==='club'&&!D.clubCol){ let c=null;
+    try{ const r0=D.rows&&D.rows[0];
+      if(ui.sport==='foot'){ const id=ffav[0], t=id&&footIdx().T[id]; c=t&&t.co?fcol(t.co):null; if(!c&&r0) c=r0.hc||r0.col||null; if(!c&&D.match) c=D.match.hc; }
+      else { c=fav.teams[0]?tcolor(fav.teams[0]):null; if(!c&&r0) c=r0.col||(r0.h?tcolor(r0.h):null); if(!c&&D.box) c=tcolor(D.box.h); } }catch(e){}
+    if(c) D={...D,clubCol:[c,'#0b1b30']}; }
+  return _theme(D);
+};
+
+/* ---------- données : titres, ton sobre, chiffres, programme NBA ---------- */
+const _data=stuData;
+const stripEmo=s=>String(s||'').replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{FE0F}\u{20E3}]/gu,m=>(m==='✅'||m==='❌')?m:'').replace(/[ \t]+/g,' ').replace(/^ /gm,'').replace(/ +$/gm,'');
+stuData=function(sport){
+  const S=stuS(), tone=S.tone; if(tone==='sobre') S.tone='fun';
+  let D; try{ D=_data(sport); } finally{ S.tone=tone; }
+  try{ if(D&&!D.empty){
+    if(sport==='foot'){
+      if(S.tplF==='fprog'&&D.src&&D.src.L){ D.title=`Le programme ${spanLabel(D.src.L.map(m=>m.d),true)} ⚽`; }
+      else if(S.tplF==='fweek'){ const lg=S.lg&&foot.leagues[S.lg]?S.lg:stuLeagues()[0][0], ph='Le joueur '+spanLabel(stuFootDay(lg).map(m=>m.d),false); D.title=ph+' ⭐'; D.caption=D.caption.replace('Le joueur du week-end',ph); }
+      else if(S.tplF==='fnum'&&D.nums){ D.nums=D.nums.filter(r=>!(/plus rapide/.test(r.s)&&/^0['’]?$/.test(String(r.big).trim()))); D.caption=D.caption.replace(/^▪️ 0['’]? but le plus rapide[^\n]*\n?/m,''); }
+    } else if(S.tplN==='nprog'&&D.prog){
+      const L=stuNbaPreList().filter(x=>Date.parse(x.t)<Date.now()+30*36e5);
+      if(L.length===D.prog.rows.length&&new Set(L.map(x=>stuParisDay(x.t))).size>1){ const out=[]; let day=''; L.forEach((x,i)=>{ const d=stuParisDay(x.t); if(d!==day){ out.push({k:'day',t:d}); day=d; } out.push(D.prog.rows[i]); }); D.prog.rows=out; }
+    }
+    if(tone==='sobre'){ D.caption=stripEmo(D.caption); D.title=stripEmo(D.title).trim(); D.cta=stripEmo(D.cta).trim(); }
+  } }catch(e){ console.error(e); }
+  return D;
+};
+
+/* ---------- « Prêt à poster » : un seul système (posté), plus de disparition au simple toucher ---------- */
+const _ready=stuReady;
+stuReady=function(sport){ const P=loadJ('suivi-stu-posted',{}), day=parisDK(new Date().toISOString()); return _ready(sport).filter(x=>!P[`${day}|${x.t}|${x.lg||''}`]); };
+window.addEventListener('click',e=>{ const b=e.target.closest&&e.target.closest('[data-act=sturdy]'); if(!b) return; e.stopImmediatePropagation(); e.preventDefault(); location.hash='studio='+b.dataset.t+(b.dataset.lg?'&lg='+b.dataset.lg:''); },true);
+STU_NBA_T.push('nperf','nprog','npoll','nduel','nclub');
+
+/* ---------- vidéo : survit au rafraîchissement de la page ---------- */
+const vidHtml=(S,sp)=>{
+  if(S.vBusy) return '<div class="stu-vprog">🎬 Création de la vidéo en cours…</div>';
+  if(!S.vid||S.vidKey!==stuPostKey(sp)) return '';
+  if(S.vurlFor!==S.vid.blob){ S.vurl=URL.createObjectURL(S.vid.blob); S.vurlFor=S.vid.blob; }
+  return `<video src="${S.vurl}" controls playsinline loop muted autoplay class="stu-video"></video><div class="row" style="gap:6px;margin-top:8px"><button data-act="stuvshare">↗ Partager la vidéo</button><button class="sec" data-act="stuvdl">⬇ Télécharger (${S.vid.ext.toUpperCase()})</button></div>`;
+};
+const _video=stuVideo;
+stuVideo=async function(sp){
+  const S=stuS(); if(S.vBusy) return; S.vid=null;
+  await _video(sp);
+  if(S.vid) S.vidKey=stuPostKey(sp);
+  const b=document.getElementById('stuVid'); if(b) b.innerHTML=vidHtml(S,sp);
+};
+
+/* ---------- affichage du Studio : fraîcheur des données, pseudo, vidéo, bouton « posté » ---------- */
+function fresh(sport){
+  if(sport==='foot'){ const S=stuS(), ls=S.lg==='all'?Object.values(foot.leagues):[foot.leagues[S.lg]].filter(Boolean), t=Math.max(0,...ls.map(L=>L.upd||0));
+    return t?'Données foot du '+new Date(t).toLocaleString('fr-FR',{...PARIS,day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'Aucune donnée foot en mémoire'; }
+  const T=Math.max(0,...Object.values(games).filter(g=>g.status===3).map(tms));
+  return T?'Dernier match NBA en base : '+new Date(T).toLocaleDateString('fr-FR',{...PARIS,weekday:'long',day:'numeric',month:'long'}):'Aucun match NBA en mémoire';
+}
+const _view=viewStudio;
+viewStudio=function(sport){
+  const S=stuS(); let h=_view(sport);
+  h=h.replace(/(id="stuHandle"[^>]*?value=")[^"]*"/,(m,a)=>a+esc(handleVal())+'"');
+  h=h.replace('<div id="stuVid"></div>','<div id="stuVid">'+vidHtml(S,sport)+'</div>');
+  h=h.replace('data-act="stuload">⬇ Télécharger</button>','data-act="stuload">⬇ Télécharger</button><button class="sec" data-act="stuposted">✓ J\'ai posté</button>');
+  h=h.replace('🔥 = gros match mis en avant.</p>','🔥 = gros match mis en avant.</p><p class="mut" style="margin:-6px 0 10px;font-size:12.5px">'+esc(fresh(sport))+' · <span class="link" data-act="stuhydrate">🔄 Actualiser</span></p>');
+  return h;
+};
+
+/* ---------- boutons : format mémorisé, choix remis à zéro au changement de championnat, etc. ---------- */
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.stu [data-act]'); if(!b) return; const a=b.dataset.act, S=stuS(), sp=ui.sport==='foot'?'foot':'nba';
+  if(a==='stufmt') stuPrefSave();
+  else if(a==='stulg'){ S.pick={}; render(); }
+  else if(a==='stuposted'){ stuMarkPosted(); say('✓ Marqué comme posté.','ok'); }
+  else if(a==='stuhydrate'){ if(sp==='foot'){ ui.fPer=0; footRefresh(); } else nbaRefresh(); }
+},true);
+document.addEventListener('change',e=>{ if(e.target&&e.target.id==='stuCarOn') stuS().pre=null; });
+
+/* ---------- téléchargement : ne marque plus « posté » ; partage : blobs pré-générés (iPhone) ---------- */
+stuDl=function(b){ const S=stuS(), a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`statify-${(S.cur&&S.cur.theme)||'image'}-${Date.now()}.png`; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },4000); say('✓ Image téléchargée. Touche « ✓ J\'ai posté » une fois publiée.','ok'); };
+stuVDl=function(){ const S=stuS(); if(!S.vid) return; const a=document.createElement('a'); a.href=URL.createObjectURL(S.vid.blob); a.download=`statify-${Date.now()}.${S.vid.ext}`; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },4000); say('✓ Vidéo téléchargée. Touche « ✓ J\'ai posté » une fois publiée.','ok'); };
+stuShare=async function(){
+  const S=stuS(), sp=ui.sport==='foot'?'foot':'nba';
+  try{
+    const bl=(S.pre&&S.pre.length)?S.pre:await stuBlobs(sp), fs=bl.map((b,i)=>new File([b],`statify-${(S.cur&&S.cur.theme)||'image'}-${i+1}.png`,{type:'image/png'}));
+    if(navigator.canShare&&navigator.canShare({files:fs})){
+      try{ navigator.clipboard.writeText((S.cur&&S.cur.caption)||'').catch(()=>{}); }catch(x){}
+      await navigator.share({files:fs}); stuMarkPosted();
+      say(fs.length>1?`✓ ${fs.length} images partagées. La légende est copiée : colle-la dans ton post.`:'✓ Image partagée. La légende est copiée : colle-la dans ton post.','ok');
+    } else bl.forEach((x,i)=>setTimeout(()=>stuDl(x),i*400));
+  }catch(err){ if(err&&err.name==='AbortError') return; say('⚠️ Partage impossible : '+esc(err.message||err)+'. Utilise « Télécharger ».','err'); }
+};
+const _draw=stuDraw;
+stuDraw=async function(sport){
+  const S=stuS(); S.pre=null; const sp=sport||(ui.sport==='foot'?'foot':'nba');
+  await _draw(sp); const tk=S.tok;
+  if(S.cur&&!S.cur.empty&&!S.car&&document.getElementById('stuCv')){ try{ const b=await stuBlobs(sp); if(tk===S.tok) S.pre=b; }catch(e){} }
+};
+
+/* ---------- focus conservé dans le champ des hashtags lors d'un rafraîchissement ---------- */
+const _render=render;
+render=function(){
+  const a=document.activeElement, id=a&&a.id, s=a&&a.selectionStart;
+  const r=_render.apply(this,arguments);
+  if(id==='stuTags'){ const n=document.getElementById(id); if(n){ n.focus(); try{ n.setSelectionRange(s,s); }catch(e){} } }
+  return r;
+};
+})();
+
 </script>
 </body>
 </html>
