@@ -364,7 +364,7 @@
   .ttk-live i{width:2.4cqw;height:2.4cqw;border-radius:50%;background:#fff;animation:livepulse 1.2s infinite}.ttk-live.pre{background:linear-gradient(135deg,#1f6fff,#1246b8);box-shadow:0 6px 22px #1f6fff55}.ttk-live.post{background:#ffffff22;box-shadow:none}
   .ttk-sub{font-size:5.6cqw;font-weight:900;margin-top:2.4cqw;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ttk-sub2{font-size:3.3cqw;opacity:.75;margin-top:1cqw}.ttk-sub2 b{color:#ff6b6b}
   .ttk-cam{width:22cqw;aspect-ratio:3/4;border:2px dashed #ffffff55;border-radius:4cqw;display:grid;place-items:center;text-align:center;font-size:3cqw;opacity:.7;flex:none;background:#ffffff08}
-  .ttk-list{flex:1 1 auto;min-height:0;overflow:hidden;padding:4px;margin:-4px}.ttk-f::after{content:'';flex:none;height:20%}.ttk-rows{display:flex;flex-direction:column;gap:2cqw}
+  .ttk-list{flex:1 1 auto;min-height:0;overflow:hidden;padding:4px;margin:-4px}.ttk-f::after{content:'';flex:none;height:3%}#ttk.chatz .ttk-f::after{height:20%}.ttk-rows{display:flex;flex-direction:column;gap:2cqw}
   .ttk-r{background:#ffffff10;border:1px solid #ffffff1a;border-radius:4.5cqw;padding:2.4cqw 3.4cqw;position:relative;overflow:hidden;backdrop-filter:blur(6px)}
   .ttk-r.in{background:linear-gradient(90deg,#ff3b4a1f,#ffffff0d 40%);border-color:#ff3b4a55}
   .ttk-r.gl{border-color:#2fc15a;background:linear-gradient(90deg,#2fc15a55,#2fc15a1a);box-shadow:0 0 0 2px #2fc15a,0 0 28px #2fc15a88;animation:ttkgl 1s ease-in-out infinite alternate}@keyframes ttkgl{to{box-shadow:0 0 0 2px #2fc15a,0 0 8px #2fc15a44}}
@@ -414,7 +414,7 @@
   .rb-eq{display:flex;align-items:flex-end;gap:2px;height:16px}.rb-eq i{width:3px;background:#e8412f;border-radius:2px;animation:rbeq .9s ease-in-out infinite alternate}.rb-eq i:nth-child(2){animation-delay:.2s}.rb-eq i:nth-child(3){animation-delay:.45s}.rb-eq i:nth-child(4){animation-delay:.1s}@keyframes rbeq{from{height:3px}to{height:16px}}
   body.ttk-on #radioBar{display:none!important}
 
-  .ttk-rows.dn{gap:1.2cqw}.ttk-r.d{display:grid;grid-template-columns:13cqw 1fr auto 1fr;align-items:center;gap:1.6cqw;padding:1.5cqw 2.6cqw;border-radius:3.4cqw}
+  .ttk-rows.dn{gap:1cqw}.ttk-r.d{display:grid;grid-template-columns:13cqw 1fr auto 1fr;align-items:center;gap:1.6cqw;padding:1.2cqw 2.6cqw;border-radius:3.4cqw}
   .ttk-r.d .ttk-sc{font-size:5.4cqw;min-width:13cqw}.ttk-r.d .ttk-t b{font-size:3.5cqw}.ttk-r.d .ttk-t img{width:5.4cqw!important;height:5.4cqw!important}.ttk-r.d .ttk-t{gap:1.4cqw}
   .ttk-dp{display:flex;justify-content:flex-start}.ttk-dp .ttk-p,.ttk-dp .ttk-bt{font-size:2.6cqw;padding:.5cqw 1.6cqw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:13cqw}
   .ttk-pg{display:flex;justify-content:center;align-items:center;gap:1.2cqw;margin-top:1.6cqw;font-size:2.7cqw;opacity:.8}.ttk-pg i{width:1.6cqw;height:1.6cqw;border-radius:50%;background:#ffffff40}.ttk-pg i.on{background:#fff;width:4cqw;border-radius:9px}.ttk-pg span{margin-left:1.4cqw}
@@ -2764,7 +2764,7 @@ function radioStop(){ radio.on=false; radio.load=false; if(radio.el){ try{ radio
 document.addEventListener('click',e=>{ const b=e.target.closest('[data-act=radio],[data-act=radiox]'); if(!b) return; e.stopPropagation(); if(b.dataset.act==='radiox'){ radioStop(); radio.err=''; radioUI(); } else if(radio.on) radioStop(); else radioPlay(); },true);
 /* ---------- Mode « Live TikTok » : multiplex plein écran au format vertical 9:16 ---------- */
 const KEYTT='suivi-ttk'; const ttk={on:false,timer:null,cache:{},wl:null,ctl:false,focus:null,votes:null,voteRes:null,cam:true,guide:false,lg:'all',handle:'',...loadJ(KEYTT,{})};
-const ttkSave=()=>saveJ(KEYTT,{cam:ttk.cam,guide:ttk.guide,lg:ttk.lg,handle:ttk.handle});
+const ttkSave=()=>saveJ(KEYTT,{cam:ttk.cam,guide:ttk.guide,lg:ttk.lg,handle:ttk.handle,chatz:!!ttk.chatz});
 function ttkSet(){ const lg=ttk.lg||'all'; return multiSet(lg==='pick'||lg==='all'||foot.leagues[lg]?lg:'all'); }
 const ttkShows=it=>{ try{ return ttk.on&&ttkSet().some(m=>String(m.id)===String(it.id)); }catch(e){ return false; } };
 const ttkHT=m=>m.st==='in'&&/mi-?temps|half/i.test(String(m.txt||''));
@@ -2848,7 +2848,7 @@ function ttkDraw(){
       return `<div class="ttk-r ${m.st}${gl?' gl':''}" data-act="ttkfocus" data-id="${esc(m.id)}"><div class="ttk-row"><span class="ttk-t">${footLogo(m.hl,30)}<b>${esc(m.hn)}</b></span><span class="ttk-sc">${m.st==='pre'?'<i>vs</i>':`${m.hs}<i>-</i>${m.as}`}</span><span class="ttk-t r"><b>${esc(m.an)}</b>${footLogo(m.al,30)}</span></div><div class="ttk-meta">${gl?'<span class="ttk-bt">⚽ BUT !</span>':''}${ttkPill(m)}${last&&m.st!=='pre'?`<span>⚽ ${esc(last.p||'?')} ${esc(last.ms||last.min+"'")}</span>`:''}${rc?'<span>🟥</span>':''}</div></div>`; };
     let L, pg='';
     if(dense){ // pages qui tournent toutes les 8 s ; les buts récents restent épinglés en haut
-      const pin=C.filter(m=>rank(m)===0), rest=C.filter(m=>rank(m)!==0), per=Math.max(1,(ttk.per||9)-pin.length), np=Math.max(1,Math.ceil(rest.length/per)), pb=Math.ceil(rest.length/np), pi=Math.floor(now/8000)%np;
+      const pin=C.filter(m=>rank(m)===0), rest=C.filter(m=>rank(m)!==0), per=Math.max(1,(ttk.per||9)-pin.length), np=Math.max(1,Math.ceil(rest.length/per)), pb=per, pi=Math.floor(now/8000)%np;
       L=[...pin,...rest.slice(pi*pb,pi*pb+pb)];
       if(np>1) pg=`<div class="ttk-pg">${Array.from({length:np},(_,k)=>`<i class="${k===pi?'on':''}"></i>`).join('')}<span>${rest.length+pin.length} matchs · page ${pi+1}/${np}</span></div>`;
     } else L=C.slice(0,cd?5:8);
@@ -2856,9 +2856,8 @@ function ttkDraw(){
     main=cd+`<div class="ttk-rows ${sz}">${L.map(row).join('')||'<div class="ttk-empty">Aucun match aujourd\'hui</div>'}</div>${pg}`;
   }
   ttkSec(R.querySelector('.ttk-list'),'list',main);
-  { const box=R.querySelector('.ttk-list'), rs=box?box.querySelectorAll('.ttk-r.d'):[]; if(rs.length){ const bb=box.getBoundingClientRect(), last=rs[rs.length-1].getBoundingClientRect(), pgH=(box.querySelector('.ttk-pg')||{offsetHeight:0}).offsetHeight, rh=last.height+4;
-    if(last.bottom+pgH>bb.bottom+1&&(ttk.per||9)>3){ ttk.per=(ttk.per||9)-1; ttk.cache.list=''; setTimeout(ttkDraw,30); }
-    else if(rs.length>=(ttk.per||9)&&bb.bottom-(last.bottom+pgH)>rh+6&&(ttk.per||9)<14){ ttk.per=(ttk.per||9)+1; } } }
+  { const box=R.querySelector('.ttk-list'), rs=box?box.querySelectorAll('.ttk-r.d'):[]; if(rs.length){ const cs=getComputedStyle(rs[0].parentNode), gap=parseFloat(cs.rowGap||cs.gap)||4, rh=rs[0].offsetHeight, top=rs[0].getBoundingClientRect().top-box.getBoundingClientRect().top, pg=box.querySelector('.ttk-pg'), pgH=pg?pg.offsetHeight+8:22;
+    const fit=Math.max(3,Math.min(16,Math.floor((box.clientHeight-top-pgH+gap)/(rh+gap)))); if(fit!==(ttk.per||9)){ ttk.per=fit; ttk.cache.list=''; setTimeout(ttkDraw,30); } } }
   const P=fm||state==='post'?[]:ttkProj(ms).slice(0,live.length>3?2:4);
   ttkSec(R.querySelector('.ttk-proj'),'proj',P.length?`<div class="ttk-pt">📈 Si ça reste comme ça…</div>${P.map(x=>`<div class="ttk-pr">${footLogo(x.r.logo,18)}<b>${esc(x.r.name)}</b><span class="${x.mv>0?'up':'dn'}">${x.mv>0?'▲':'▼'}${Math.abs(x.mv)}</span><span>${x.r.nr}${x.r.nr===1?'er':'e'}</span></div>`).join('')}`:'');
   // votes pendant le direct, sinon question pour le chat (change toutes les 12 s)
@@ -2876,9 +2875,9 @@ function ttkDraw(){
   if(!items.length) items.push('Bienvenue sur le multiplex Statify','Scores en direct','Classement live','Pose ta question dans le chat');
   const tx=items.join('<i>•</i>');
   ttkSec(R.querySelector('.ttk-tick'),'tick',`<div class="ttk-tk" style="animation-duration:${Math.max(18,items.length*7)}s"><span>${tx}</span><span>${tx}</span></div>`);
-  ttkSec(R.querySelector('.ttk-ctl'),'ctl',`<button data-act="ttkx">✕ Quitter</button><button data-act="ttkcam">${ttk.cam?'📷 Caméra : oui':'📷 Caméra : non'}</button><button data-act="ttkguide">${ttk.guide?'🧭 Repères : oui':'🧭 Repères : non'}</button><button data-act="ttkfs">⛶ Plein écran</button><select id="ttkLg">${[['all','🌍 Tous les championnats'],['pick','⭐ Ma sélection'],...FLG].map(([c,n])=>`<option value="${esc(c)}" ${c===(ttk.lg||'all')?'selected':''}>${esc(n)}</option>`).join('')}</select><input id="ttkHandle" placeholder="@ton pseudo TikTok" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="ttk-hint">Touche un match pour le zoomer</span>`);
+  ttkSec(R.querySelector('.ttk-ctl'),'ctl',`<button data-act="ttkx">✕ Quitter</button><button data-act="ttkcam">${ttk.cam?'📷 Caméra : oui':'📷 Caméra : non'}</button><button data-act="ttkguide">${ttk.guide?'🧭 Repères : oui':'🧭 Repères : non'}</button><button data-act="ttkchatz">${ttk.chatz?'💬 Place pour le chat : oui':'💬 Place pour le chat : non'}</button><button data-act="ttkfs">⛶ Plein écran</button><select id="ttkLg">${[['all','🌍 Tous les championnats'],['pick','⭐ Ma sélection'],...FLG].map(([c,n])=>`<option value="${esc(c)}" ${c===(ttk.lg||'all')?'selected':''}>${esc(n)}</option>`).join('')}</select><input id="ttkHandle" placeholder="@ton pseudo TikTok" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="ttk-hint">Touche un match pour le zoomer</span>`);
   const hi=R.querySelector('#ttkHandle'); if(hi&&document.activeElement!==hi) hi.value=ttk.handle||'';
-  R.classList.toggle('guide',!!ttk.guide); R.classList.toggle('ctl',!!ttk.ctl);
+  R.classList.toggle('guide',!!ttk.guide); R.classList.toggle('chatz',!!ttk.chatz); R.classList.toggle('ctl',!!ttk.ctl);
 }
 function ttkOpen(){
   if(ttk.on) return; if(radio.on){ radioStop(); say('📻 Radio coupée : RMC ne doit pas passer dans ton live TikTok (droits d\'auteur).','warn'); } ttk.on=true; ttk.cache={}; ttk.ctl=true; ttk.focus=null; document.body.classList.add('ttk-on');
@@ -2893,6 +2892,7 @@ document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&ttk.on&&
 document.addEventListener('click',e=>{ const b=e.target.closest('#ttk [data-act]'); if(!b){ if(e.target.closest('#ttk')&&!e.target.closest('.ttk-ctl')){ ttk.ctl=!ttk.ctl; ttkDraw(); } return; } e.stopPropagation(); const a=b.dataset.act;
   if(a==='ttkx') ttkClose(); else if(a==='ttkctl'){ ttk.ctl=!ttk.ctl; ttkDraw(); }
   else if(a==='ttkcam'){ ttk.cam=!ttk.cam; ttkSave(); ttkDraw(); } else if(a==='ttkguide'){ ttk.guide=!ttk.guide; ttkSave(); ttkDraw(); }
+  else if(a==='ttkchatz'){ ttk.chatz=!ttk.chatz; ttkSave(); ttk.cache={}; ttkDraw(); }
   else if(a==='ttkfs'){ try{ document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen(); }catch(err){} }
   else if(a==='ttkfocus'){ ttk.focus=b.dataset.id||null; if(ttk.focus) setTimeout(()=>{ try{ liveDetail(ttk.focus); }catch(err){} },50); ttkDraw(); }
   else if(a==='ttkvote'){ if(ttk.votes){ ttk.votes[b.dataset.k]++; ttkDraw(); } }
