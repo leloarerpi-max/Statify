@@ -346,6 +346,12 @@
   .pre-st{display:grid;grid-template-columns:34px 1fr 34px;gap:8px;align-items:center;margin:9px 0;font-size:13px}.pre-st b{text-align:center}.pre-sb{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;font-size:11px;color:var(--mut);text-align:center}.pre-sb .l,.pre-sb .r{height:6px;background:var(--hover);border-radius:9px;display:flex}.pre-sb .l{justify-content:flex-end}.pre-sb i{display:block;height:100%;border-radius:9px}
   .pre-note{background:#fff7e0;color:#7a5a00;border-radius:16px;padding:10px 12px;font-size:12.5px;display:flex;gap:8px;margin:0 0 12px}:root:not([data-theme=light]) .pre-note{background:#3a3014;color:#f0d98a}
   .hero-t small{font-weight:600;opacity:.85;font-size:11px}
+
+  .ai-card{padding:18px 16px}.ai-tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#1a9d55;background:#d8f5e0;border-radius:99px;padding:4px 10px;margin-bottom:10px}
+  .ai-card h2{font-size:21px;line-height:1.2;margin:0 0 8px;letter-spacing:-.01em}.ai-chapo{font-size:14.5px;line-height:1.5;font-weight:600;color:var(--mut);margin-bottom:12px}
+  .ai-card p{font-size:14.5px;line-height:1.6;margin:0 0 10px}.ai-ft{display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:10px;margin-top:4px;font-size:11.5px;color:var(--mut)}.ai-ft button{min-height:0;padding:6px 11px;border-radius:99px;font-size:12px;white-space:nowrap}
+  .ai-key{border:2px dashed color-mix(in srgb,var(--mut) 45%,transparent)}.ai-key input{width:100%}
+  .ai-ld{font-size:14px;font-weight:700;margin-bottom:6px}.ai-sk{height:11px;border-radius:9px;background:var(--hover);margin:9px 0;animation:aisk 1.2s ease-in-out infinite alternate}@keyframes aisk{to{opacity:.45}}
 </style>
 </head>
 <body>
@@ -2213,6 +2219,91 @@ function footLineup(m,s){
   const st=pl.filter(p=>p.s), bn=pl.filter(p=>!p.s);
   return `<div><h3 style="border-left:4px solid ${fcol(co)};padding-left:8px">${tlink(tid,name)}${fm?` <span class="mut">${esc(fm)}</span>`:''}</h3><div class="scroll"><table><thead><tr><th class="l">Joueur</th><th>B</th><th>PD</th><th>Tirs</th><th>Cart.</th><th>Arr.</th></tr></thead><tbody>${st.map(row).join('')}${bn.length?`<tr><td class="l mut" colspan="6">Remplaçants utilisés</td></tr>${bn.map(row).join('')}`:''}</tbody></table></div></div>`;
 }
+
+/* ---- Résumé de match rédigé par IA (Google Gemini), à partir du live écrit ESPN ---- */
+const KEYAI='suivi-ai-key', KEYAIM='suivi-ai-model', KEYRS='suivi-resumes';
+let aiKey=(()=>{ try{ return localStorage.getItem(KEYAI)||''; }catch(e){ return ''; } })(), aiDraft='';
+let resumes=loadJ(KEYRS,{}); const resBusy={}, resErr={};
+const AIMODELS=['gemini-flash-latest','gemini-3.6-flash','gemini-3.5-flash','gemini-2.5-flash','gemini-2.0-flash'];
+function resSave(){ const ks=Object.keys(resumes).sort((a,b)=>(resumes[b].at||0)-(resumes[a].at||0)); for(const k of ks.slice(80)) delete resumes[k]; saveJ(KEYRS,resumes); }
+async function aiCall(prompt){
+  let last=''; const pref=(()=>{ try{ return localStorage.getItem(KEYAIM)||''; }catch(e){ return ''; } })();
+  const list=pref?[pref,...AIMODELS.filter(x=>x!==pref)]:AIMODELS;
+  for(const mo of list){
+    let r; try{ r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${mo}:generateContent?key=${encodeURIComponent(aiKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.7,responseMimeType:'application/json'}})}); }
+    catch(e){ throw new Error('Pas de connexion avec Google Gemini. Vérifie ta connexion internet.'); }
+    const j=await r.json().catch(()=>({})), msg=(j.error&&j.error.message)||('HTTP '+r.status);
+    if(r.status===404){ last='modèle indisponible'; continue; }
+    if(!r.ok){ if(/api key|API_KEY/i.test(msg)||r.status===401||r.status===403) { const e=new Error('Google refuse la clé : vérifie que tu l\'as copiée en entier.'); e.key=1; throw e; }
+      if(r.status===429) throw new Error('Limite gratuite de Gemini atteinte pour le moment. Réessaie dans quelques minutes.');
+      last=msg; continue; }
+    const txt=((((j.candidates||[])[0]||{}).content||{}).parts||[]).map(x=>x.text||'').join('');
+    if(txt){ try{ localStorage.setItem(KEYAIM,mo); }catch(e){} return txt; }
+    last='réponse vide';
+  }
+  throw new Error('Gemini n\'a pas répondu ('+last.slice(0,140)+').');
+}
+function resFacts(m,d){
+  const x=m.x||{}, {T}=footIdx(), L=[];
+  L.push(`Compétition : ${footLgName(m.lg)}. Date : ${fmtDT(m.d)}.${(m.ven||x.ven)?' Stade : '+(m.ven||x.ven)+'.':''}${x.att?' Spectateurs : '+x.att+'.':''}`);
+  L.push(`Équipe à domicile : ${m.hn}. Équipe à l'extérieur : ${m.an}. Score final : ${m.hn} ${m.hs} - ${m.as} ${m.an}.`);
+  const st=id=>{ const t=T[id]; return t&&t.st?`${t.st.rank}${t.st.rank===1?'er':'e'} avec ${t.st.pts} pts`:''; };
+  if(st(m.hid)||st(m.aid)) L.push(`Classement actuel (après ce match, peut inclure d'autres matchs de la journée) : ${m.hn} ${st(m.hid)||'?'} ; ${m.an} ${st(m.aid)||'?'}.`);
+  const tn=s=>s==='h'?m.hn:s==='a'?m.an:'?', TY={g:'But',pg:'But sur penalty',og:'But contre son camp',yc:'Carton jaune',rc:'Carton rouge',sub:'Remplacement'};
+  const ev=(x.ev||[]).filter(e=>e.t!=='sub'&&e.t!=='yc');
+  if(ev.length) L.push('Faits officiels :\n'+ev.map(e=>`- ${e.ms||e.m+"'"} ${TY[e.t]||e.t} (${tn(e.s)}) : ${e.p||e.tx||'?'}${e.p2&&e.t==='g'?' (passe de '+e.p2+')':''}`).join('\n'));
+  const yc=(x.ev||[]).filter(e=>e.t==='yc'); if(yc.length) L.push('Cartons jaunes : '+yc.map(e=>`${e.p} (${tn(e.s)}, ${e.ms})`).join(', ')+'.');
+  const ts=x.ts||{}, SN={poss:'Possession %',sh:'Tirs',sot:'Tirs cadrés',cor:'Corners',sv:'Arrêts',fl:'Fautes',off:'Hors-jeu'};
+  const sl=Object.keys(SN).filter(k=>ts.h&&ts.h[k]!=null).map(k=>`${SN[k]} ${ts.h[k]}-${ts.a[k]}`); if(sl.length) L.push(`Statistiques (${m.hn}-${m.an}) : ${sl.join(', ')}.`);
+  const pl=s=>((x.pl||{})[s]||[]).filter(p=>p.s).map(p=>p.n).join(', '); if(pl('h')) L.push(`Titulaires ${m.hn} : ${pl('h')}.\nTitulaires ${m.an} : ${pl('a')}.`);
+  let com=((d&&d.commentary)||[]).map(c=>({t:(c.time&&c.time.displayValue)||(c.clock&&c.clock.displayValue)||'',x:String(c.text||(c.play&&c.play.text)||'').trim(),q:+c.sequence||0})).filter(c=>c.x);
+  if(com.length>1&&com[0].q>com[com.length-1].q) com.reverse();
+  let txt=com.map(c=>`${c.t} ${c.x}`).join('\n');
+  if(txt.length>16000) txt=com.filter(c=>!/^(Corner|Foul by|Offside|Substitution|Delay|.* wins a free kick|.* is shown the yellow card|Hand ball)/i.test(c.x)).map(c=>`${c.t} ${c.x}`).join('\n').slice(-16000);
+  if(!com.length){ const ke=((d&&d.keyEvents)||[]).map(e=>`${(e.clock&&e.clock.displayValue)||''} ${e.text||''}`.trim()).filter(Boolean); if(ke.length) txt=ke.join('\n'); }
+  if(txt) L.push('Commentaire en direct (en anglais, ordre chronologique) :\n'+txt);
+  return {facts:L.join('\n\n'),live:com.length>0};
+}
+async function resGen(m){
+  const id=String(m.id); if(!aiKey||resBusy[id]) return; resBusy[id]=1; delete resErr[id]; try{ render(); }catch(e){}
+  try{
+    let d=null; try{ d=await footGet(`https://site.api.espn.com/apis/site/v2/sports/soccer/${m.lg}/summary?event=${m.id}`); if(!m.x){ footIngest({__foot:'summary',league:m.lg,id:m.id,data:d}); footSave(); m=footIdx().mt.find(z=>String(z.id)===id)||m; } }catch(e){}
+    const {facts,live}=resFacts(m,d);
+    const prompt=`Tu es journaliste sportif pour un grand site d'information sportive français. Rédige le compte rendu du match de football décrit ci-dessous, en français.
+Règles :
+- N'invente RIEN : utilise uniquement les faits fournis. Le commentaire en direct est en anglais : sers-t'en pour raconter les actions (occasions, arrêts, tournants), traduit et reformulé.
+- Pas de citations de joueurs ou d'entraîneurs, pas de statistiques qui ne sont pas fournies.
+- Minutes au format « (58e) ». Style vivant et précis, phrases variées, pas de liste à puces.
+- Mets en gras avec **...** les 2 à 4 joueurs décisifs, une seule fois chacun.
+- Si un classement est fourni, termine par la conséquence au classement, avec prudence.
+Réponds uniquement en JSON : {"titre":"titre accrocheur, 70 caractères max, sans le score","chapo":"une phrase de résumé","paragraphes":["3 ou 4 paragraphes de 2 à 4 phrases, dans l'ordre du match"]}
+
+${facts}`;
+    let raw=await aiCall(prompt); raw=raw.replace(/^\s*```(json)?/i,'').replace(/```\s*$/,'');
+    let o; try{ o=JSON.parse(raw); }catch(e){ const a=raw.indexOf('{'), b=raw.lastIndexOf('}'); o=JSON.parse(raw.slice(a,b+1)); }
+    const ps=(o.paragraphes||o.paragraphs||[]).map(String).filter(Boolean); if(!ps.length) throw new Error('Réponse de l\'IA incomplète. Touche « Réécrire ».');
+    resumes[id]={t:String(o.titre||o.title||''),c:String(o.chapo||''),p:ps,at:Date.now(),live,sc:m.hs+'-'+m.as}; resSave();
+  }catch(e){ resErr[id]={m:e.message||String(e),key:!!e.key}; }
+  finally{ delete resBusy[id]; try{ render(); }catch(e){} }
+}
+function resAuto(){
+  if(!aiKey||Object.keys(resBusy).length) return;
+  const mine=new Set([...ffav,...((nfav&&nfav.foot)||[])]), now=Date.now();
+  const m=footIdx().done.filter(x=>(mine.has(x.hid)||mine.has(x.aid))&&now-Date.parse(x.d)<36*36e5&&now-Date.parse(x.d)>105*6e4&&!resumes[x.id]&&!resErr[x.id]).sort((a,b)=>Date.parse(b.d)-Date.parse(a.d))[0];
+  if(m) resGen(m);
+}
+setTimeout(resAuto,8000); setInterval(resAuto,90e3);
+const resMd=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+function footAiHtml(m){
+  if(!m.done) return ''; const id=String(m.id), r=resumes[id], tag='<span class="ai-tag">📰 Résumé du match</span>';
+  if(r&&r.sc&&r.sc!==m.hs+'-'+m.as){ delete resumes[id]; resSave(); }
+  else if(r) return `<div class="card ai-card">${tag}${r.t?`<h2>${resMd(r.t)}</h2>`:''}${r.c?`<div class="ai-chapo">${resMd(r.c)}</div>`:''}${r.p.map(t=>`<p>${resMd(t)}</p>`).join('')}<div class="ai-ft"><span>✨ Rédigé par IA ${r.live?'à partir du live ESPN':'à partir des données du match (pas de live écrit ESPN)'}</span><button class="sec" data-act="resgen" data-id="${esc(id)}">↻ Réécrire</button></div></div>`;
+  if(!aiKey) return `<div class="card ai-card ai-key">${tag}<p>Pour avoir un résumé écrit comme par un journaliste, Statify a besoin d'une clé d'IA gratuite (Google Gemini). À faire une seule fois.</p><p class="mut" style="font-size:12.5px">1. <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Ouvre Google AI Studio ↗</a> et connecte-toi avec ton compte Google.<br>2. Touche « Create API key » et copie la clé.<br>3. Colle-la ci-dessous.</p><input id="aiKeyIn" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Colle ta clé ici (commence par AIza…)" value="${esc(aiDraft)}"><button data-act="aikeysave" style="width:100%;margin-top:8px">🔑 Enregistrer ma clé Gemini</button></div>`;
+  if(resErr[id]) return `<div class="card ai-card">${tag}<p class="err" style="font-size:13.5px">⚠️ ${esc(resErr[id].m)}</p><div class="row"><button data-act="resgen" data-id="${esc(id)}">↻ Réessayer</button>${resErr[id].key?'<button class="sec" data-act="aikeyreset">🔑 Changer la clé</button>':''}</div></div>`;
+  if(!resBusy[id]) setTimeout(()=>resGen(m),30);
+  return `<div class="card ai-card">${tag}<div class="ai-ld">✍️ Rédaction du résumé en cours…</div><div class="ai-sk" style="width:92%"></div><div class="ai-sk"></div><div class="ai-sk" style="width:76%"></div><div class="ai-sk" style="width:88%"></div></div>`;
+}
+document.addEventListener('input',e=>{ if(e.target&&e.target.id==='aiKeyIn') aiDraft=e.target.value; });
 function footMatchModal(m){
   const {mt}=footIdx(), h2h=mt.filter(x=>x.done&&x.id!==m.id&&((x.hid===m.hid&&x.aid===m.aid)||(x.hid===m.aid&&x.aid===m.hid))).sort((a,b)=>Date.parse(b.d)-Date.parse(a.d));
   const live=m.st==='in', pre=!m.done&&!live, [ca]=pickColors([fcol(m.hc)]);
@@ -2220,7 +2311,7 @@ function footMatchModal(m){
   return `<div class="card print-target">
   <div class="row between" style="margin-bottom:10px"><span class="mut" style="font-size:12px">${esc(footLgName(m.lg))}${m.ven||(m.x&&m.x.ven)?' · '+esc(m.ven||m.x.ven):''}${m.x&&m.x.att?' · '+m.x.att.toLocaleString('fr-FR')+' spectateurs':''}</span><div class="row"><button class="sec" data-act="print">Imprimer / PDF</button><button class="sec" data-act="fclose">Fermer</button></div></div>
   <div class="hero" style="--tc:${ca};cursor:default"><div class="hero-eb">${esc(footLgName(m.lg))} · ${esc(fmtDT(m.d))}</div><div class="hero-row"><div class="hero-t"><span class="hero-lg">${footLogo(m.hl,44)}</span><b>${tlink(m.hid,m.hn)}</b></div><div class="hero-s"${pre?' style="font-size:22px"':''}>${pre?esc((fmtDT(m.d).match(/\d{1,2}[:h]\d{2}/)||['–'])[0]):`${m.hs}<small>–</small>${m.as}`}</div><div class="hero-t"><span class="hero-lg">${footLogo(m.al,44)}</span><b>${tlink(m.aid,m.an)}</b></div></div><div class="hero-ft" style="justify-content:center"><span>${pre?esc(preCd(m.d)):stTxt}</span></div></div>
-  ${pre?footPre(m):''}${live?'<div class="mut" style="font-size:12px;margin-bottom:6px">🔴 Match en cours : score, buts, stats et compositions se mettent à jour automatiquement.</div>':''}${footRecapHtml(m)}
+  ${pre?footPre(m):''}${live?'<div class="mut" style="font-size:12px;margin-bottom:6px">🔴 Match en cours : score, buts, stats et compositions se mettent à jour automatiquement.</div>':''}${footAiHtml(m)}${resumes[String(m.id)]?'':footRecapHtml(m)}
    ${m.x?'':(m.done?`<p class="mut">${m.nx?'ESPN n\'a pas fourni de détails pour ce match.':'Détails non chargés : clique sur « 🔄 Actualiser le foot ».'}</p>`:'')}
   ${footFrise(m)}${footTimeline(m)}${footStatBars(m)}
   ${m.x?`<div class="grid2">${footLineup(m,'h')}${footLineup(m,'a')}</div>`:''}
@@ -2683,6 +2774,9 @@ function toggleFav(type,id,name){
   else if(a==='favplayer') toggleFav('player',id,el.dataset.name);
   else if(a==='opengame'){ closeModals(); ui.openGame=id; $('#modal').scrollTop=0; render(); }
   else if(a==='closegame'){ ui.openGame=null; render(); }
+  else if(a==='aikeysave'){ const v=((document.getElementById('aiKeyIn')||{}).value||'').trim().replace(/\s+/g,''); if(v.length<20){ say('⚠️ Cette clé paraît incomplète : copie-la en entier depuis Google AI Studio.','err'); return; } aiKey=v; aiDraft=''; try{ localStorage.setItem(KEYAI,v); }catch(e){} for(const k in resErr) delete resErr[k]; say('✓ Clé Gemini enregistrée. Le résumé est en cours de rédaction…','ok'); render(); }
+  else if(a==='aikeyreset'){ aiKey=''; try{ localStorage.removeItem(KEYAI); }catch(e){} for(const k in resErr) delete resErr[k]; render(); }
+  else if(a==='resgen'){ const m=footIdx().mt.find(z=>String(z.id)===String(id)); if(m){ delete resumes[String(id)]; resSave(); delete resErr[String(id)]; resGen(m); } }
   else if(a==='pall'){ ui.pAll=!ui.pAll; render(); }
   else if(a==='delgame'){ if(confirm('Supprimer ce match ?')){ delete games[id]; if(ui.openGame===id) ui.openGame=null; save(); render(); } }
   else if(a==='openplayer'){ ui.openPlayer=id; ui.openTeam=null; $('#modal').scrollTop=0; render(); }
