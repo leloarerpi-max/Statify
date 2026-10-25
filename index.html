@@ -2620,7 +2620,7 @@ $('#modal').addEventListener('click',e=>{ if(e.target.id==='modal'){ closeModals
 $('#mclose').addEventListener('click',()=>{ closeModals(); render(); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&$('#welcome').classList.contains('on')){ closeWelcome(); return; } if(e.key==='Escape'&&!tv.on&&(ui.openPlayer||ui.openTeam||ui.openGame||ui.fMatch||ui.fTeam||ui.fPlayer)){ closeModals(); render(); } });
 $('#modal').addEventListener('change',e=>{ const t=e.target; if(t.dataset&&t.dataset.note){ setNote(t.dataset.note,t.dataset.name,t.value); t.style.borderColor='var(--ok)'; setTimeout(()=>{ t.style.borderColor=''; },900); } });
-$('#tabs').addEventListener('click',e=>{ if(e.target.closest('[data-act=tabmore]')){ ui.tabMore=!ui.tabMore; render(); return; } const b=e.target.closest('[data-act=tab]'); if(b){ ui.tabMore=false; if(ui.sport==='foot'){ if(b.dataset.t!=='multi'||ui.ftab!=='multi') ui.fMultiDay=null; ui.ftab=b.dataset.t; } else ui.tab=b.dataset.t; closeModals(); render(); } });
+$('#tabs').addEventListener('click',e=>{ if(e.target.closest('[data-act=tabmore]')){ ui.tabMore=!ui.tabMore; render(); return; } const b=e.target.closest('[data-act=tab]'); if(b){ ui.tabMore=false; if(ui.sport==='foot'){ if(b.dataset.t!=='multi'||ui.ftab!=='multi'){ ui.fMultiDay=null; if(b.dataset.t==='multi') ui.fMulti='all'; } ui.ftab=b.dataset.t; } else ui.tab=b.dataset.t; closeModals(); render(); } });
 $('#view').addEventListener('change',e=>{
   const t=e.target, id=t.id;
   if(t.dataset&&t.dataset.note){ setNote(t.dataset.note,t.dataset.name,t.value); t.style.borderColor='var(--ok)'; setTimeout(()=>{ t.style.borderColor=''; },900); return; }
