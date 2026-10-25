@@ -364,7 +364,7 @@
   .ttk-live i{width:2.4cqw;height:2.4cqw;border-radius:50%;background:#fff;animation:livepulse 1.2s infinite}.ttk-live.pre{background:linear-gradient(135deg,#1f6fff,#1246b8);box-shadow:0 6px 22px #1f6fff55}.ttk-live.post{background:#ffffff22;box-shadow:none}
   .ttk-sub{font-size:5.6cqw;font-weight:900;margin-top:2.4cqw;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ttk-sub2{font-size:3.3cqw;opacity:.75;margin-top:1cqw}.ttk-sub2 b{color:#ff6b6b}
   .ttk-cam{width:22cqw;aspect-ratio:3/4;border:2px dashed #ffffff55;border-radius:4cqw;display:grid;place-items:center;text-align:center;font-size:3cqw;opacity:.7;flex:none;background:#ffffff08}
-  .ttk-list{flex:1 1 auto;min-height:0;overflow:hidden;padding:4px;margin:-4px}.ttk-f::after{content:'';flex:none;height:25%}.ttk-rows{display:flex;flex-direction:column;gap:2cqw}
+  .ttk-list{flex:1 1 auto;min-height:0;overflow:hidden;padding:4px;margin:-4px}.ttk-f::after{content:'';flex:none;height:20%}.ttk-rows{display:flex;flex-direction:column;gap:2cqw}
   .ttk-r{background:#ffffff10;border:1px solid #ffffff1a;border-radius:4.5cqw;padding:2.4cqw 3.4cqw;position:relative;overflow:hidden;backdrop-filter:blur(6px)}
   .ttk-r.in{background:linear-gradient(90deg,#ff3b4a1f,#ffffff0d 40%);border-color:#ff3b4a55}
   .ttk-r.gl{border-color:#2fc15a;background:linear-gradient(90deg,#2fc15a55,#2fc15a1a);box-shadow:0 0 0 2px #2fc15a,0 0 28px #2fc15a88;animation:ttkgl 1s ease-in-out infinite alternate}@keyframes ttkgl{to{box-shadow:0 0 0 2px #2fc15a,0 0 8px #2fc15a44}}
@@ -407,6 +407,17 @@
   .ttk-vb b{position:relative;font-size:3cqw;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ttk-vb em{position:relative;font-style:normal;font-weight:900;font-size:4cqw}.ttk-vf{position:absolute;left:0;top:0;bottom:0;transition:width .4s}.ttk-vb.h .ttk-vf{background:#ff3b4a88}.ttk-vb.a .ttk-vf{background:#1f6fff88}.ttk-vb.n .ttk-vf{background:#ffffff33}
   .ttk-vt{display:flex;justify-content:space-between;font-size:2.7cqw;opacity:.75;margin-top:1cqw}.ttk-vt .link{color:#fff!important}.ttk-vres{background:#2fc15a;border-radius:3.4cqw;padding:1.6cqw 3cqw;font-size:3.4cqw;text-align:center;margin-bottom:1.6cqw;animation:ttkq .5s ease-out}
   .ttk-ctl input{font-size:13px;padding:7px 10px;border-radius:12px;width:170px;min-height:0}.ttk-hint{color:#fff;opacity:.6;font-size:12px;align-self:center}
+
+  #radioBar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 92px);z-index:900;display:none;align-items:center;gap:10px;padding:8px 8px 8px 14px;border-radius:99px;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow);max-width:calc(100vw - 32px)}
+  #radioBar.on{display:flex}.rb-ic{font-size:20px}.rb-tx{display:flex;flex-direction:column;line-height:1.15;min-width:0}.rb-tx b{font-size:14px}.rb-tx span{font-size:11.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
+  #radioBar button{min-height:0!important;width:38px;height:38px;padding:0!important;border-radius:50%!important;font-size:15px}#radioBar button.x{background:transparent!important;color:var(--mut)!important;border:0!important;box-shadow:none!important}
+  .rb-eq{display:flex;align-items:flex-end;gap:2px;height:16px}.rb-eq i{width:3px;background:#e8412f;border-radius:2px;animation:rbeq .9s ease-in-out infinite alternate}.rb-eq i:nth-child(2){animation-delay:.2s}.rb-eq i:nth-child(3){animation-delay:.45s}.rb-eq i:nth-child(4){animation-delay:.1s}@keyframes rbeq{from{height:3px}to{height:16px}}
+  body.ttk-on #radioBar{display:none!important}
+
+  .ttk-rows.dn{gap:1.2cqw}.ttk-r.d{display:grid;grid-template-columns:13cqw 1fr auto 1fr;align-items:center;gap:1.6cqw;padding:1.5cqw 2.6cqw;border-radius:3.4cqw}
+  .ttk-r.d .ttk-sc{font-size:5.4cqw;min-width:13cqw}.ttk-r.d .ttk-t b{font-size:3.5cqw}.ttk-r.d .ttk-t img{width:5.4cqw!important;height:5.4cqw!important}.ttk-r.d .ttk-t{gap:1.4cqw}
+  .ttk-dp{display:flex;justify-content:flex-start}.ttk-dp .ttk-p,.ttk-dp .ttk-bt{font-size:2.6cqw;padding:.5cqw 1.6cqw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:13cqw}
+  .ttk-pg{display:flex;justify-content:center;align-items:center;gap:1.2cqw;margin-top:1.6cqw;font-size:2.7cqw;opacity:.8}.ttk-pg i{width:1.6cqw;height:1.6cqw;border-radius:50%;background:#ffffff40}.ttk-pg i.on{background:#fff;width:4cqw;border-radius:9px}.ttk-pg span{margin-left:1.4cqw}
 </style>
 </head>
 <body>
@@ -2675,7 +2686,7 @@ function footMultiView(){
   const goals=ms.reduce((n,m)=>n+(m.st==='pre'?0:(+m.hs||0)+(+m.as||0)),0), dd=new Date(Date.parse(first?first.d:Date.now())).toLocaleDateString('fr-FR',{...PARIS,weekday:'long',day:'numeric',month:'long'});
   h+=`<div class="mxhero"><div class="row between" style="gap:10px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:0"><h2 style="margin:0">${live?'<span class="livedot"></span>':''}${title}</h2><div class="mut" style="font-size:12px;margin-top:2px;text-transform:capitalize">${esc(dd)} · heure de Paris</div></div><select id="fMulti" style="max-width:100%">${opts.map(([c,n])=>`<option value="${esc(c)}" ${c===lg?'selected':''}>${esc(n)}</option>`).join('')}</select></div>
   <div class="mxchips"><div><b>${ms.length}</b><span>Matchs</span></div><div><b class="${live?'err':''}">${live}</b><span>En cours</span></div><div><b>${goals}</b><span>Buts</span></div></div>
-  <div class="row" style="margin-top:12px;gap:8px"><button class="sec" data-act="sndtoggle">${sndPref()==='0'?'🔇 Son de but : coupé':'🔊 Son de but : activé'}</button><button class="sec" data-act="gbtest">▶ Tester le bandeau</button><button class="sec" data-act="ttkopen">📱 Live TikTok</button></div>
+  <div class="row" style="margin-top:12px;gap:8px"><button class="sec" data-act="sndtoggle">${sndPref()==='0'?'🔇 Son de but : coupé':'🔊 Son de but : activé'}</button><button class="sec" data-act="gbtest">▶ Tester le bandeau</button><button class="sec" data-act="ttkopen">📱 Live TikTok</button><button class="sec rb-btn" data-act="radio">${radio.on?'⏸ Couper RMC':'📻 Écouter RMC en direct'}</button></div>
   ${ms.length?`<p class="mut" style="margin:10px 0 0;font-size:12px">${first?'Premier coup d\'envoi à '+esc(parisT(first.d))+' · ':''}touche ☆ pour ajouter un match à ta sélection</p>`:''}</div>${secHtml||`<div class="card">${empty}</div>`}`;
   // classement live : un championnat à la fois
   const tl=[...new Set(ms.map(m=>m.lg))].filter(l=>foot.leagues[l]&&foot.leagues[l].standings.length);
@@ -2728,6 +2739,29 @@ function footCalView(){
 }
 
 
+
+/* ---------- Radio RMC en direct (écoute perso, coupée en mode Live TikTok) ---------- */
+const RADIO={n:'RMC',u:['https://audio.bfmtv.com/rmcradio_128.mp3','http://audio.bfmtv.com/rmcradio_128.mp3']};
+const radio={el:null,on:false,load:false,err:'',i:0};
+function radioUI(){
+  let b=document.getElementById('radioBar');
+  if(!b){ b=document.createElement('div'); b.id='radioBar'; document.body.appendChild(b); }
+  const show=radio.on||radio.err; b.classList.toggle('on',!!show);
+  b.innerHTML=show?`<span class="rb-ic">📻</span><div class="rb-tx"><b>${esc(RADIO.n)}</b><span>${radio.err?esc(radio.err):radio.load?'Connexion…':'En direct'}</span></div>${radio.on&&!radio.load&&!radio.err?'<span class="rb-eq"><i></i><i></i><i></i><i></i></span>':''}<button data-act="radio" title="${radio.on?'Couper':'Écouter'}">${radio.on?'⏸':'▶'}</button><button class="x" data-act="radiox" title="Fermer">✕</button>`:'';
+  document.querySelectorAll('.rb-btn').forEach(x=>{ x.textContent=radio.on?'⏸ Couper RMC':'📻 Écouter RMC en direct'; });
+}
+function radioPlay(){
+  if(ttk.on){ say('📻 La radio est coupée pendant le Live TikTok : diffuser RMC en live est interdit (droits d\'auteur).','warn'); return; }
+  if(!radio.el){ const a=radio.el=new Audio(); a.preload='none';
+    a.addEventListener('playing',()=>{ radio.load=false; radio.err=''; radioUI(); });
+    a.addEventListener('waiting',()=>{ if(radio.on){ radio.load=true; radioUI(); } });
+    a.addEventListener('error',()=>{ if(!radio.on) return; if(radio.i<RADIO.u.length-1){ radio.i++; radioStart(); } else { radio.on=false; radio.load=false; radio.err='Flux indisponible pour le moment.'; radio.i=0; radioUI(); } }); }
+  radio.on=true; radio.err=''; radioStart();
+  try{ if('mediaSession' in navigator){ navigator.mediaSession.metadata=new MediaMetadata({title:'RMC en direct',artist:'Statify',artwork:[{src:'icon-512.png',sizes:'512x512',type:'image/png'}]}); navigator.mediaSession.setActionHandler('pause',radioStop); navigator.mediaSession.setActionHandler('stop',radioStop); navigator.mediaSession.setActionHandler('play',radioPlay); } }catch(e){}
+}
+function radioStart(){ radio.load=true; radioUI(); const a=radio.el; a.src=RADIO.u[radio.i]+(RADIO.u[radio.i].includes('?')?'&':'?')+'t='+Date.now(); a.play().catch(e=>{ if(!radio.on) return; radio.on=false; radio.load=false; radio.err=/NotAllowed/i.test(e&&e.name||'')?'Touche ▶ pour lancer la radio.':'Lecture impossible.'; radioUI(); }); }
+function radioStop(){ radio.on=false; radio.load=false; if(radio.el){ try{ radio.el.pause(); radio.el.removeAttribute('src'); radio.el.load(); }catch(e){} } radioUI(); }
+document.addEventListener('click',e=>{ const b=e.target.closest('[data-act=radio],[data-act=radiox]'); if(!b) return; e.stopPropagation(); if(b.dataset.act==='radiox'){ radioStop(); radio.err=''; radioUI(); } else if(radio.on) radioStop(); else radioPlay(); },true);
 /* ---------- Mode « Live TikTok » : multiplex plein écran au format vertical 9:16 ---------- */
 const KEYTT='suivi-ttk'; const ttk={on:false,timer:null,cache:{},wl:null,ctl:false,focus:null,votes:null,voteRes:null,cam:true,guide:false,lg:'all',handle:'',...loadJ(KEYTT,{})};
 const ttkSave=()=>saveJ(KEYTT,{cam:ttk.cam,guide:ttk.guide,lg:ttk.lg,handle:ttk.handle});
@@ -2805,14 +2839,27 @@ function ttkDraw(){
   else {
     let cd=''; if(!live.length&&pre.length){ const t=Date.parse(pre[0].d)-now; if(t>0&&t<24*36e5){ const h=Math.floor(t/36e5), mn=Math.floor(t%36e5/6e4), sc=Math.floor(t%6e4/1e3), k=pre.filter(x=>x.d===pre[0].d).length; cd=`<div class="ttk-cd"><span>Coup d'envoi dans</span><b>${h?h+':':''}${String(mn).padStart(h?2:1,'0')}:${String(sc).padStart(2,'0')}</b><span>${esc(pre[0].hn)} – ${esc(pre[0].an)}${k>1?' et '+(k-1)+' autre'+(k>2?'s':''):''}</span></div>`; } }
     const rank=m=>{ const c=liveMem['f'+m.id]; return (c&&c.chg&&now-c.chg<90000)?0:m.st==='in'?1:m.st==='pre'?2:3; };
-    const L=[...ms].sort((a,b)=>rank(a)-rank(b)||(rank(a)===3?Date.parse(b.d)-Date.parse(a.d):Date.parse(a.d)-Date.parse(b.d))).slice(0,cd?5:8);
-    const n=L.length+(cd?2:0)+(live.length?2:0), sz=n<=3?'xl':n<=4?'l':n<=6?'m':'s';
-    const row=m=>{ const c=liveMem['f'+m.id], gl=c&&c.chg&&now-c.chg<90000, last=[...m.ev].filter(e=>e.t!=='rc').sort((x,y)=>y.min-x.min)[0];
-      return `<div class="ttk-r ${m.st}${gl?' gl':''}" data-act="ttkfocus" data-id="${esc(m.id)}"><div class="ttk-row"><span class="ttk-t">${footLogo(m.hl,30)}<b>${esc(m.hn)}</b></span><span class="ttk-sc">${m.st==='pre'?'<i>vs</i>':`${m.hs}<i>-</i>${m.as}`}</span><span class="ttk-t r"><b>${esc(m.an)}</b>${footLogo(m.al,30)}</span></div><div class="ttk-meta">${gl?'<span class="ttk-bt">⚽ BUT !</span>':''}${ttkPill(m)}${last&&m.st!=='pre'?`<span>⚽ ${esc(last.p||'?')} ${esc(last.ms||last.min+"'")}</span>`:''}${m.ev.some(e=>e.t==='rc')?'<span>🟥</span>':''}</div></div>`; };
-    main=cd+`<div class="ttk-rows ${sz}">${L.map(row).join('')||'<div class="ttk-empty">Aucun match aujourd\'hui</div>'}</div>`;
+    // pendant le direct : seulement les matchs en cours + ceux qui commencent dans les 30 min (les autres sont dans le bandeau et le zoom)
+    let C=[...ms]; if(live.length) C=C.filter(m=>m.st==='in'||(m.st==='pre'&&Date.parse(m.d)-now<30*6e4)||rank(m)===0);
+    C.sort((a,b)=>rank(a)-rank(b)||(rank(a)===3?Date.parse(b.d)-Date.parse(a.d):Date.parse(a.d)-Date.parse(b.d)));
+    const dense=C.length>5;
+    const row=m=>{ const c=liveMem['f'+m.id], gl=c&&c.chg&&now-c.chg<90000, last=[...m.ev].filter(e=>e.t!=='rc').sort((x,y)=>y.min-x.min)[0], rc=m.ev.some(e=>e.t==='rc');
+      if(dense) return `<div class="ttk-r d ${m.st}${gl?' gl':''}" data-act="ttkfocus" data-id="${esc(m.id)}"><span class="ttk-dp">${gl?'<span class="ttk-bt">BUT</span>':ttkHT(m)?'<span class="ttk-p ht">MT</span>':ttkPill(m)}</span><span class="ttk-t">${footLogo(m.hl,24)}<b>${esc(m.hn)}</b></span><span class="ttk-sc">${m.st==='pre'?'<i>vs</i>':`${m.hs}<i>-</i>${m.as}`}</span><span class="ttk-t r"><b>${esc(m.an)}</b>${rc?'🟥':''}${footLogo(m.al,24)}</span></div>`;
+      return `<div class="ttk-r ${m.st}${gl?' gl':''}" data-act="ttkfocus" data-id="${esc(m.id)}"><div class="ttk-row"><span class="ttk-t">${footLogo(m.hl,30)}<b>${esc(m.hn)}</b></span><span class="ttk-sc">${m.st==='pre'?'<i>vs</i>':`${m.hs}<i>-</i>${m.as}`}</span><span class="ttk-t r"><b>${esc(m.an)}</b>${footLogo(m.al,30)}</span></div><div class="ttk-meta">${gl?'<span class="ttk-bt">⚽ BUT !</span>':''}${ttkPill(m)}${last&&m.st!=='pre'?`<span>⚽ ${esc(last.p||'?')} ${esc(last.ms||last.min+"'")}</span>`:''}${rc?'<span>🟥</span>':''}</div></div>`; };
+    let L, pg='';
+    if(dense){ // pages qui tournent toutes les 8 s ; les buts récents restent épinglés en haut
+      const pin=C.filter(m=>rank(m)===0), rest=C.filter(m=>rank(m)!==0), per=Math.max(1,(ttk.per||9)-pin.length), np=Math.max(1,Math.ceil(rest.length/per)), pb=Math.ceil(rest.length/np), pi=Math.floor(now/8000)%np;
+      L=[...pin,...rest.slice(pi*pb,pi*pb+pb)];
+      if(np>1) pg=`<div class="ttk-pg">${Array.from({length:np},(_,k)=>`<i class="${k===pi?'on':''}"></i>`).join('')}<span>${rest.length+pin.length} matchs · page ${pi+1}/${np}</span></div>`;
+    } else L=C.slice(0,cd?5:8);
+    const n=L.length+(cd?2:0)+(live.length?2:0), sz=dense?'dn':n<=3?'xl':n<=4?'l':n<=6?'m':'s';
+    main=cd+`<div class="ttk-rows ${sz}">${L.map(row).join('')||'<div class="ttk-empty">Aucun match aujourd\'hui</div>'}</div>${pg}`;
   }
   ttkSec(R.querySelector('.ttk-list'),'list',main);
-  const P=fm||state==='post'?[]:ttkProj(ms);
+  { const box=R.querySelector('.ttk-list'), rs=box?box.querySelectorAll('.ttk-r.d'):[]; if(rs.length){ const bb=box.getBoundingClientRect(), last=rs[rs.length-1].getBoundingClientRect(), pgH=(box.querySelector('.ttk-pg')||{offsetHeight:0}).offsetHeight, rh=last.height+4;
+    if(last.bottom+pgH>bb.bottom+1&&(ttk.per||9)>3){ ttk.per=(ttk.per||9)-1; ttk.cache.list=''; setTimeout(ttkDraw,30); }
+    else if(rs.length>=(ttk.per||9)&&bb.bottom-(last.bottom+pgH)>rh+6&&(ttk.per||9)<14){ ttk.per=(ttk.per||9)+1; } } }
+  const P=fm||state==='post'?[]:ttkProj(ms).slice(0,live.length>3?2:4);
   ttkSec(R.querySelector('.ttk-proj'),'proj',P.length?`<div class="ttk-pt">📈 Si ça reste comme ça…</div>${P.map(x=>`<div class="ttk-pr">${footLogo(x.r.logo,18)}<b>${esc(x.r.name)}</b><span class="${x.mv>0?'up':'dn'}">${x.mv>0?'▲':'▼'}${Math.abs(x.mv)}</span><span>${x.r.nr}${x.r.nr===1?'er':'e'}</span></div>`).join('')}`:'');
   // votes pendant le direct, sinon question pour le chat (change toutes les 12 s)
   const vm=(fm&&fm.st==='in')?fm:live.find(m=>!ttkHT(m))||null;
@@ -2834,7 +2881,7 @@ function ttkDraw(){
   R.classList.toggle('guide',!!ttk.guide); R.classList.toggle('ctl',!!ttk.ctl);
 }
 function ttkOpen(){
-  if(ttk.on) return; ttk.on=true; ttk.cache={}; ttk.ctl=true; ttk.focus=null; document.body.classList.add('ttk-on');
+  if(ttk.on) return; if(radio.on){ radioStop(); say('📻 Radio coupée : RMC ne doit pas passer dans ton live TikTok (droits d\'auteur).','warn'); } ttk.on=true; ttk.cache={}; ttk.ctl=true; ttk.focus=null; document.body.classList.add('ttk-on');
   const R=document.createElement('div'); R.id='ttk';
   R.innerHTML=`<div class="ttk-f"><div class="ttk-top"><span>STATIFY</span><button class="ttk-gear" data-act="ttkctl" title="Réglages">⚙</button></div><div class="ttk-head"></div><div class="ttk-list"></div><div class="ttk-proj"></div><div class="ttk-ask"></div><div class="ttk-tick"></div><div class="ttk-chat"><span>Zone des commentaires TikTok<br><small>(rien d'important ici)</small></span></div><div class="ttk-side"><span>Boutons TikTok</span></div></div><div class="ttk-ctl"></div>`;
   document.body.appendChild(R); ttkDraw(); clearInterval(ttk.timer); ttk.timer=setInterval(ttkDraw,1000);
@@ -2858,7 +2905,7 @@ function footTiktokView(){
   return `<div class="card"><h2>📱 Live TikTok</h2><p>Un écran vertical (9:16) prévu pour diffuser le multiplex en live sur TikTok : scores en direct, bandeau « BUT ! » avec son et confettis, classement « si ça reste comme ça », questions pour le chat et bandeau défilant.</p><button data-act="ttkopen" style="width:100%;font-size:16px;padding:14px">▶ Lancer le mode Live TikTok</button>
   <h3 style="margin-top:16px">Comment diffuser</h3><ol style="padding-left:20px;line-height:1.55;margin:0"><li>Sur ton ordinateur, ouvre Statify dans le navigateur et lance ce mode (bouton ⛶ pour le plein écran).</li><li>Dans <b>TikTok LIVE Studio</b>, ajoute une source « Capture de fenêtre » sur le navigateur, puis ta webcam dans le cadre « Ta caméra ici ».</li><li>Touche l'écran (ou ⚙) pour afficher les réglages : championnats, caméra oui/non, repères.</li><li>Active <b>🧭 Repères</b> pour voir où TikTok place les commentaires et ses boutons, puis coupe-les avant de lancer le live.</li></ol>
   <h3 style="margin-top:16px">Pendant le live</h3><ul style="padding-left:20px;line-height:1.55;margin:0"><li><b>Zoom</b> : touche un match pour l'afficher en grand (buteurs, stats, résumé IA s'il est terminé). « ✕ Multiplex » pour revenir.</li><li><b>Votes « Prochain but ? »</b> : tape sur l'équipe à chaque vote du chat. Quand un but tombe, l'écran félicite les bons pronostics et les votes repartent à zéro. Le vote porte sur le match zoomé, sinon sur le premier match en cours.</li><li><b>Mi-temps</b> et <b>fin du multiplex</b> : écrans automatiques avec le bilan.</li><li><b>Bandeaux télé</b> : but, but sur penalty, carton rouge et but refusé (VAR).</li><li>Ton <b>@pseudo TikTok</b> se règle dans la barre des réglages (⚙).</li></ul>
-  <p class="mut" style="font-size:12.5px;margin:12px 0 0">L'écran reste allumé tant que le mode est ouvert. Échap : sortir du zoom, puis du mode.</p></div>`;
+  <p class="mut" style="font-size:12.5px;margin:12px 0 0">L'écran reste allumé tant que le mode est ouvert. Échap : sortir du zoom, puis du mode. La radio RMC est coupée automatiquement en mode Live TikTok : la diffuser dans un live est interdit.</p></div>`;
 }
 function viewFoot(){
   const v={home:footHome,multi:footMultiView,matches:footMatchesView,table:footTableView,teams:footTeamsView,players:footPlayersView,records:footRecordsView,compare:footCompareView,cal:footCalView,tiktok:footTiktokView}[ui.ftab]||footHome;
