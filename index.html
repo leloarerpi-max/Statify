@@ -1849,7 +1849,7 @@ function duelCard(S){
   return `<div class="card"><h2>⚔️ Duel de la semaine</h2><p class="mut">Les deux joueurs avec le meilleur Game Score moyen sur les 7 derniers jours de matchs (au moins 2 matchs si possible).</p><div class="row between">${hd(a,ca)}${hd(b,cb)}</div>${rows}<div style="margin-top:8px"><button class="sec" data-act="cmpopen" data-a="${esc(a.p.id)}" data-b="${esc(b.p.id)}">Comparer en détail</button></div></div>`;
 }
 function viewCal(S){
-  if(!sched.length) return `<div class="card"><h2>Calendrier</h2><p>Pour voir tous les matchs de la saison :</p><ol><li>Va sur <b>nba.com/schedule</b>.</li><li>Clique sur ton favori « 🏀 Copier match NBA ».</li><li>Reviens ici et fais <b>Ctrl+V</b>.</li></ol><p class="mut">Si le favori a été installé avant cette version, glisse à nouveau le bouton du haut de la page dans ta barre de favoris pour le mettre à jour.</p></div>`;
+  if(!sched.length) return `<div class="card"><h2>Calendrier</h2><p>Pour voir tous les matchs de la saison :</p><p><button data-act="nbarefresh">🔄 Charger le calendrier</button></p><p class="mut">Ou, sur ordinateur :</p><ol><li>Va sur <b>nba.com/schedule</b>.</li><li>Clique sur ton favori « 🏀 Copier match NBA ».</li><li>Reviens ici et fais <b>Ctrl+V</b>.</li></ol><p class="mut">Si le favori a été installé avant cette version, glisse à nouveau le bouton du haut de la page dans ta barre de favoris pour le mettre à jour.</p></div>`;
   const done={}; Object.values(games).filter(g=>g.status===3).forEach(g=>{ done[g.id]=g; });
   const now=Date.now()-4*3600e3, mk=t=>{ const d=new Date(t); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); };
   const all=sched.filter(x=>!/^001/.test(x.id)&&x.h&&x.a&&Date.parse(x.t));
@@ -4692,6 +4692,97 @@ render=function(){
   if(id==='stuTags'){ const n=document.getElementById(id); if(n){ n.focus(); try{ n.setSelectionRange(s,s); }catch(e){} } }
   return r;
 };
+
+/* ---------- MON PACK : je choisis moi-même mes images (résultats, programme, cartons…) ---------- */
+const PK='suivi-stu-pack';
+const PRESET={nba:{n:'🌙 Pack de la nuit',k:['nres','nprog','ntop']},foot:{n:'⚽ Pack de la journée',k:['recap','scor','table']}};
+const packSel=sp=>{ const S=stuS(); if(!S.pack) S.pack=loadJ(PK,{}); const a=S.pack[sp]; return Array.isArray(a)?a:[]; };
+const packSave=(sp,a)=>{ const S=stuS(); if(!S.pack) S.pack=loadJ(PK,{}); S.pack[sp]=a; saveJ(PK,S.pack); S.packB=null; };
+const tplList=sp=>sp==='foot'?STU_TPL_F:STU_TPL_N;
+function packHtml(sp){
+  const sel=packSel(sp), L=tplList(sp).filter(t=>sel.includes(t[0])||true);
+  const chips=L.map(([k,n])=>`<label class="fbtn ${sel.includes(k)?'':'sec'}" style="display:inline-flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" data-pk="${k}" ${sel.includes(k)?'checked':''}> ${esc(n)}</label>`).join('');
+  return `<div class="stu-pack" style="margin:14px 0;padding:12px;border-radius:12px;background:rgba(255,255,255,.05)"><h3 style="margin:0 0 4px">🧺 Mon pack d'images</h3>
+  <p class="mut" style="margin:0 0 8px;font-size:12.5px">Coche les images que tu veux : Statify les crée toutes d'un coup, dans le format choisi plus bas.</p>
+  <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:8px"><button class="sec fbtn" data-act="stupackpre">${PRESET[sp].n}</button><button class="sec fbtn" data-act="stupackclr">Tout décocher</button></div>
+  <div class="row" style="gap:6px;flex-wrap:wrap">${chips}</div>
+  <div class="row" style="gap:6px;flex-wrap:wrap;margin-top:10px"><button data-act="stupackshare">↗ Partager le pack (<span id="stuPackN">${sel.length}</span>)</button><button class="sec" data-act="stupackdl">⬇ Télécharger le pack</button></div><div id="stuPackMsg" class="mut" style="font-size:12.5px;margin-top:6px"></div></div>`;
+}
+const _view2=viewStudio;
+viewStudio=function(sport){ let h=_view2(sport); return h.replace('<h3>2. Format',packHtml(sport)+'<h3>2. Format'); };
+
+async function packBuild(sp){
+  const S=stuS(), keys=packSel(sp), F=sp==='foot', tk=F?'tplF':'tplN', old=S[tk], oldCur=S.cur, out=[], skipped=[];
+  try{
+    for(const k of keys){
+      S[tk]=k; let D; try{ D=stuData(sp); }catch(e){ D={empty:e.message}; }
+      if(!D||D.empty){ skipped.push((tplList(sp).find(t=>t[0]===k)||[k,k])[1]); continue; }
+      S.cur=D; const cv=document.createElement('canvas'); await stuRender(cv,D,S.fmt);
+      const blob=await new Promise((res,rej)=>cv.toBlob(b=>b?res(b):rej(new Error('vide')),'image/png'));
+      out.push({k,blob,cap:D.caption||'',name:(D.theme||k)});
+    }
+  } finally { S[tk]=old; S.cur=oldCur; }
+  return {out,skipped};
+}
+function packMark(sp){ const S=stuS(), F=sp==='foot', tk=F?'tplF':'tplN', old=S[tk]; try{ packSel(sp).forEach(k=>{ S[tk]=k; stuMarkPosted(); }); } finally{ S[tk]=old; } }
+const pmsg=t=>{ const m=document.getElementById('stuPackMsg'); if(m) m.textContent=t; };
+async function packRun(sp,mode){
+  const S=stuS(); if(!packSel(sp).length){ pmsg('Coche au moins une image.'); return; }
+  if(S.packBusy) return;
+  let r=S.packB&&S.packB.key===S.fmt+'|'+packSel(sp).join()+'|'+S.lg?S.packB.r:null;
+  if(!r){ S.packBusy=true; pmsg('⏳ Création des images…'); try{ r=await packBuild(sp); S.packB={key:S.fmt+'|'+packSel(sp).join()+'|'+S.lg,r}; } catch(e){ S.packBusy=false; pmsg('⚠️ '+(e.message||e)); return; } S.packBusy=false; }
+  const {out,skipped}=r; if(!out.length){ pmsg('Rien à créer : aucune donnée pour ces modèles.'); return; }
+  const note=skipped.length?` (ignoré, pas de données : ${skipped.join(', ')})`:'';
+  const caps=out.map(o=>o.cap).filter(Boolean).join('\n\n———\n\n');
+  const files=out.map((o,i)=>new File([o.blob],`statify-${i+1}-${o.k}.png`,{type:'image/png'}));
+  if(mode==='dl'){ out.forEach((o,i)=>setTimeout(()=>stuDl(o.blob),i*400)); pmsg(`✓ ${out.length} images téléchargées.${note}`); return; }
+  try{
+    if(navigator.canShare&&navigator.canShare({files})){ try{ navigator.clipboard.writeText(caps).catch(()=>{}); }catch(x){} await navigator.share({files}); packMark(sp); pmsg(`✓ ${out.length} images partagées, légendes copiées.${note}`); render(); }
+    else { out.forEach((o,i)=>setTimeout(()=>stuDl(o.blob),i*400)); pmsg(`Partage indisponible : ${out.length} images téléchargées.${note}`); }
+  }catch(err){ if(err&&err.name==='AbortError') return; if(err&&err.name==='NotAllowedError') pmsg(`✓ ${out.length} images prêtes${note}. Touche une 2e fois « Partager le pack ».`); else pmsg('⚠️ Partage impossible : '+(err.message||err)); }
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest&&e.target.closest('.stu [data-act^=stupack]'); if(!b) return; e.stopImmediatePropagation(); e.preventDefault();
+  const a=b.dataset.act, sp=ui.sport==='foot'?'foot':'nba';
+  if(a==='stupackpre'){ packSave(sp,PRESET[sp].k.filter(k=>tplList(sp).some(t=>t[0]===k))); render(); }
+  else if(a==='stupackclr'){ packSave(sp,[]); render(); }
+  else if(a==='stupackshare') packRun(sp,'share'); else if(a==='stupackdl') packRun(sp,'dl');
+},true);
+document.addEventListener('change',e=>{ const t=e.target; if(!t||!t.dataset||!t.dataset.pk) return; e.stopImmediatePropagation();
+  const sp=ui.sport==='foot'?'foot':'nba', k=t.dataset.pk, a=packSel(sp).filter(x=>x!==k); if(t.checked) a.push(k);
+  const order=tplList(sp).map(x=>x[0]); a.sort((x,y)=>order.indexOf(x)-order.indexOf(y)); packSave(sp,a);
+  t.parentElement.classList.toggle('sec',!t.checked); const n=document.getElementById('stuPackN'); if(n) n.textContent=a.length; },true);
+
+/* ---------- iPhone : si Safari bloque la lecture directe d'ESPN, nouvel essai via un relais ---------- */
+const _fetch=window.fetch.bind(window);
+window.fetch=function(u,o){
+  const url=typeof u==='string'?u:(u&&u.url)||'';
+  if(!/^https:\/\/site\.api\.espn\.com\//.test(url)) return _fetch(u,o);
+  return _fetch(u,o).catch(err=>{ if(err&&err.name==='AbortError') throw err; return _fetch('https://corsproxy.io/?url='+encodeURIComponent(url),o); });
+};
+
+/* ---------- calendrier NBA : si nba.com est injoignable, on le reconstruit depuis ESPN ---------- */
+async function espnSchedule(){
+  if(sched.length&&!sched.every(x=>/^espn/.test(x.id))) return false;
+  const now=new Date(), sy=now.getMonth()>=7?now.getFullYear():now.getFullYear()-1, out=[], seen=new Set(); let okReq=0;
+  const mk=(y,m)=>new Date(Date.UTC(y,m,1)).toISOString().slice(0,10).replace(/-/g,''), me=(y,m)=>new Date(Date.UTC(y,m+1,0)).toISOString().slice(0,10).replace(/-/g,'');
+  const months=[[sy,9],[sy,10],[sy,11],[sy+1,0],[sy+1,1],[sy+1,2],[sy+1,3],[sy+1,4],[sy+1,5]];
+  const fin=Object.values(games).filter(g=>g.status===3);
+  for(let i=0;i<months.length;i+=3){
+    await Promise.all(months.slice(i,i+3).map(async([y,m])=>{
+      try{ const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${mk(y,m)}-${me(y,m)}&limit=500`); if(!r.ok) return; const j=await r.json(); okReq++;
+        for(const e of (j.events||[])){ if(seen.has(e.id)) continue; if(e.season&&e.season.type&&e.season.type<2) continue;
+          const cs=((e.competitions||[])[0]||{}).competitors||[], h=cs.find(c=>c.homeAway==='home'), w=cs.find(c=>c.homeAway==='away'); if(!h||!w) continue; seen.add(e.id);
+          const H=etri(h.team.abbreviation), A=etri(w.team.abbreviation), t=Date.parse(e.date)||0, st=e.status&&e.status.type&&e.status.type.state, s=st==='post'?3:st==='in'?2:1;
+          const g=fin.find(x=>x.home&&x.away&&x.home.tri===H&&x.away.tri===A&&Math.abs((tms(x)||0)-t)<36*36e5);
+          out.push({id:g?g.id:'espn'+e.id,t:new Date(t).toISOString(),h:H,a:A,s}); }
+      }catch(e){} })); }
+  if(!okReq||out.length<20) return false;
+  out.sort((a,b)=>Date.parse(a.t)-Date.parse(b.t)); sched=out; saveJ(KEYS,sched); return true;
+}
+const _espnRef=nbaEspnRefresh;
+nbaEspnRefresh=async function(why){ let ok=false; try{ say('⏳ NBA : construction du calendrier via ESPN…','warn'); ok=await espnSchedule(); }catch(e){ console.error(e); }
+  await _espnRef(why); if(ok){ render(); say(`✓ Calendrier chargé : ${sched.length} matchs.`,'ok'); } };
 })();
 
 </script>
