@@ -5022,6 +5022,7 @@ function dayCard(){
     return `<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:8px 0;border-top:1px solid #ffffff14"><div style="flex:1;min-width:170px"><b>${p.t}</b><div class="mut" style="font-size:12.5px">${esc(l)}</div></div>
     <div class="row" style="gap:6px">${can?`<button class="${k==='now'?'':'sec'}" data-act="daypost" data-id="${p.id}">↗ Partager</button><button class="sec" data-act="daydl" data-id="${p.id}">⬇</button>`:''}${k!=='done'&&p.ok?`<button class="sec" data-act="dayok" data-id="${p.id}">✓ Posté</button>`:''}</div></div>`; }).join('');
   return `<div class="card" id="dayPack" style="${due.length?'border-color:#ffb020':''}"><div class="row between"><h2 style="margin:0">📅 Mon pack du jour</h2><span class="mut" style="font-size:13px">${nDone}/${P.length} posté${nDone>1?'s':''}</span></div>
+  <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="mut" style="font-size:12.5px">Images :</span><button class="${stuS().lang!=='en'?'':'sec'} fbtn" data-act="stulang" data-k="fr">🇫🇷 FR</button><button class="${stuS().lang==='en'?'':'sec'} fbtn" data-act="stulang" data-k="en">🇬🇧 EN</button></div>
   ${due.length?`<p style="margin:8px 0 0;color:#ffb020;font-weight:700">⏰ À poster maintenant : ${due.map(p=>p.t).join(' · ')}</p>`:'<p class="mut" style="margin:6px 0 0;font-size:13px">Les images se créent en 9:16 (TikTok), avec la légende copiée au partage.</p>'}
   ${rows}<div id="dayMsg" class="mut" style="font-size:12.5px;margin-top:6px"></div></div>`; }
 async function dayBuild(post){
@@ -5037,7 +5038,7 @@ const dmsg=t=>{ const m=document.getElementById('dayMsg'); if(m) m.textContent=t
 const dayCache={};
 async function dayRun(id,mode){
   const post=dayPosts().find(p=>p.id===id); if(!post||!post.ok){ dmsg('Pas encore de données pour cette publication.'); return; }
-  const ck=id+'|'+post.items.map(i=>i.k+(i.lg||'')).join(); let r=dayCache[ck]&&Date.now()-dayCache[ck].at<10*6e4?dayCache[ck].r:null;
+  const ck=id+'|'+stuS().lang+'|'+(stuS().sportCol!==false)+'|'+post.items.map(i=>i.k+(i.lg||'')).join(); let r=dayCache[ck]&&Date.now()-dayCache[ck].at<10*6e4?dayCache[ck].r:null;
   if(!r){ dmsg('⏳ Création des images…'); try{ r=await dayBuild(post); }catch(e){ dmsg('⚠️ '+(e.message||e)); return; } dayCache[ck]={at:Date.now(),r}; }
   const {out}=r; if(!out.length){ dmsg('Rien à créer : pas de données pour cette publication.'); return; }
   const caps=out.map(o=>o.cap).filter(Boolean).join('\n\n———\n\n'), files=out.map((o,i)=>new File([o.blob],`statify-${id}-${i+1}.png`,{type:'image/png'}));
@@ -5051,6 +5052,171 @@ const _vh2=viewHome; viewHome=function(){ return dayCard()+_vh2.apply(this,argum
 const _fh2=footHome; footHome=function(){ const h=_fh2.apply(this,arguments); return typeof h==='string'?dayCard()+h:h; };
 document.addEventListener('click',e=>{ const b=e.target.closest&&e.target.closest('#dayPack [data-act]'); if(!b) return; e.stopImmediatePropagation(); e.preventDefault();
   const a=b.dataset.act, id=b.dataset.id; if(a==='daypost') dayRun(id,'share'); else if(a==='daydl') dayRun(id,'dl'); else if(a==='dayok'){ dayMark(id); render(); } },true);
+
+
+
+/* ================= STUDIO : version anglaise (TikTok international) + couleur par sport ================= */
+const OPTK='suivi-stu-opt';
+const optLoad=()=>{ try{ return JSON.parse(localStorage.getItem(OPTK))||{}; }catch(e){ return {}; } };
+const optSave=()=>{ const S=stuS(); try{ localStorage.setItem(OPTK,JSON.stringify({lang:S.lang||'en',sportCol:S.sportCol!==false})); }catch(e){} };
+(function(){ const S=stuS(), o=optLoad(); if(S.lang===undefined) S.lang=o.lang||'en'; if(S.sportCol===undefined) S.sportCol=o.sportCol!==false; })();
+const MON={janvier:'Jan',février:'Feb',fevrier:'Feb',mars:'Mar',avril:'Apr',mai:'May',juin:'Jun',juillet:'Jul',août:'Aug',aout:'Aug',septembre:'Sep',octobre:'Oct',novembre:'Nov',décembre:'Dec',decembre:'Dec',janv:'Jan',févr:'Feb',avr:'Apr',juil:'Jul',sept:'Sep',oct:'Oct',nov:'Nov',déc:'Dec'};
+const DAY={lundi:'Monday',mardi:'Tuesday',mercredi:'Wednesday',jeudi:'Thursday',vendredi:'Friday',samedi:'Saturday',dimanche:'Sunday'};
+const LGN={'Ligue des champions':'Champions League','Conférence League':'Conference League','Ligue Europa':'Europa League'};
+const ORD=n=>{ n=+n; const s=n%100>=11&&n%100<=13?'th':({1:'st',2:'nd',3:'rd'})[n%10]||'th'; return n+s; };
+const pl=(n,a,b)=>`${n} ${+n===1?a:b}`;
+const FORM=s=>s.replace(/(^|[\s·:(])([VDN])(?=$|[\s·,)])/g,(m,a,b)=>a+({V:'W',D:'L',N:'D'})[b]);
+const EXACT={'Note':'Rating','Nul':'Draw','Forme':'Form','FORME':'FORM','pts/m':'ppg','3 points':'3PT','Cartons':'Cards','Buts':'Goals','Statify':'Statify'};
+function trEn(s,sp){
+  if(typeof s!=='string'||!s) return s; if(EXACT[s]) return EXACT[s]; if(/^(\d+)(?:er|e)$/.test(s)) return ORD(parseInt(s)); const F=sp==='foot', G=F?'matches':'games', g1=F?'match':'game';
+  let t=s;
+  const R=[
+   // --- règles prioritaires ---
+   [/💙 (.+?) : (\d+)(?:er|e) de (.+?) avec (\d+) points \((\d+)V (\d+)N (\d+)D\)/g,(m,a,b,c,d,e,f,g)=>`💙 ${a}: ${ORD(b)} in ${c} with ${d} points (${e}W ${f}D ${g}L)`],
+   [/(\d+)V (\d+)N (\d+)D/g,'$1W $2D $3L'],
+   [/Le match de la journée en (.+?) !/g,'Game of the day in $1!'],
+   [/plus large victoire/g,'biggest win'],[/buts sur (\d+) matchs?/g,(m,n)=>`goals in ${pl(n,'match','matches')}`],[/\btirs : /g,'shots: '],[/\bcartons? rouges?\b/g,'red cards'],[/ arr\./g,' saves'],
+   [/Ton homme du match \?/g,'Your man of the match?'],
+   [/Foot · (\d+) matchs?/g,(m,n)=>`Football · ${pl(n,'match','matches')}`],
+   [/(\d+) buts?, 🅰️ (\d+) passes? décisives?, (\d+) tirs dont (\d+) cadrés?/g,(m,a,b,c,d)=>`${pl(a,'goal','goals')}, 🅰️ ${pl(b,'assist','assists')}, ${pl(c,'shot','shots')} (${d} on target)`],
+   [/(\d+) buts?, (\d+) passes? décisives?/g,(m,a,b)=>`${pl(a,'goal','goals')}, ${pl(b,'assist','assists')}`],
+   [/(\d+) passes? déc\./g,(m,n)=>pl(n,'assist','assists')],[/Passes déc\./g,'Assists'],[/(\d+) passes? décisives?/g,(m,n)=>pl(n,'assist','assists')],
+   [/Tirs cadrés/g,'Shots on target'],[/(\d+) tirs : /g,'$1 shots: '],[/Cadrés/g,'On target'],[/ cadrés/g,' on target'],
+   [/Le déroulé :/g,'How it went:'],[/ouvre le score pour/g,'opens the scoring for'],[/égalise pour/g,'equalizes for'],[/réduit l'écart pour/g,'pulls one back for'],[/redonne l'avantage à/g,'puts it back in front for'],[/double la mise pour/g,'doubles the lead for'],[/creuse l'écart pour/g,'extends the lead for'],[/enfonce le clou pour/g,'adds another for'],[/aggrave le score pour/g,'adds to the score for'],
+   [/signe un (?:triplé|hat-trick)/g,'scores a hat-trick'],[/s'offre un (?:doublé|brace)/g,'scores a brace'],[/ \(passe de ([^)]+)\)/g,' (assist: $1)'],
+   [/, l'équipe la plus dangereuse/g,', the most dangerous team'],[/ l'équipe la plus dangereuse/g,' the most dangerous team'],
+   [/([\d.,]+) pts marqués · ([\d.,]+) encaissés/g,'$1 pts scored · $2 allowed'],[/de sa conférence/g,'of his conference'],[/au classement/g,'in the standings'],[/DERNIER MATCH · VICTOIRE/gi,'Last game · Win'],[/Dernier match · /g,'Last game · '],[/Forme/g,'Form'],
+   [/Tu le connais \?/g,'Do you know him?'],[/Le match de la journée/g,'Game of the day'],[/L'affiche de la journée/g,'Headline match'],
+   [/Joueurs à suivre/g,'Players to watch'],
+   // dates
+   [/Nuit du (\d+) au (\d+) (janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)(?![\wÀ-ÿ])/gi,(m,a,b,c)=>`Night of ${MON[c.toLowerCase()]} ${a}–${b}`],
+   [/Nuit du (\d+) (janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre) au (\d+) (janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)(?![\wÀ-ÿ])/gi,(m,a,b,c,d)=>`Night of ${MON[b.toLowerCase()]} ${a}–${MON[d.toLowerCase()]} ${c}`],
+   [/(\d+) au (\d+) (janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)(?![\wÀ-ÿ])/gi,(m,a,b,c)=>`${MON[c.toLowerCase()]} ${a}–${b}`],
+   [/(\d{1,2}) (janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre|janv|févr|avr|juil|sept|oct|nov|déc)(?![\wÀ-ÿ])\.?/gi,(m,a,b)=>`${MON[b.toLowerCase()]} ${a}`],
+   [/\b(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\b/gi,(m)=>DAY[m.toLowerCase()]],
+   [/heure de Paris/g,'Paris time'],
+   // grandes phrases NBA
+   [/Les résultats de la nuit en NBA \((\d+) matchs?\)/g,(m,n)=>`Last night's NBA results (${pl(n,'game','games')})`],
+   [/Les résultats de la nuit 🏀/g,"Last night's results 🏀"],[/Résultats de la nuit/g,"Last night's results"],[/Les résultats de la nuit/g,"Last night's results"],
+   [/Le match de la nuit \?/g,'Game of the night?'],
+   [/Le programme NBA de la nuit : (\d+) matchs?/g,(m,n)=>`Tonight's NBA schedule: ${pl(n,'game','games')}`],
+   [/Le programme de la nuit/g,"Tonight's schedule"],[/Programme de la nuit/g,"Tonight's schedule"],
+   [/Tu veilles pour quel match \?/g,'Which game are you staying up for?'],
+   [/La perf de la nuit/g,'Performance of the night'],
+   [/Il mérite le MVP \?/g,'Does he deserve the MVP?'],
+   [/Les cartons de la nuit en NBA :/g,'Top performers of the night in the NBA:'],[/Les cartons de la nuit/g,'Top performers of the night'],
+   [/Le meilleur de la nuit \?/g,'Best of the night?'],
+   [/Ton MVP du match \?/g,'Your MVP of the game?'],
+   [/Top marqueurs/g,'Top scorers'],
+   [/Les (.+?) s'imposent au bout du suspense/g,'$1 win a thriller'],[/au bout du suspense/g,'in a thriller'],
+   [/Les (\w[\w .'-]*?) s'imposent/g,'$1 win'],
+   [/Les (\w+) perdent (\d+)-(\d+) contre les (\w+)/g,'The $1 lose $2-$3 to the $4'],[/Les (\w+) gagnent (\d+)-(\d+) contre les (\w+)/g,'The $1 beat the $4 $2-$3'],
+   [/victoire des (\w+)/g,'$1 win'],[/victoire (?=\S)/g,'win '],[/Victoire/g,'Win'],[/Défaite/g,'Loss'],[/défaite/g,'loss'],
+   [/\(rivalité\)/g,'(rivalry)'],[/Rivalité/g,'Rivalry'],[/RIVALITÉ/g,'RIVALRY'],
+   [/\(prolongation\)/g,'(overtime)'],[/\bprol\./g,'OT'],
+   [/L'affiche de la nuit/g,'Game of the night'],[/L'affiche de la journée/g,'Match of the day'],[/L'affiche : /g,'Headliner: '],[/À ne pas rater : /g,'Not to miss: '],
+   [/Avant-match NBA/g,'NBA preview'],[/Avant-match/g,'Pre-match'],
+   [/Ton prono \? Donne-moi le score exact/g,'Your prediction? Give me the exact score'],[/Ton prono \?/g,'Your prediction?'],
+   [/📊 Bilans :/g,'📊 Records:'],[/📈 5 derniers :/g,'📈 Last 5:'],[/⚔️ Cette saison :/g,'⚔️ This season:'],[/⭐ À suivre :/g,'⭐ Watch:'],
+   [/\(([\d.,]+) pts\/match\)/g,(m,n)=>`(${n.replace(',','.')} ppg)`],
+   [/Qui va gagner \?/g,'Who wins?'],[/Vote en commentaire/g,'Vote in the comments'],[/cette nuit : qui gagne \?/g,'tonight: who wins?'],[/ : qui va gagner \?/g,': who wins?'],[/qui gagne \?/g,'who wins?'],
+   [/Écris en commentaire :/g,'Drop it in the comments:'],[/❌ = match nul/g,'❌ = draw'],[/Bonus : l'écart de points/g,'Bonus: the point margin'],[/Bonus : donne le score exact/g,'Bonus: give the exact score'],
+   [/Le classement à l'(Est|Ouest)/g,(m,a)=>`${a==='Est'?'East':'West'}ern standings`],[/Le classement de la conférence (\w+) en NBA :/g,'📊 NBA standings:'],
+   [/Conférence Est/g,'Eastern Conference'],[/Conférence Ouest/g,'Western Conference'],
+   [/Qui va aller au bout \?/g,'Who goes all the way?'],[/série ([VD])(\d+)/g,(m,a,b)=>`streak ${a==='V'?'W':'L'}${b}`],
+   [/Le duel ⚔️/g,'The duel ⚔️'],[/Tu choisis qui \?/g,'Who do you pick?'],[/⚔️ (.+?) ou (.+?) \?/g,'⚔️ $1 or $2?'],
+   [/moyennes par match/g,'per-game averages'],
+   [/\b(1er|2e|3e|4e|5e|6e|7e|8e|9e|\d+e) (?=à l'|de |au )/g,(m,a)=>ORD(parseInt(a))+' '],[/à l'Est/g,'in the East'],[/à l'Ouest/g,'in the West'],
+   [/⏮️ Dernier match :/g,'⏮️ Last game:'],[/⏭️ Prochain :/g,'⏭️ Next:'],[/Dernier match · /g,'Last game · '],[/Prochain match/g,'Next game'],
+   [/Allez (\S+?) !/g,'Go $1!'],
+   [/Pas de match NBA en mémoire/g,'No NBA game in memory'],
+   // chiffres NBA
+   [/(\d+) pts, (\d+) reb, (\d+) pas, (\d+\/\d+) aux tirs/g,'$1 pts, $2 reb, $3 ast, $4 FG'],
+   [/(\d+) pas\b/g,'$1 ast'],[/\baux tirs\b/g,'FG'],[/ (\d+) reb\b/g,' $1 reb'],
+   [/(\d+) rebonds/g,(m,n)=>pl(n,'rebound','rebounds')],[/(\d+) passes décisives/g,(m,n)=>pl(n,'assist','assists')],[/(\d+) passes décisive/g,(m,n)=>pl(n,'assist','assists')],[/(\d+) passes?\b/g,(m,n)=>pl(n,'assist','assists')],
+   [/(\d+) interceptions?/g,(m,n)=>pl(n,'steal','steals')],[/(\d+) contres?/g,(m,n)=>pl(n,'block','blocks')],
+   [/(\d+) points cette nuit/g,'$1 points tonight'],[/ à 3 points/g,' from three'],[/ % de réussite au tir/g,'% from the field'],
+   [/(\d+) pts par rapport à sa moyenne/g,'$1 pts above his average'],[/contre les /g,'vs the '],[/ : TRIPLE-DOUBLE/g,': TRIPLE-DOUBLE'],
+   [/Adresse :/g,'FG:'],[/Adresse %/g,'FG %'],[/3 points %/g,'3PT %'],[/ · 3 pts :/g,' · 3PT:'],[/ · Rebonds :/g,' · Rebounds:'],[/ · Passes :/g,' · Assists:'],[/ · Pertes :/g,' · Turnovers:'],
+   [/Pertes de balle/g,'Turnovers'],[/\bInterceptions\b/g,'Steals'],[/\bContres\b/g,'Blocks'],[/\bRebonds\b/g,'Rebounds'],[/\bPasses\b/g,'Assists'],[/\bTirs\b/g,F?'Shots':'FG'],
+   [/ : (Points|Buts)/g,': $1'],
+   // foot
+   [/Le récap de la journée en (.+?) ⚽ (\d+) buts ?!/g,'Matchday recap in $1 ⚽ $2 goals!'],[/Le récap de la journée ⚽/g,'Matchday recap ⚽'],[/Le récap de la journée en/g,'Matchday recap in'],[/Récap de la journée/g,'Matchday recap'],[/Journée terminée/g,'Matchday complete'],
+   [/Ton avis en commentaire/g,'Your take in the comments'],[/Ton avis \?/g,'Your take?'],
+   [/(.+?) s'impose \((\d+-\d+)\)/g,'$1 win ($2)'],[/ s'impose/g,' win'],[/Match nul/g,'Draw'],[/ nul\b/g,' draw'],
+   [/\(classique\)/g,'(classic)'],[/\(choc au sommet\)/g,'(top-of-the-table clash)'],[/Choc au sommet/g,'Top-of-the-table clash'],[/Duel pour le maintien/g,'Relegation battle'],[/Classique/g,'Classic'],[/\(duel pour le maintien\)/g,'(relegation battle)'],
+   [/Le programme (?:de )?(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) ⚽/g,'$1\'s schedule ⚽'],[/Le programme du week-end ⚽/g,'Weekend schedule ⚽'],[/Le programme des prochains jours ⚽/g,'Upcoming schedule ⚽'],[/Le programme de la période ⚽/g,'Schedule ⚽'],[/Le programme de la journée ⚽/g,'Schedule ⚽'],
+   [/📅 Le programme foot : (\d+) matchs à suivre !/g,(m,n)=>`📅 Football schedule: ${n} ${+n===1?'match':'matches'} to watch (Paris time)!`],[/📅 Le programme (.+?) : (\d+) matchs à suivre !/g,(m,a,n)=>`📅 Schedule ${a}: ${n} matches to watch!`],
+   [/Programme du week-end/g,'Weekend schedule'],[/Programme à venir/g,'Upcoming schedule'],
+   [/Quel match tu regardes \?/g,'Which match are you watching?'],
+   [/Le classement 📊/g,'The table 📊'],[/📊 Le classement de (.+?) :/g,'📊 $1 table:'],[/📊 Le classement de (.+?) après cette journée\./g,'📊 $1 table after this matchday.'],[/Qui sera champion \?/g,'Who wins the title?'],[/Qui finit en tête ce soir \?/g,'Who finishes top tonight?'],
+   [/Si ça reste comme ça \/ Classement/g,'If it stays like this / Table'],[/Si ça reste comme ça… 📈/g,'If it stays like this… 📈'],[/🔴 EN DIRECT : si ça reste comme ça…/g,'🔴 LIVE: if it stays like this…'],[/📈 Si ça reste comme ça/g,'📈 If it stays like this'],[/Si ça reste comme ça/g,'If it stays like this'],[/EN DIRECT/g,'LIVE'],[/Classement en direct/g,'Live table'],
+   [/(\d+) J\b/g,'$1 P'],[/Classement/g,'Table'],
+   [/Le joueur (?:de la journée|du week-end|de la période) en (.+?) :/g,'Player of the matchday in $1:'],[/Le joueur (?:de la journée|du week-end|de la période) ⭐/g,'Player of the matchday ⭐'],[/Le joueur (?:de la journée|du week-end|de la période)/g,'Player of the matchday'],[/Le joueur du week-end/g,'Player of the weekend'],
+   [/Tu valides \?/g,'Agree?'],[/📊 Note Statify : ([\d.,]+)\/10/g,(m,n)=>`📊 Statify rating: ${n.replace(',','.')}/10`],
+   [/(\d+) buts?, 🅰️ (\d+) passes? décisives?, (\d+) tirs dont (\d+) cadrés?/g,(m,a,b,c,d)=>`${pl(a,'goal','goals')}, 🅰️ ${pl(b,'assist','assists')}, ${pl(c,'shot','shots')} (${d} on target)`],
+   [/(\d+) buts?, (\d+) passes? décisives?/g,(m,a,b)=>`${pl(a,'goal','goals')}, ${pl(b,'assist','assists')}`],
+   [/L'équipe type de la journée en (.+?) \(([\d-]+), d'après les stats\) :/g,'Team of the matchday in $1 ($2, based on stats):'],[/L'équipe type de la journée/g,'Team of the matchday'],[/L'équipe type/g,'Team of the week'],[/Qui manque selon toi \?/g,'Who\'s missing, in your view?'],[/Qui manque \?/g,"Who's missing?"],[/d'après les stats/g,'based on stats'],
+   [/Les chiffres de la journée en (.+?) :/g,'Matchday numbers in $1:'],[/Les chiffres de la journée/g,'Matchday numbers'],[/Quel chiffre te surprend (?:le plus )?\?/g,'Which number surprises you?'],
+   [/(\d+) buts en (\d+) matchs/g,(m,a,b)=>`${pl(a,'goal','goals')} in ${pl(b,'match','matches')}`],[/buts en (\d+) matchs/g,(m,b)=>`goals in ${pl(b,'match','matches')}`],[/([\d.,]+) buts par match/g,(m,n)=>`${n.replace(',','.')} goals per match`],[/buts par match/g,'goals per match'],
+   [/but le plus rapide/g,'fastest goal'],[/but le plus tardif/g,'latest goal'],[/plus large victoire/g,'biggest win'],[/plus grosse possession/g,'highest possession'],[/, l'équipe la plus dangereuse/g,', the most dangerous team'],
+   [/(\d+) cartons? rouges?/g,(m,n)=>pl(n,'red card','red cards')],[/ rouge\b/g,' red'],[/(\d+) doublés ou plus/g,'$1 braces or more'],[/doublés ou plus/g,'braces or more'],[/(?<![\wÀ-ÿ])doublé(?![\wÀ-ÿ])/g,'brace'],[/(?<![\wÀ-ÿ])triplé(?![\wÀ-ÿ])/g,'hat-trick'],[/, le plus tardif/g,', the latest'],[/ renverse /g,' comeback '],[/accroché/g,'held'],
+   [/(\d+) tirs : /g,'$1 shots: '],
+   [/Les buteurs 🎯/g,'Top scorers 🎯'],[/Les buteurs/g,'Top scorers'],[/Qui finira meilleur buteur \?/g,'Who finishes top scorer?'],[/🎯 Les meilleurs buteurs de (.+?) :/g,'🎯 Top scorers in $1:'],[/matchs chargés/g,'season stats'],
+   [/ (\d+) buts?\b/g,(m,n)=>' '+pl(n,'goal','goals')],[/(\d+) passes? déc\./g,(m,n)=>pl(n,'assist','assists')],[/Passes déc\./g,'Assists'],[/Buts \/ match/g,'Goals / game'],[/\bButs\b/g,'Goals'],[/\bbuts\b/g,'goals'],[/\bTirs cadrés\b/g,'Shots on target'],[/\bCadrés\b/g,'On target'],[/\bMatchs\b/g,'Games'],[/\bmatchs\b/g,G],[/\bmatch\b/g,g1],
+   [/Le duel ⚔️/g,'The duel ⚔️'],
+   [/ARRÊTS/g,'SAVES'],[/Arrêts/g,'Saves'],[/Buts encaissés/g,'Goals conceded'],[/ arrêts/g,' saves'],[/ décisive/g,' assist'],[/, clean sheet/g,', clean sheet'],[/ \(pen\.\)/g,' (pen.)'],[/ \(csc\)/g,' (og)'],
+   [/Terminé/g,F?'Full time':'Final'],[/Tirs cadrés/g,'Shots on target'],
+   [/Forme \(5 derniers\)/g,'Form (last 5)'],[/Bilan cette saison/g,'Season record'],[/Face à face/g,'Head to head'],[/Joueurs à suivre/g,'Players to watch'],[/ · repos/g,' · rest'],[/Reposé · (\d+) j/g,'Rested · $1 d'],[/2e soir de suite/g,'2nd night in a row'],[/ · victoire (\w+)/g,' · $1 win'],
+   [/Mon club/g,'My club'],[/Mon équipe/g,'My team'],[/Duel de joueurs/g,'Player duel'],[/Sondage : qui gagne \?/g,'Poll: who wins?'],[/L'équipe type/g,'Team of the week'],[/Les chiffres de la journée/g,'Matchday numbers'],
+   [/Ce soir\b/g,'Tonight'],[/Foot · (\d+) matchs?/g,(m,n)=>`Football · ${pl(n,'match','matches')}`],[/\bFoot\b/g,'Football'],
+   [/💙 (.+?) : (\d+)(?:er|e) de (.+?) avec (\d+) points \((\d+)V (\d+)N (\d+)D\)/g,(m,a,b,c,d,e,f,g)=>`💙 ${a}: ${ORD(b)} in ${c} with ${d} points (${e}W ${f}D ${g}L)`],[/📈 Forme :/g,'📈 Form:'],
+   [/(\d+) points/g,'$1 points'],
+   [/Le match de la journée/g,'Match of the matchday'],[/score final/g,'final score'],[/Le match de la journée en (.+?) !/g,'Match of the matchday in $1!'],
+   [/ ! 👇/g,'! 👇'],
+  ];
+  for(const [re,rep] of R){ t=t.replace(re,rep); }
+  t=t.replace(/(\d),(\d)/g,'$1.$2').replace(/ +([!?:])(?=\s|$)/g,'$1');
+  for(const [k,v] of Object.entries(LGN)) t=t.split(k).join(v);
+  if(/5 derniers|Last 5|Form:/.test(t)) t=t.split('\n').map(l=>/Last 5|Form:/.test(l)?FORM(l):l).join('\n');
+  // hashtags
+  t=t.replace(/#NBAFrance/g,'#NBAtok').replace(/#basket\b/g,'#basketball').replace(/#foot\b/g,'#soccer').replace(/#prono\b/g,'#prediction').replace(/#classement\b/g,'#standings').replace(/#buteur\b/g,'#topscorer').replace(/#equipetype\b/g,'#teamoftheweek').replace(/#programme\b/g,'#fixtures').replace(/#direct\b/g,'#live');
+  t=t.replace(/((?:#\w+ ?){2,})$/m,m=>{ const seen=new Set(); return m.trim().split(/\s+/).filter(x=>{ const k=x.toLowerCase(); if(seen.has(k)) return false; seen.add(k); return true; }).join(' '); });
+  return t;
+}
+window.trEn=trEn;
+const sportOf=D=>(D&&D.sp)||(window.__stuSport)||(ui.sport==='foot'?'foot':'nba');
+const SKIP=new Set(['id','hl','al','lo','ol','col','hc','ac','k','ini','tri','htri','atri','otri','h','a','n','name','sp','theme','img','logo','clubCol','_t','d','t','mi','ms','p','p2']);
+const trDeep=(v,sp,key,dep)=>{ if(dep>6) return v; if(typeof v==='string'){ if(SKIP.has(key)||/^(https?:|data:|#[0-9a-f]{3,8}$)/i.test(v)||v.length<3) return v; return trEn(v,sp); } if(Array.isArray(v)) return v.map(x=>trDeep(x,sp,key,dep+1)); if(v&&typeof v==='object'&&!(v instanceof Node)&&!(v instanceof HTMLElement)){ const o={}; for(const k of Object.keys(v)) o[k]=trDeep(v[k],sp,k,dep+1); return o; } return v; };
+const trD=(D,sp)=>{ if(!D||D.empty) return D; const o={}; for(const k of Object.keys(D)){ o[k]=(k==='src'||k==='list'||k==='_t'||k==='cur')?D[k]:trDeep(D[k],sp,k,0); } return o; };
+
+/* données : on marque le sport et on traduit titre / légende */
+const _data5=stuData;
+stuData=function(sport){ let D=_data5(sport); if(D&&!D.empty){ D.sp=sport; if(stuS().lang==='en') D=trD(D,sport); } return D; };
+const _slides2=stuSlides; stuSlides=function(sport){ const L=_slides2(sport); L.forEach(d=>{ if(d&&!d.sp) d.sp=sport; }); return L; };
+
+/* rendu : textes anglais sur le canvas, couleur du sport, bande + pastille */
+const SPCOL={nba:{bg:['#1a0e05','#2b1405'],g1:'#ff7a1a',g2:'#ff3d00',acc:'#ffb066',pill:'#ff7a1a',pt:'NBA'},foot:{bg:['#041a0e','#0a2a18'],g1:'#22c55e',g2:'#0ea5a4',acc:'#86efac',pill:'#22c55e',pt:'FOOT'}};
+const _th5=stuTheme;
+stuTheme=function(D){ const S=stuS(), base=_th5(D); if(S.sportCol!==false&&(!S.theme||S.theme==='auto')){ const c=SPCOL[sportOf(D)]; if(c) return {...base,bg:c.bg,g1:c.g1,g2:c.g2,acc:c.acc}; } return base; };
+const _rend5=stuRender;
+stuRender=async function(cv,D,fmt){
+  const S=stuS(), en=S.lang==='en', sp=sportOf(D); let ox=null;
+  if(en){ D=trD(D,sp); ox=cvTx; const prev=ox; cvTx=function(c,t,x,y,o){ if(typeof t==='string'){ if(t==='V') t='W'; else if(t==='N') t='D'; else if(t==='D') t='L'; else if(t===t.toUpperCase()&&/[A-ZÀ-Ý]{3}/.test(t)&&t.length>3){ const lo=t.toLowerCase(), cap=lo[0].toUpperCase()+lo.slice(1), r=trEn(cap,sp); if(r!==cap) t=r.toUpperCase(); } else t=trEn(t,sp); } return prev(c,t,x,y,o); }; }
+  try{ await _rend5(cv,D,fmt); } finally{ if(ox) cvTx=ox; }
+  if(S.sportCol!==false&&cv.width&&D&&!D.empty){ try{ const c=cv.getContext('2d'), W=cv.width, H=cv.height, cc=SPCOL[sp]; if(cc&&!D._noBrand){
+      c.save(); c.globalAlpha=1; c.fillStyle=cc.pill; c.fillRect(0,0,16,H);
+      const story=fmt==='st', P=story?96:72, top=story?210:70, w=sp==='foot'?148:116, h=46, x=W-P-w, y=top+6; cvRR(c,x,y,w,h,23); c.fillStyle=cc.pill; c.fill();
+      cvTx(c,cc.pt,x+w/2,y+32,{size:26,weight:900,align:'center',color:'#101010'}); c.restore(); } }catch(e){} }
+};
+
+/* interface : langue + couleur par sport */
+const _view5=viewStudio;
+viewStudio=function(sport){ let h=_view5(sport); const S=stuS();
+  const row=`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center"><span class="mut" style="font-size:12.5px">Langue des images :</span><button class="${S.lang!=='en'?'':'sec'} fbtn" data-act="stulang" data-k="fr">🇫🇷 Français</button><button class="${S.lang==='en'?'':'sec'} fbtn" data-act="stulang" data-k="en">🇬🇧 English</button><button class="${S.sportCol!==false?'':'sec'} fbtn" data-act="stusportcol" style="margin-left:6px">🎨 Couleur par sport</button></div>`;
+  h=h.replace('<h3>3. Aperçu</h3>',row.replace('class="row"','class="row" id="stuLangRow"')+'<h3>3. Aperçu</h3>'); return h; };
+document.addEventListener('click',e=>{ const b=e.target.closest&&e.target.closest('.stu [data-act=stulang],.stu [data-act=stusportcol]'); if(!b) return; e.stopImmediatePropagation(); e.preventDefault();
+  const S=stuS(); if(b.dataset.act==='stulang') S.lang=b.dataset.k; else S.sportCol=S.sportCol===false; optSave(); S.pre=null; S.packB=null; render(); },true);
 })();
 
 </script>
