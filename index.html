@@ -3932,7 +3932,7 @@ async function stuRender(cv,D,fmt){
   // fond
   const g=c.createLinearGradient(0,0,W*.6,H); g.addColorStop(0,th.bg[0]); g.addColorStop(1,th.bg[1]); c.fillStyle=g; c.fillRect(0,0,W,H);
   for(const [x,y,r,col] of [[W,0,W*.85,th.g1],[0,H,W*.85,th.g2]]){ const rg=c.createRadialGradient(x,y,0,x,y,r); rg.addColorStop(0,col+'55'); rg.addColorStop(1,col+'00'); c.fillStyle=rg; c.fillRect(0,0,W,H); }
-  const P=72, story=fmt==='st', top=story?190:70, botSafe=story?260:0;
+  const story=fmt==='st', P=story?96:72, top=story?210:70, botSafe=story?340:0;
   // marque
   const ic=S.img['icon-192.png']; if(ic&&!S.noImg){ c.save(); cvRR(c,P,top,58,58,16); c.clip(); try{ c.drawImage(ic,P,top,58,58); }catch(e){} c.restore(); } else { cvRR(c,P,top,58,58,16); c.fillStyle='#2fc15a'; c.fill(); }
   cvTx(c,'S T A T I F Y',P+76,top+40,{size:26,weight:900,alpha:.9});
@@ -4332,7 +4332,7 @@ async function stuRender(cv,D,fmt){
   const t=D._t, ease=v=>1-Math.pow(1-Math.max(0,Math.min(1,v)),3);
   const g=c.createLinearGradient(0,0,W*.6,H); g.addColorStop(0,th.bg[0]); g.addColorStop(1,th.bg[1]); c.fillStyle=g; c.fillRect(0,0,W,H);
   for(const [x,y,r,col] of [[W,0,W*.85,th.g1],[0,H,W*.85,th.g2]]){ const rg=c.createRadialGradient(x,y,0,x,y,r); rg.addColorStop(0,col+'55'); rg.addColorStop(1,col+'00'); c.fillStyle=rg; c.fillRect(0,0,W,H); }
-  const P=72, story=fmt==='st', top=story?190:70, botSafe=story?260:0;
+  const story=fmt==='st', P=story?96:72, top=story?210:70, botSafe=story?340:0;
   const ic=S.img['icon-192.png']; if(ic&&!S.noImg){ c.save(); cvRR(c,P,top,58,58,16); c.clip(); try{ c.drawImage(ic,P,top,58,58); }catch(e){} c.restore(); } else { cvRR(c,P,top,58,58,16); c.fillStyle='#2fc15a'; c.fill(); }
   cvTx(c,'S T A T I F Y',P+76,top+40,{size:26,weight:900,alpha:.9});
   let y=top+58+56; const ta=t==null?1:ease(t/.6);
@@ -4453,7 +4453,7 @@ async function stuVideo(sport){
   const box=document.getElementById('stuVid'); if(S.vBusy) return; S.vBusy=1;
   const [W,H]=STU_FMT[S.fmt]||STU_FMT.pt, cv=document.createElement('canvas'); cv.width=W; cv.height=H; cv.style.cssText='position:fixed;left:0;top:0;width:2px;height:2px;opacity:.01;pointer-events:none'; document.body.appendChild(cv);
   try{ await stuRender(cv,D,S.fmt); }catch(e){}
-  const n=(D.rows||D.nums||[]).length, T=Math.min(16,Math.max(6,1.2+(D.rows||D.nums?n*.32+.6:1.4)+3.8));
+  const n=(D.rows||D.nums||[]).length, T=stuS().vDur||Math.min(16,Math.max(6,1.2+(D.rows||D.nums?n*.32+.6:1.4)+3.8));
   const stream=cv.captureStream(30), rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:8e6}), chunks=[];
   rec.ondataavailable=e=>{ if(e.data&&e.data.size) chunks.push(e.data); };
   const done=new Promise(r=>{ rec.onstop=r; });
@@ -4830,6 +4830,90 @@ document.addEventListener('click',e=>{
   const sp=ui.sport==='foot'?'foot':'nba'; stuBlobs(sp).then(b=>{ if(stuS().carCtx===S.carCtx) S.pre=b; }).catch(()=>{});
 },true);
 (function(){ const st=document.createElement('style'); st.textContent='.stu-thumbs canvas[data-off]{opacity:.25;filter:grayscale(1)}'; document.head.appendChild(st); })();
+
+/* ================= STUDIO : améliorations TikTok / Instagram ================= */
+/* 1) couleurs d'équipe en thème Auto : dégradé aux couleurs du joueur / du match */
+const _th2=stuTheme;
+stuTheme=function(D){ const S=stuS(), base=_th2(D);
+  if((S.theme&&S.theme!=='auto')||!D) return base;
+  let a=null,b=null; try{ if(D.clubCol){ a=D.clubCol[0]; b=D.clubCol[1]; } else if(D.hero&&D.hero.col) a=D.hero.col; else if(D.match&&D.match.hc){ a=D.match.hc; b=D.match.ac; } else if(D.pre&&D.pre.hc){ a=D.pre.hc; b=D.pre.ac; } else if(D.pre&&D.pre.htri){ a=tcolor(D.pre.htri); b=tcolor(D.pre.atri); } else if(D.box&&D.box.h){ a=tcolor(D.box.h); b=tcolor(D.box.a); } }catch(e){}
+  const ok=x=>typeof x==='string'&&/^#[0-9a-f]{6}$/i.test(x);
+  if(!ok(a)) return base; return {...base,g1:a,g2:ok(b)&&b!==a?b:base.g2}; };
+
+/* 2) vidéo : compteur qui monte sur le chiffre vedette + durée au choix */
+const _rend=stuRender;
+stuRender=async function(cv,D,fmt){
+  if(D&&D.hook) return hookRender(cv,D,fmt);
+  if(D&&D._t!=null&&D.hero&&Number.isFinite(+D.hero.big)){ const k=Math.max(0,Math.min(1,(D._t-.6)/1.2)), e=1-Math.pow(1-k,3); D={...D,hero:{...D.hero,big:Math.round(+D.hero.big*e)}}; }
+  return _rend(cv,D,fmt);
+};
+
+/* 3) couverture « accroche » : un gros chiffre, une phrase choc */
+function hookRender(cv,D,fmt){
+  const [W,H]=STU_FMT[fmt]||STU_FMT.pt, c=cv.getContext('2d'), th=stuTheme(D), S=stuS(), h=D.hook, t=D._t, ease=v=>1-Math.pow(1-Math.max(0,Math.min(1,v)),3);
+  if(cv.width!==W) cv.width=W; if(cv.height!==H) cv.height=H; c.setTransform(1,0,0,1,0,0); c.globalAlpha=1;
+  const g=c.createLinearGradient(0,0,W*.6,H); g.addColorStop(0,th.bg[0]); g.addColorStop(1,th.bg[1]); c.fillStyle=g; c.fillRect(0,0,W,H);
+  for(const [x,y,r,col] of [[W,0,W*.95,th.g1],[0,H,W*.95,th.g2]]){ const rg=c.createRadialGradient(x,y,0,x,y,r); rg.addColorStop(0,col+'88'); rg.addColorStop(1,col+'00'); c.fillStyle=rg; c.fillRect(0,0,W,H); }
+  const story=fmt==='st', P=story?96:72, top=story?210:90, bot=story?340:90, cx=W/2, availH=H-top-bot, mid=top+availH*.46;
+  const ic=S.img['icon-192.png']; if(ic&&!S.noImg){ c.save(); cvRR(c,P,top,58,58,16); c.clip(); try{ c.drawImage(ic,P,top,58,58); }catch(e){} c.restore(); } else { cvRR(c,P,top,58,58,16); c.fillStyle='#2fc15a'; c.fill(); }
+  cvTx(c,'S T A T I F Y',P+76,top+40,{size:26,weight:900,alpha:.9});
+  const k1=t==null?1:ease(t/.5), k2=t==null?1:ease((t-.3)/.9), k3=t==null?1:ease((t-1)/.6);
+  c.save(); c.globalAlpha=k1; cvTx(c,String(h.kicker||'').toUpperCase(),cx,mid-Math.min(300,availH*.34),{size:34,weight:900,align:'center',color:th.acc,max:W-2*P}); c.restore();
+  const big=String(h.big), sz=Math.min(story?430:360,Math.floor((W-2*P)/Math.max(1,big.length*.62)));
+  const shown=(t!=null&&/^\d+$/.test(big))?String(Math.round(+big*k2)):big;
+  c.save(); c.globalAlpha=Math.max(.001,k2); const s=.92+.08*k2; c.translate(cx,mid); c.scale(s,s); c.translate(-cx,-mid);
+  cvTx(c,shown,cx,mid+sz*.34,{size:sz,weight:900,align:'center',color:'#ffffff'}); c.restore();
+  c.save(); c.globalAlpha=k3; cvTx(c,String(h.unit||'').toUpperCase(),cx,mid+sz*.34+62,{size:46,weight:900,align:'center',color:th.acc,max:W-2*P});
+  cvTx(c,h.line1||'',cx,mid+sz*.34+160,{size:story?70:62,weight:900,align:'center',max:W-2*P});
+  cvTx(c,h.line2||'',cx,mid+sz*.34+222,{size:34,weight:700,align:'center',alpha:.85,max:W-2*P}); c.restore();
+  const fy=H-bot; c.fillStyle='#ffffff26'; c.fillRect(P,fy,W-2*P,2);
+  cvTx(c,stuHandle(),P,fy+66,{size:30,weight:800,alpha:.85}); cvTx(c,D.cta||'',W-P,fy+66,{size:28,weight:800,align:'right',alpha:.85,max:W/2});
+}
+const tagStr=S=>{ const tg=(S.tags||'').trim(); return tg?' '+tg.split(/\s+/).map(x=>x.startsWith('#')?x:'#'+x).join(' '):''; };
+function hookData(sport){
+  const S=stuS();
+  if(sport!=='foot'){ const P=stuNbaPerf(); if(!P||P.empty||!P.hero) return P||{empty:'Pas de données NBA.'}; const h=P.hero, rb=(h.grid||[]).map(x=>x[1]);
+    return {theme:'nba',eyebrow:P.eyebrow,title:h.big+' points',cta:'Tu le connais ? 👇',clubCol:P.clubCol,hook:{kicker:'La perf de la nuit',big:h.big,unit:'points',line1:h.n,line2:h.sub},
+      caption:`🔥 ${h.n} : ${h.big} points cette nuit !\n${h.sub}\n${rb[0]!=null?rb[0]+' rebonds · '+rb[1]+' passes\n':''}\nIl mérite le MVP ? 👇`+tagStr(S)}; }
+  const lg=S.lg&&foot.leagues[S.lg]?S.lg:stuLeagues()[0][0], ms=stuFootDay(lg); if(!ms.length) return {empty:'Aucun match foot terminé en mémoire. Actualise le foot.'};
+  const m=[...ms].sort((a,b)=>(b.hs+b.as)-(a.hs+a.as)||Math.abs(b.hs-b.as)-Math.abs(a.hs-a.as))[0];
+  return {theme:'recap',eyebrow:footLgName(lg),title:`${m.hs}-${m.as}`,cta:'Ton avis ? 👇',clubCol:[fcol(m.hc),fcol(m.ac)],hook:{kicker:'Le match de la journée',big:`${m.hs}-${m.as}`,unit:'score final',line1:`${m.hn} – ${m.an}`,line2:footLgName(lg)},
+    caption:`⚽ ${m.hn} ${m.hs}-${m.as} ${m.an}\nLe match de la journée en ${footLgName(lg)} !\n\nTon avis ? 👇`+tagStr(S)};
+}
+STU_TPL_N.splice(1,0,['nhook','🎣 Accroche (couverture)','#2a1608']); STU_TPL_F.splice(1,0,['fhook','🎣 Accroche (couverture)','#2a1608']);
+STU_NBA_T.push('nhook');
+const _data2=stuData;
+stuData=function(sport){ const S=stuS();
+  if(sport!=='foot'&&S.tplN==='nhook'||sport==='foot'&&S.tplF==='fhook'){ try{ return hookData(sport); }catch(e){ return {empty:'Erreur : '+e.message}; } }
+  return _data2(sport); };
+
+/* 4) durée de la vidéo au choix */
+/* 5) hashtags suggérés + conseil d'horaire + zones TikTok (aperçu seulement) */
+const hashSug=sport=>{ const S=stuS(), D=S.cur, out=new Set(); const add=x=>{ if(x) out.add('#'+String(x).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9]/g,'')); };
+  if(sport==='foot'){ ['foot','football','buteurs'].forEach(add); try{ const lg=S.lg&&foot.leagues[S.lg]?S.lg:null; if(lg) add(footLgName(lg)); }catch(e){} try{ const m=D&&(D.match||(D.src&&D.src[0])); if(m){ add(m.hn||m.h); add(m.an||m.a); } }catch(e){} }
+  else { ['NBA','nbafr','basketball','nbafrance'].forEach(add); try{ const pre=D&&D.pre; if(pre&&pre.htri){ add(stuNick(pre.htri)); add(stuNick(pre.atri)); } if(D&&D.hero){ add(D.hero.n); add(stuNick(D.hero.tri)); } if(D&&D.box){ add(stuNick(D.box.h)); add(stuNick(D.box.a)); } }catch(e){} }
+  return [...out].filter(x=>x.length>2).slice(0,10); };
+const _view3=viewStudio;
+viewStudio=function(sport){ let h=_view3(sport); const S=stuS();
+  h=h.replace('<div class="stu-cvw"><canvas id="stuCv"','<div class="stu-cvw" style="position:relative"><div id="stuSafe" style="display:none"></div><canvas id="stuCv"');
+  const durs=[[0,'Auto'],[8,'8 s'],[12,'12 s'],[15,'15 s']].map(([v,l])=>`<button class="${(S.vDur||0)===v?'':'sec'} fbtn" data-act="stuvdur" data-k="${v}" style="padding:4px 10px">${l}</button>`).join('');
+  h=h.replace('<button class="sec" data-act="stuvid">🎬 Créer la vidéo animée</button>','<button class="sec" data-act="stuvid">🎬 Créer la vidéo animée</button><div class="row" style="gap:6px;align-items:center;flex-wrap:wrap"><span class="mut" style="font-size:12px">Durée :</span>'+durs+'</div>');
+  h=h.replace('<h3>3. Aperçu</h3>','<h3>3. Aperçu</h3><div class="row" style="gap:6px;margin-bottom:6px"><button class="'+(S.safe?'':'sec')+' fbtn" data-act="stusafe" style="padding:4px 10px">👁 Zones TikTok / Reels</button></div>');
+  h=h.replace('<div class="stu-cap">','<div id="stuHash" class="row" style="gap:6px;flex-wrap:wrap;margin:6px 0"></div><p class="mut" style="font-size:12px;margin:0 0 8px">🕗 Heures qui marchent bien en France : 12 h – 14 h et 18 h – 21 h. Poste les résultats de la nuit dès le matin (7 h – 9 h).</p><div class="stu-cap">');
+  return h; };
+function safeDraw(){ const el=document.getElementById('stuSafe'); if(!el) return; const S=stuS(), on=S.safe&&S.fmt==='st';
+  el.style.cssText=on?'position:absolute;inset:0;pointer-events:none;border-radius:14px;overflow:hidden;z-index:2;background:linear-gradient(to bottom,rgba(255,60,80,.28) 0,rgba(255,60,80,.28) 10.9%,transparent 10.9%,transparent 82.3%,rgba(255,60,80,.28) 82.3%);':'display:none';
+  el.innerHTML=on?'<div style="position:absolute;right:0;top:45%;width:14%;height:37%;background:rgba(255,60,80,.28)"></div><div style="position:absolute;left:6px;top:2px;font:700 9px sans-serif;color:#fff">zone cachée</div><div style="position:absolute;left:6px;bottom:3px;font:700 9px sans-serif;color:#fff">légende / boutons TikTok</div>':''; }
+function hashDraw(sport){ const box=document.getElementById('stuHash'); if(!box) return; const S=stuS(), cur=(S.tags||'').toLowerCase();
+  box.innerHTML=hashSug(sport).map(x=>`<button class="sec fbtn" data-act="stuhash" data-k="${x}" style="padding:3px 9px;font-size:12.5px;${cur.includes(x.toLowerCase())?'opacity:.4':''}">${x}</button>`).join(''); }
+const _draw4=stuDraw;
+stuDraw=async function(sport){ await _draw4(sport); try{ safeDraw(); hashDraw(sport||(ui.sport==='foot'?'foot':'nba')); }catch(e){} };
+document.addEventListener('click',e=>{ const b=e.target.closest&&e.target.closest('.stu [data-act^=stusafe],.stu [data-act^=stuvdur],.stu [data-act^=stuhash]'); if(!b) return; e.stopImmediatePropagation(); e.preventDefault();
+  const S=stuS(), a=b.dataset.act;
+  if(a==='stusafe'){ S.safe=!S.safe; b.classList.toggle('sec',!S.safe); safeDraw(); }
+  else if(a==='stuvdur'){ S.vDur=+b.dataset.k||0; render(); }
+  else if(a==='stuhash'){ const t=document.getElementById('stuTags'), v=b.dataset.k; if(!t) return; if(!(' '+t.value.toLowerCase()+' ').includes(' '+v.toLowerCase()+' ')) t.value=(t.value.trim()+' '+v).trim(); S.tags=t.value; stuPrefSave(); stuDraw(); } },true);
+document.addEventListener('click',e=>{ const b=e.target.closest&&e.target.closest('.stu [data-act=stufmt]'); if(b) setTimeout(safeDraw,50); },false);
 })();
 
 </script>
