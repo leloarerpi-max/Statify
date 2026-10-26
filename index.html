@@ -766,7 +766,7 @@ async function nbaEspnRefresh(why){
   for(const c of cand){ if(seen.has(c.eid)) continue; seen.add(c.eid);
     const m=sched.filter(x=>x.h===c.h&&x.a===c.a).sort((x,y)=>Math.abs(Date.parse(x.t)-c.t)-Math.abs(Date.parse(y.t)-c.t))[0];
     const nid=(m&&Math.abs(Date.parse(m.t)-c.t)<36*36e5)?m.id:'espn'+c.eid;
-    if(games[nid]&&games[nid].status===3) continue; todo.push({...c,nid}); }
+    if(games[nid]&&games[nid].status===3) continue; if(Object.values(games).some(g=>g.status===3&&g.home&&g.away&&g.home.tri===c.h&&g.away.tri===c.a&&Math.abs((tms(g)||0)-c.t)<36*36e5)) continue; todo.push({...c,nid}); }
   if(!todo.length){ render(); say('✓ NBA (ESPN) : rien de nouveau, tes matchs sont à jour.','ok'); return; }
   todo.sort((a,b)=>a.t-b.t); let ok=0; errm='';
   for(let i=0;i<todo.length;i+=3){ say(`⏳ NBA via ESPN : matchs ${i}/${todo.length}…`,'warn'); await Promise.all(todo.slice(i,i+3).map(async x=>{ try{ const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${x.eid}`); if(!r.ok) throw new Error('HTTP '+r.status); games[x.nid]=espnParseSummary(await r.json(),x.nid,maps); const sc=sched.find(z=>z.id===x.nid); if(sc) sc.s=3; ok++; }catch(e){ ko++; errm=e.message||String(e); } })); }
@@ -4914,6 +4914,42 @@ document.addEventListener('click',e=>{ const b=e.target.closest&&e.target.closes
   else if(a==='stuvdur'){ S.vDur=+b.dataset.k||0; render(); }
   else if(a==='stuhash'){ const t=document.getElementById('stuTags'), v=b.dataset.k; if(!t) return; if(!(' '+t.value.toLowerCase()+' ').includes(' '+v.toLowerCase()+' ')) t.value=(t.value.trim()+' '+v).trim(); S.tags=t.value; stuPrefSave(); stuDraw(); } },true);
 document.addEventListener('click',e=>{ const b=e.target.closest&&e.target.closest('.stu [data-act=stufmt]'); if(b) setTimeout(safeDraw,50); },false);
+
+/* ---------- doublons : un même match ne compte qu'une fois ; un même joueur n'a qu'un seul identifiant ---------- */
+function dedupeGames(){
+  const L=Object.values(games).filter(g=>g&&g.home&&g.away), used=new Set(); let removed=0;
+  const rank=g=>(/^espn/.test(String(g.id))?0:10)+(g.status===3?5:0)+Math.min(4,((g.home.players||[]).length+(g.away.players||[]).length)/10);
+  for(const g of L){ if(used.has(g.id)) continue; const grp=L.filter(x=>!used.has(x.id)&&x.home.tri===g.home.tri&&x.away.tri===g.away.tri&&Math.abs((tms(x)||0)-(tms(g)||0))<36*36e5);
+    grp.forEach(x=>used.add(x.id)); if(grp.length<2) continue;
+    grp.sort((a,b)=>rank(b)-rank(a)); const keep=grp[0];
+    for(const d of grp.slice(1)){ delete games[d.id]; removed++; for(const s of sched) if(s.id===d.id) s.id=keep.id; } }
+  return removed;
+}
+function dedupePlayers(){
+  const by={}; let fixed=0;
+  for(const g of Object.values(games)) for(const sd of ['home','away']) for(const p of (g[sd]&&g[sd].players)||[]){ const k=p.tri+'|'+nname(p.name); (by[k]||(by[k]={ids:{},ps:[]})); by[k].ids[p.id]=(by[k].ids[p.id]||0)+1; by[k].ps.push(p); }
+  for(const k in by){ const ids=Object.keys(by[k].ids); if(ids.length<2) continue;
+    const pick=ids.find(i=>/^\d+$/.test(i)&&!/^e/.test(i))||ids.sort((a,b)=>by[k].ids[b]-by[k].ids[a])[0];
+    const real=by[k].ps.find(p=>String(p.id)===pick); for(const p of by[k].ps) if(String(p.id)!==pick){ p.id=real?real.id:p.id; fixed++; } }
+  return fixed;
+}
+function cleanDup(show){
+  let a=0,b=0; try{ a=dedupeGames(); b=dedupePlayers(); }catch(e){ console.error(e); }
+  if(a||b){ try{ save(); saveJ(KEYS,sched); }catch(e){} render(); if(show) say(`🧹 Nettoyage : ${a} match(s) en double supprimé(s), ${b} joueur(s) réunifié(s).`,'ok'); }
+  else if(show) say('✓ Aucun doublon trouvé.','ok');
+  return [a,b];
+}
+window.cleanDup=cleanDup;
+const _espnRef2=nbaEspnRefresh;
+nbaEspnRefresh=async function(why){ try{ await _espnRef2(why); } finally{ cleanDup(false); } };
+setTimeout(()=>cleanDup(false),800);
+
+/* ---------- NBA : plus aucune donnée de nba.com (seulement ESPN) ---------- */
+const _fg=fetchGame;
+fetchGame=async function(id){
+  if(/^espn/.test(String(id))){ const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${String(id).slice(4)}`); if(!r.ok) throw new Error('HTTP '+r.status); return espnParseSummary(await r.json(),id,espnIdMaps()); }
+  throw new Error('NBA : seules les données ESPN sont utilisées');
+};
 })();
 
 </script>
