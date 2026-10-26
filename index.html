@@ -4950,6 +4950,30 @@ fetchGame=async function(id){
   if(/^espn/.test(String(id))){ const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${String(id).slice(4)}`); if(!r.ok) throw new Error('HTTP '+r.status); return espnParseSummary(await r.json(),id,espnIdMaps()); }
   throw new Error('NBA : seules les données ESPN sont utilisées');
 };
+
+/* ---------- rattrapage : récupère les matchs terminés manquants depuis le début de saison (via ESPN) ---------- */
+async function espnCatchUp(force){
+  const KC='suivi-nba-catchup'; let last=0; try{ last=+localStorage.getItem(KC)||0; }catch(e){}
+  if(!force&&Date.now()-last<6*36e5) return 0;
+  const day=864e5, now=Date.now(), f=t=>new Date(t).toISOString().slice(0,10).replace(/-/g,''), log=[];
+  const y=new Date(); const sy=y.getMonth()>=7?y.getFullYear():y.getFullYear()-1, start=Date.UTC(sy,9,15), n=Math.min(60,Math.ceil((now-start)/day));
+  const days=[]; for(let a=-n;a<=0;a++) days.push(a); const cand=[], seen=new Set(); let okReq=0;
+  for(let i=0;i<days.length;i+=6){ await Promise.all(days.slice(i,i+6).map(async a=>{ const j=await getChain(`https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${f(now+a*day-6*36e5)}`,log); if(!j) return; okReq++;
+    for(const e of (j.events||[])){ if(seen.has(e.id)) continue; seen.add(e.id); if(e.season&&e.season.type&&e.season.type<2) continue; if(!(e.status&&e.status.type&&e.status.type.completed)) continue;
+      const cs=((e.competitions||[])[0]||{}).competitors||[], h=cs.find(c=>c.homeAway==='home'), w=cs.find(c=>c.homeAway==='away'); if(!h||!w) continue;
+      cand.push({eid:e.id,t:Date.parse(e.date)||0,h:etri(h.team.abbreviation),a:etri(w.team.abbreviation)}); } })); }
+  if(!okReq) return 0;
+  const have=c=>games['espn'+c.eid]||Object.values(games).some(g=>g.status===3&&g.home&&g.away&&g.home.tri===c.h&&g.away.tri===c.a&&Math.abs((tms(g)||0)-c.t)<36*36e5);
+  const todo=cand.filter(c=>!have(c)).sort((a,b)=>a.t-b.t).slice(0,80); let added=0, maps=espnIdMaps();
+  for(let i=0;i<todo.length;i+=4){ say(`⏳ NBA : rattrapage des matchs ${i}/${todo.length}…`,'warn');
+    await Promise.all(todo.slice(i,i+4).map(async c=>{ try{ const g=await fetchGame('espn'+c.eid); games[g.id]=g; added++; }catch(e){} })); }
+  if(okReq>=days.length/2){ try{ localStorage.setItem(KC,String(Date.now())); }catch(e){} }
+  if(added){ try{ save(); }catch(e){} }
+  return added;
+}
+window.espnCatchUp=espnCatchUp;
+const _espnRef3=nbaEspnRefresh;
+nbaEspnRefresh=async function(why){ await _espnRef3(why); let n=0; try{ n=await espnCatchUp(false); }catch(e){ console.error(e); } if(n){ cleanDup(false); render(); say(`✓ ${n} match(s) manquant(s) récupéré(s) depuis le début de saison.`,'ok'); } };
 })();
 
 </script>
