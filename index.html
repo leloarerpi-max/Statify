@@ -4706,7 +4706,7 @@ function packHtml(sp){
   const sel=packSel(sp), L=tplList(sp).filter(t=>sel.includes(t[0])||true);
   const chips=L.map(([k,n])=>`<label class="fbtn ${sel.includes(k)?'':'sec'}" style="display:inline-flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" data-pk="${k}" ${sel.includes(k)?'checked':''}> ${esc(n)}</label>`).join('');
   return `<div class="stu-pack" style="margin:14px 0;padding:12px;border-radius:12px;background:rgba(255,255,255,.05)"><h3 style="margin:0 0 4px">🧺 Mon pack d'images</h3>
-  <p class="mut" style="margin:0 0 8px;font-size:12.5px">Coche les images que tu veux : Statify les crée toutes d'un coup, dans le format choisi plus bas.</p>
+  <p class="mut" style="margin:0 0 8px;font-size:12.5px">Coche les images que tu veux : Statify les crée toutes d'un coup, dans le format choisi plus bas. Si la case « 🖼️ Carrousel » est cochée, « Résultats de la nuit » / « Récap » ajoutent aussi une image par match.</p>
   <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:8px"><button class="sec fbtn" data-act="stupackpre">${PRESET[sp].n}</button><button class="sec fbtn" data-act="stupackclr">Tout décocher</button></div>
   <div class="row" style="gap:6px;flex-wrap:wrap">${chips}</div>
   <div class="row" style="gap:6px;flex-wrap:wrap;margin-top:10px"><button data-act="stupackshare">↗ Partager le pack (<span id="stuPackN">${sel.length}</span>)</button><button class="sec" data-act="stupackdl">⬇ Télécharger le pack</button></div><div id="stuPackMsg" class="mut" style="font-size:12.5px;margin-top:6px"></div></div>`;
@@ -4720,9 +4720,10 @@ async function packBuild(sp){
     for(const k of keys){
       S[tk]=k; let D; try{ D=stuData(sp); }catch(e){ D={empty:e.message}; }
       if(!D||D.empty){ skipped.push((tplList(sp).find(t=>t[0]===k)||[k,k])[1]); continue; }
-      S.cur=D; const cv=document.createElement('canvas'); await stuRender(cv,D,S.fmt);
-      const blob=await new Promise((res,rej)=>cv.toBlob(b=>b?res(b):rej(new Error('vide')),'image/png'));
-      out.push({k,blob,cap:D.caption||'',name:(D.theme||k)});
+      S.cur=D; let L=[D]; try{ if(S.car&&stuCarOk(sp)){ const sl=stuSlides(sp); if(sl&&sl.length) L=sl; } }catch(e){}
+      for(let n=0;n<L.length;n++){ const cv=document.createElement('canvas'); await stuRender(cv,L[n],S.fmt);
+        const blob=await new Promise((res,rej)=>cv.toBlob(b=>b?res(b):rej(new Error('vide')),'image/png'));
+        out.push({k,blob,cap:n===0?(D.caption||''):'',name:(D.theme||k)+(L.length>1?'-'+(n+1):'')}); }
     }
   } finally { S[tk]=old; S.cur=oldCur; }
   return {out,skipped};
@@ -4732,12 +4733,12 @@ const pmsg=t=>{ const m=document.getElementById('stuPackMsg'); if(m) m.textConte
 async function packRun(sp,mode){
   const S=stuS(); if(!packSel(sp).length){ pmsg('Coche au moins une image.'); return; }
   if(S.packBusy) return;
-  let r=S.packB&&S.packB.key===S.fmt+'|'+packSel(sp).join()+'|'+S.lg?S.packB.r:null;
-  if(!r){ S.packBusy=true; pmsg('⏳ Création des images…'); try{ r=await packBuild(sp); S.packB={key:S.fmt+'|'+packSel(sp).join()+'|'+S.lg,r}; } catch(e){ S.packBusy=false; pmsg('⚠️ '+(e.message||e)); return; } S.packBusy=false; }
+  let r=S.packB&&S.packB.key===S.fmt+'|'+packSel(sp).join()+'|'+S.lg+'|'+!!S.car?S.packB.r:null;
+  if(!r){ S.packBusy=true; pmsg('⏳ Création des images…'); try{ r=await packBuild(sp); S.packB={key:S.fmt+'|'+packSel(sp).join()+'|'+S.lg+'|'+!!S.car,r}; } catch(e){ S.packBusy=false; pmsg('⚠️ '+(e.message||e)); return; } S.packBusy=false; }
   const {out,skipped}=r; if(!out.length){ pmsg('Rien à créer : aucune donnée pour ces modèles.'); return; }
   const note=skipped.length?` (ignoré, pas de données : ${skipped.join(', ')})`:'';
   const caps=out.map(o=>o.cap).filter(Boolean).join('\n\n———\n\n');
-  const files=out.map((o,i)=>new File([o.blob],`statify-${i+1}-${o.k}.png`,{type:'image/png'}));
+  const files=out.map((o,i)=>new File([o.blob],`statify-${i+1}-${o.name||o.k}.png`,{type:'image/png'}));
   if(mode==='dl'){ out.forEach((o,i)=>setTimeout(()=>stuDl(o.blob),i*400)); pmsg(`✓ ${out.length} images téléchargées.${note}`); return; }
   try{
     if(navigator.canShare&&navigator.canShare({files})){ try{ navigator.clipboard.writeText(caps).catch(()=>{}); }catch(x){} await navigator.share({files}); packMark(sp); pmsg(`✓ ${out.length} images partagées, légendes copiées.${note}`); render(); }
@@ -4803,6 +4804,32 @@ nbaEspnRefresh=async function(why){
   let ok=false; try{ say('⏳ NBA : construction du calendrier…','warn'); ok=await espnSchedule(); }catch(e){ window.__schedErr=e.message||String(e); }
   render(); if(ok) say(`✓ Calendrier chargé : ${sched.length} matchs.`,'ok'); else say(`⚠️ Calendrier non chargé : ${esc(window.__schedErr)}`,'err');
 };
+
+/* ---------- carrousel : je choisis quelles images garder (touche une miniature pour la retirer / la remettre) ---------- */
+const _slides=stuSlides;
+const carCtx=(S,sp,n)=>(sp==='foot'?S.tplF+'|'+S.lg:S.tplN)+'|'+n;
+stuSlides=function(sport){
+  const all=_slides(sport); if(window.__allSlides||all.length<2) return all;
+  const S=stuS(); if(S.carCtx!==carCtx(S,sport,all.length)) return all;
+  const off=S.carOff||[], keep=all.filter((_,i)=>!off.includes(i)); return keep.length?keep:all;
+};
+const _drawCar=stuDrawCar;
+stuDrawCar=function(sport){
+  const S=stuS(); window.__allSlides=true; let p; try{ p=_drawCar(sport); } finally{ window.__allSlides=false; }
+  try{ const box=document.getElementById('stuCar'), th=box&&box.querySelectorAll('.stu-thumbs canvas');
+    if(th&&th.length){ const c=carCtx(S,sport,th.length); if(S.carCtx!==c){ S.carCtx=c; S.carOff=[]; }
+      th.forEach((cv,i)=>{ cv.style.cursor='pointer'; if(S.carOff.includes(i)) cv.dataset.off='1'; });
+      box.insertAdjacentHTML('beforeend','<div class="mut" style="font-size:12px;margin-top:4px">👆 Touche une image pour la retirer du carrousel (ou la remettre).</div>'); } }catch(e){}
+  return p;
+};
+document.addEventListener('click',e=>{
+  const cv=e.target.closest&&e.target.closest('#stuCar .stu-thumbs canvas'); if(!cv) return; e.stopImmediatePropagation();
+  const S=stuS(), i=+cv.dataset.i, off=S.carOff||(S.carOff=[]), k=off.indexOf(i);
+  if(k>=0){ off.splice(k,1); delete cv.dataset.off; } else { const n=document.querySelectorAll('#stuCar .stu-thumbs canvas').length; if(off.length>=n-1){ say('Garde au moins une image.','warn'); return; } off.push(i); cv.dataset.off='1'; }
+  S.pre=null; S.packB=null;
+  const sp=ui.sport==='foot'?'foot':'nba'; stuBlobs(sp).then(b=>{ if(stuS().carCtx===S.carCtx) S.pre=b; }).catch(()=>{});
+},true);
+(function(){ const st=document.createElement('style'); st.textContent='.stu-thumbs canvas[data-off]{opacity:.25;filter:grayscale(1)}'; document.head.appendChild(st); })();
 })();
 
 </script>
