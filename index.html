@@ -5242,6 +5242,169 @@ document.addEventListener('click',e=>{ const b=e.target.closest&&e.target.closes
   const S=stuS(); if(b.dataset.act==='stulang') S.lang=b.dataset.k; else S.sportCol=S.sportCol===false; optSave(); S.pre=null; S.packB=null; render(); },true);
 })();
 
+
+/* ===== STUDIO : TRAME VIDÉO (voix off TikTok) =====
+   Construit un texte à lire sur la vidéo, minuté, à partir des vrais scores / buteurs / stats
+   du modèle affiché. Sans IA par défaut ; « Réécrire avec l'IA » utilise la clé Gemini si elle existe. */
+(function(){
+const WPS=2.5, DURS=[15,30,45,60], KS='suivi-stu-scr';
+const PART=/^(de|du|van|von|der|den|da|dos|di|le|la|el|al|bin|ten|ter)$/i;
+const sp0=()=>ui.sport==='foot'?'foot':'nba';
+const nw=t=>String(t||'').trim().split(/\s+/).filter(Boolean).length;
+const lastN=n=>{ const w=String(n||'').trim().split(/\s+/); if(w.length<2) return w[0]||''; let i=w.length-1; while(i>0&&PART.test(w[i-1])) i--; return w.slice(i).join(' '); };
+const list=a=>a.length<2?a.join(''):a.slice(0,-1).join(', ')+' et '+a[a.length-1];
+const noEmo=s=>String(s||'').replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2B06}\u{FE0F}\u{20E3}▲▼]/gu,'').replace(/\s+/g,' ').trim();
+const fun=()=>stuS().tone!=='sobre';
+const pk=(a,i)=>a[((stuS().scrSeed||0)+(i||0))%a.length];
+const art=n=>['Heat','Thunder','Magic','Jazz'].includes(n)?'le '+n:'les '+n;
+const TM=n=>{ const s=['Heat','Thunder','Magic','Jazz'].includes(n); return {s,the:(s?'le ':'les ')+n,de:(s?'du ':'des ')+n,a:(s?'au ':'aux ')+n,cap:(s?'Le ':'Les ')+n}; };
+const ord=n=>n===1?'premier':n+'e';
+(function(){ const p=loadJ(KS,{}); const S=stuS(); if(p.dur) S.scrDur=p.dur; })();
+
+/* ---------- foot ---------- */
+function footItem(m,i){
+  const ev=((m.x&&m.x.ev)||[]).filter(e=>e.s==='h'||e.s==='a'), goals=ev.filter(e=>e.t==='g'||e.t==='pg'||e.t==='og').sort((a,b)=>a.m-b.m), rc=ev.filter(e=>e.t==='rc');
+  const cnt={}; goals.forEach(e=>{ if(e.t!=='og'&&e.p) cnt[e.p]=(cnt[e.p]||0)+1; });
+  const multi=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0], hs=+m.hs, as=+m.as, diff=Math.abs(hs-as), f=fun();
+  const W=hs>as?m.hn:m.an, Lo=hs>as?m.an:m.hn, sc=`${Math.max(hs,as)} à ${Math.min(hs,as)}`;
+  let s;
+  if(hs===as) s=hs===0?pk(f?[`Rien à signaler entre ${m.hn} et ${m.an} : 0 à 0.`,`${m.hn} et ${m.an} se neutralisent, 0 à 0.`]:[`${m.hn} et ${m.an} se séparent sur un 0 à 0.`],i):pk(f?[`${m.hn} et ${m.an} se quittent dos à dos, ${hs} partout.`,`Match fou entre ${m.hn} et ${m.an} : ${hs} partout.`]:[`${m.hn} et ${m.an} se séparent sur un nul, ${hs} partout.`],i);
+  else if(diff>=3) s=pk(f?[`${W} déroule contre ${Lo} : ${sc}.`,`${W} écrase ${Lo}, ${sc}.`,`Carton de ${W} face à ${Lo}, ${sc}.`]:[`${W} s'impose nettement face à ${Lo}, ${sc}.`],i);
+  else s=pk(f?[`${W} s'impose ${sc} face à ${Lo}.`,`${W} bat ${Lo} ${sc}.`,`Victoire de ${W} contre ${Lo}, ${sc}.`]:[`${W} s'impose ${sc} face à ${Lo}.`,`Victoire de ${W} contre ${Lo}, ${sc}.`],i);
+  const wSide=hs>as?'h':'a', lg=goals[goals.length-1]; let extra='', pts=hs+as;
+  if(multi&&multi[1]>=2){ extra=`${lastN(multi[0])} signe un ${multi[1]>=3?'triplé':'doublé'}.`; pts+=3; }
+  else if(diff===1&&lg&&lg.s===wSide&&lg.m>=85&&lg.p){ extra=`Et c'est ${lastN(lg.p)} qui décide ça à la ${lg.m}e minute.`; pts+=3; }
+  else if(rc.length){ extra=`${rc[0].p?lastN(rc[0].p)+' est':'Un joueur est'} expulsé.`; pts+=2; }
+  else { const nm=[...new Set(goals.filter(e=>e.t!=='og'&&e.p).map(e=>lastN(e.p)))].slice(0,3); if(nm.length) extra=`Buts de ${list(nm)}.`; }
+  try{ if(stuFootBig(m)) pts+=3; }catch(e){}
+  return {txt:s+(extra?' '+extra:''),pts,vis:`Image « ${m.hn} – ${m.an} »`};
+}
+function footBlocks(D,t){
+  const S=stuS(), lg=footLgName(S.lg), f=fun(); let hook='', items=[], outro='';
+  if(t==='recap'){ const ms=D.src||[]; hook=pk(f?[`${lg} : on récapitule tout, et il y a de quoi dire !`,`${ms.length} matchs en ${lg}, voici ce qu'il faut retenir.`,`Les résultats de ${lg}, c'est parti !`]:[`Les résultats de ${lg}.`,`Le récap de la journée en ${lg}.`]);
+    items=ms.map(footItem).sort((a,b)=>b.pts-a.pts);
+    outro=f?'Ton homme du match ? Dis-le en commentaire, et abonne-toi pour les résultats chaque jour.':'Votre avis en commentaire. Abonnez-vous pour le récap quotidien.'; }
+  else if(t==='table'){ const {live,srt}=D.src||{}; hook=live&&live.length?`Et si ça restait comme ça ? Voilà le classement de ${lg}.`:`Le classement de ${lg}.`;
+    (srt||[]).slice(0,5).forEach((r,i)=>items.push({txt:`${i===0?'En tête':ord(r.nr||r.rank||i+1)} : ${r.name}, ${r.np!=null?r.np:r.pts} points.`,pts:10-i,vis:'Tableau'}));
+    outro=f?'Ton club est où dans ce classement ? Dis-le en commentaire.':'Votre avis en commentaire.'; }
+  else if(t==='pre'){ const m=D.src, p=D.pre||{}; hook=`${m.hn} contre ${m.an}, ${noEmo(D.eyebrow||lg)}.`; const L=[];
+    if(p.hs||p.as) L.push(`Au classement : ${m.hn} ${p.hs||'?'}, ${m.an} ${p.as||'?'}.`);
+    if(p.h2&&(p.h2[0]+p.h2[1]+p.h2[2])) L.push(`Dans leurs confrontations : ${p.h2[0]} victoire${p.h2[0]>1?'s':''} pour ${m.hn}, ${p.h2[1]} nul${p.h2[1]>1?'s':''}, ${p.h2[2]} pour ${m.an}.`);
+    if(p.ph||p.pa) L.push(`À suivre : ${list([p.ph&&`${lastN(p.ph.n)} avec ${p.ph.g} buts`,p.pa&&`${lastN(p.pa.n)} avec ${p.pa.g} buts`].filter(Boolean))}.`);
+    L.forEach((x,i)=>items.push({txt:x,pts:9-i,vis:'Image avant-match'})); outro=f?'Tu le regardes ? Dis-le en commentaire !':'Rendez-vous au coup d\'envoi.'; }
+  else if(t==='scor'){ hook=`Les meilleurs buteurs de ${lg}.`; (D.rows||[]).slice(0,6).forEach((r,i)=>items.push({txt:`${i===0?'En tête':ord(r.rk)} : ${lastN(r.n)}, ${r.big} but${r.big>1?'s':''}.`,pts:9-i,vis:'Tableau'})); outro=f?'Qui finira en tête ? Dis-le en commentaire.':'Votre avis en commentaire.'; }
+  return {hook,items,outro};
+}
+
+/* ---------- NBA ---------- */
+function nbaItem(g,i){
+  const aw=+g.away.score>+g.home.score, Wt=aw?g.away:g.home, Lt=aw?g.home:g.away, hi=Math.max(+g.away.score,+g.home.score), lo=Math.min(+g.away.score,+g.home.score), d=hi-lo, f=fun();
+  const ot=Math.max((g.away.q||[]).length,(g.home.q||[]).length)>4, wn=TM(stuNick(Wt.tri)), ln=TM(stuNick(Lt.tri)), v=(x,y)=>wn.s?x:y;
+  const s0=d<=3?pk(f?[`${wn.cap} ${v("s'en sort","s'en sortent")} de justesse face ${ln.a}, ${hi} à ${lo}.`,`Finish serré : ${wn.the} ${v('bat','battent')} ${ln.the}, ${hi} à ${lo}.`]:[`${wn.cap} ${v("s'impose","s'imposent")} d'un cheveu face ${ln.a}, ${hi} à ${lo}.`],i):d>=20?pk(f?[`${wn.cap} ${v('humilie','humilient')} ${ln.the} : ${hi} à ${lo}.`,`Démonstration ${wn.de} contre ${ln.the}, ${hi} à ${lo}.`]:[`${wn.cap} ${v("s'impose","s'imposent")} largement face ${ln.a}, ${hi} à ${lo}.`],i):pk([`${wn.cap} ${v('bat','battent')} ${ln.the}, ${hi} à ${lo}.`,`Victoire ${wn.de} contre ${ln.the}, ${hi} à ${lo}.`],i);
+  let s=s0;
+  if(ot) s+=' Après prolongation.';
+  const a=stuTopP(g.away), h=stuTopP(g.home), star=(a&&h)?(a.pts>=h.pts?a:h):(a||h); let pts=(ot?3:0)+(d<=3?2:0)+(d>=20?1:0);
+  if(star){ const dd=stuDD(star); s+=` ${lastN(star.name)}, ${star.pts} points${dd==='TD'?', triple-double':dd==='DD'?', double-double':star.reb>=10?`, ${star.reb} rebonds`:star.ast>=10?`, ${star.ast} passes`:''}.`; pts+=star.pts>=40?4:star.pts>=30?2:0; if(dd==='TD') pts+=3; }
+  return {txt:s,pts,vis:`Image « ${stuNick(g.away.tri)} – ${stuNick(g.home.tri)} »`};
+}
+function nbaBlocks(D,t){
+  const f=fun(); let hook='', items=[], outro='';
+  if(t==='nres'){ const gs=D.src||[]; hook=pk(f?[`La nuit NBA en ${gs.length} matchs, tout est là !`,`NBA : ${gs.length} matchs cette nuit, voici l'essentiel.`]:[`Les résultats de la nuit en NBA.`,`NBA : le récap de la nuit.`]);
+    items=gs.map(nbaItem).sort((a,b)=>b.pts-a.pts); outro=f?'Ton joueur de la nuit ? Dis-le en commentaire, et abonne-toi pour les résultats chaque matin.':'Votre joueur de la nuit en commentaire. Abonnez-vous pour le récap quotidien.'; }
+  else if(t==='ntop'){ hook=f?'Les cartons de la nuit en NBA !':'Les meilleures performances de la nuit en NBA.';
+    (D.src||[]).forEach((p,i)=>{ const dd=stuDD(p); items.push({txt:`${i===0?'En tête':ord(i+1)} : ${lastN(p.name)}, ${p.pts} points${p.reb>=8?', '+p.reb+' rebonds':''}${p.ast>=8?', '+p.ast+' passes':''}${dd==='TD'?'. Triple-double !':'.'}`,pts:20-i,vis:'Tableau'}); });
+    outro=f?'Le meilleur de la nuit, selon toi ? Dis-le en commentaire.':'Votre avis en commentaire.'; }
+  else if(t==='nbox'){ const g=D.src, f1=fun(), aw=+g.away.score>+g.home.score; const it=nbaItem(g,0); hook=`${stuNick(g.away.tri)} ${g.away.score}, ${stuNick(g.home.tri)} ${g.home.score}.`; items.push({txt:it.txt,pts:30,vis:'Image du match'});
+    const sa=g.away.st||{}, sh=g.home.st||{}, pc=(m,a)=>a?Math.round(100*m/a):0;
+    if(sa.fga&&sh.fga) items.push({txt:`Aux tirs : ${pc(sa.fgm,sa.fga)} % pour ${stuNick(g.away.tri)}, ${pc(sh.fgm,sh.fga)} % pour ${stuNick(g.home.tri)}. Aux rebonds : ${sa.reb} à ${sh.reb}.`,pts:20,vis:'Stats d\'équipe'});
+    for(const tm of [aw?g.away:g.home,aw?g.home:g.away]){ const ps=tm.players.filter(p=>p.min>0).sort((a,b)=>b.pts-a.pts).slice(0,2); if(ps.length) items.push({txt:`Chez ${art(stuNick(tm.tri))} : ${list(ps.map(p=>`${lastN(p.name)} ${p.pts} points`))}.`,pts:10,vis:'Joueurs'}); }
+    outro=f1?'Ton MVP du match ? Dis-le en commentaire.':'Votre MVP du match en commentaire.'; }
+  else if(t==='nstand'){ hook=noEmo(D.title||'Le classement NBA')+'.'; (D.rows||[]).slice(0,5).forEach((r,i)=>items.push({txt:`${i===0?'En tête':ord(r.rk)} : ${r.n}, ${String(r.pts).replace('-',' victoires, ')} défaites.`,pts:9-i,vis:'Tableau'})); outro=f?'Qui ira au bout ? Dis-le en commentaire.':'Votre avis en commentaire.'; }
+  else if(t==='npre'){ const p=D.pre||{}; hook=`${p.a} chez ${p.h}, ${noEmo(String(D.eyebrow||'').replace(/^NBA · /,''))}.`;
+    const L=[]; if(p.hs||p.as) L.push(`Bilans : ${p.h} ${p.hs||'?'}, ${p.a} ${p.as||'?'}.`);
+    if(p.fh&&p.fa&&(p.fh.length||p.fa.length)) L.push(`Sur les cinq derniers : ${p.h} ${p.fh.filter(x=>x==='V').length} victoires, ${p.a} ${p.fa.filter(x=>x==='V').length}.`);
+    if(p.h2&&(p.h2[0]+p.h2[2])) L.push(`Cette saison : ${p.h2[0]} à ${p.h2[2]} dans les face-à-face.`);
+    if(p.ph||p.pa) L.push(`À suivre : ${list([p.ph&&`${lastN(p.ph.n)}, ${String(p.ph.g).replace('.',',')} points de moyenne`,p.pa&&`${lastN(p.pa.n)}, ${String(p.pa.g).replace('.',',')}`].filter(Boolean))}.`);
+    L.forEach((x,i)=>items.push({txt:x,pts:9-i,vis:'Image avant-match'})); outro=f?'Tu le regardes cette nuit ? Dis-le en commentaire !':'Rendez-vous cette nuit.'; }
+  return {hook,items,outro};
+}
+
+/* ---------- assemblage ---------- */
+function build(sport,D,dur){
+  const S=stuS(), t=sport==='foot'?S.tplF:S.tplN; let B;
+  try{ B=sport==='foot'?footBlocks(D,t):nbaBlocks(D,t); }catch(e){ console.error(e); B={hook:'',items:[],outro:''}; }
+  if(!B.hook&&!B.items.length){ // modèle sans trame dédiée : on lit la légende
+    const L=String(D.caption||'').split('\n').map(noEmo).filter(l=>l&&!/^#/.test(l));
+    B={hook:noEmo(D.title||'')+'.',items:L.map((x,i)=>({txt:x,pts:50-i,vis:'Image'})),outro:fun()?'Dis-moi ton avis en commentaire !':'Votre avis en commentaire.'}; }
+  if(dur<=15) B.outro=fun()?'Ton avis en commentaire !':'Votre avis en commentaire.';
+  const budget=Math.round(dur*WPS), room=budget-nw(B.hook)-nw(B.outro); let used=0; const kept=[];
+  for(const it of B.items){ const w=nw(it.txt); if(kept.length&&used+w>room) continue; kept.push(it); used+=w; }
+  const left=B.items.length-kept.length, blocks=[{k:'Accroche',txt:B.hook,vis:'Couverture'}];
+  kept.forEach((it,i)=>blocks.push({k:B.items.length>1&&(sport==='foot'?S.tplF:S.tplN).match(/^(recap|nres)$/)?`Match ${i+1}`:`Point ${i+1}`,txt:it.txt,vis:it.vis}));
+  blocks.push({k:'Conclusion',txt:B.outro,vis:'Dernière image'});
+  let tt=0; blocks.forEach(b=>{ b.w=nw(b.txt); b.s0=tt; tt+=Math.max(1,Math.round(b.w/WPS)); b.s1=tt; });
+  const key=blocks.map(b=>b.txt).join('|')+'|'+dur+'|'+(S.tone||'');
+  return {blocks,left,words:blocks.reduce((a,b)=>a+b.w,0),secs:tt,key};
+}
+function cur(){ const S=stuS(); if(!S.cur||S.cur.empty) return null; const T=build(sp0(),S.cur,S.scrDur||30);
+  if(S.scrAI&&S.scrAI.key===T.key&&S.scrAI.txt.length===T.blocks.length){ T.blocks.forEach((b,i)=>{ b.txt=S.scrAI.txt[i]; b.w=nw(b.txt); }); T.ai=true; T.words=T.blocks.reduce((a,b)=>a+b.w,0); }
+  return T; }
+const plain=T=>T.blocks.map(b=>b.txt).filter(Boolean).join('\n\n');
+const full=T=>T.blocks.map(b=>`[${b.s0}–${b.s1} s] ${b.k.toUpperCase()}  (à l'écran : ${b.vis})\n${b.txt}`).join('\n\n');
+
+function draw(){
+  const box=document.getElementById('stuScr'); if(!box) return; const S=stuS(), T=cur(), dur=S.scrDur||30;
+  if(!T){ box.innerHTML='<p class="mut" style="font-size:13px">Choisis un modèle avec des données pour générer la trame.</p>'; return; }
+  const ds=DURS.map(v=>`<button class="${dur===v?'':'sec'} fbtn" data-act="stuscrdur" data-k="${v}" style="padding:4px 10px">${v} s</button>`).join('');
+  box.innerHTML=`<div class="row" style="gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span class="mut" style="font-size:12.5px">Durée visée :</span>${ds}</div>
+  <div class="mut" style="font-size:12.5px;margin-bottom:8px">≈ ${T.secs} s · ${T.words} mots · rythme TikTok (~150 mots/min)${T.ai?' · ✨ réécrit par l\'IA':''}${T.left>0?` · ${T.left} élément${T.left>1?'s':''} non repris (durée trop courte)`:''}</div>
+  ${T.blocks.map(b=>`<div style="background:var(--field);border-radius:12px;padding:10px 12px;margin-bottom:6px"><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;font-size:12px"><b>${b.s0}–${b.s1} s · ${esc(b.k)}</b><span class="mut">🖼 ${esc(b.vis)}</span></div><div style="font-size:14px;margin-top:3px">${esc(b.txt)||'<span class="mut">—</span>'}</div></div>`).join('')}
+  <div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="sec" data-act="stuscrcopy">📋 Copier la trame</button><button class="sec" data-act="stuscrtxt">📋 Texte seul</button><button class="sec" data-act="stuscrsay">${window.speechSynthesis&&speechSynthesis.speaking?'⏹ Stop':'🔊 Écouter'}</button><button class="sec" data-act="stuscrseed">🔀 Autre formulation</button><button class="sec" data-act="stuscrai">✨ Réécrire avec l'IA</button>${T.ai?'<button class="sec" data-act="stuscrorig">↩ Version d\'origine</button>':''}</div>
+  <p class="mut" style="font-size:12px;margin:8px 0 0">Les phrases sont construites avec les vrais scores, buteurs et stats de ce modèle. « Texte seul » est fait pour coller dans CapCut ou TikTok (voix automatique).</p>`;
+}
+
+async function aiRewrite(btn){
+  const S=stuS(), T=cur(); if(!T) return;
+  if(!aiKey){ say('Pour l\'IA, ajoute d\'abord ta clé Gemini (gratuite) dans les résumés de match.','warn'); return; }
+  if(btn){ btn.disabled=true; btn.textContent='✨ Écriture…'; }
+  const base=build(sp0(),S.cur,S.scrDur||30);
+  try{
+    const prompt=`Tu écris la voix off d'une vidéo TikTok de ${S.scrDur||30} secondes sur du ${sp0()==='foot'?'football':'basket NBA'}, en français. Réécris chaque bloc de la trame ci-dessous avec un ton ${fun()?'énergique, familier, punchy':'sobre et factuel'}. Garde EXACTEMENT les faits (scores, noms, chiffres), le même nombre de blocs, et à peu près le même nombre de mots par bloc. N'invente rien et ne fais aucun pronostic. Réponds uniquement en JSON : {"blocs":["texte du bloc 1","texte du bloc 2"]}\n\n`+base.blocks.map((b,i)=>`${i+1}. [${b.k}] ${b.txt}`).join('\n');
+    let raw=await aiCall(prompt); raw=raw.replace(/^\s*```(json)?/i,'').replace(/```\s*$/,''); let o; try{ o=JSON.parse(raw); }catch(e){ const a=raw.indexOf('{'), z=raw.lastIndexOf('}'); o=JSON.parse(raw.slice(a,z+1)); }
+    const L=(o.blocs||o.blocks||[]).map(String); if(L.length!==base.blocks.length) throw new Error('Réponse de l\'IA incomplète. Réessaie.');
+    S.scrAI={key:base.key,txt:L}; say('✓ Trame réécrite par l\'IA.','ok');
+  }catch(e){ say('⚠️ '+esc(e.message||e),'err'); }
+  draw();
+}
+function copy(t,msg){ (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>say(msg,'ok')).catch(()=>{ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); say(msg,'ok'); }catch(e){ say('Copie impossible.','err'); } ta.remove(); }); }
+function speak(){
+  if(!window.speechSynthesis){ say('Ton navigateur ne sait pas lire le texte à voix haute.','warn'); return; }
+  if(speechSynthesis.speaking){ speechSynthesis.cancel(); setTimeout(draw,100); return; }
+  const T=cur(); if(!T) return; try{ voixStop(); }catch(e){}
+  const u=new SpeechSynthesisUtterance(plain(T)); u.lang='fr-FR'; u.rate=1.08; try{ const v=voixPick(); if(v) u.voice=v; }catch(e){}
+  u.onend=u.onerror=()=>draw(); speechSynthesis.speak(u); setTimeout(draw,150);
+}
+
+document.addEventListener('click',e=>{
+  const b=e.target.closest&&e.target.closest('.stu [data-act^=stuscr]'); if(!b) return; e.stopImmediatePropagation(); e.preventDefault();
+  const S=stuS(), a=b.dataset.act;
+  if(a==='stuscrdur'){ S.scrDur=+b.dataset.k; saveJ(KS,{dur:S.scrDur}); draw(); }
+  else if(a==='stuscrcopy'){ const T=cur(); if(T) copy(full(T),'✓ Trame copiée.'); }
+  else if(a==='stuscrtxt'){ const T=cur(); if(T) copy(plain(T),'✓ Texte copié : colle-le dans ta voix off.'); }
+  else if(a==='stuscrsay') speak();
+  else if(a==='stuscrseed'){ S.scrSeed=(S.scrSeed||0)+1; draw(); }
+  else if(a==='stuscrai') aiRewrite(b);
+  else if(a==='stuscrorig'){ S.scrAI=null; draw(); }
+},true);
+
+const _vw=viewStudio;
+viewStudio=function(sport){ let h=_vw(sport); const mk='<p class="mut" style="font-size:12px;margin:10px 0 0">Les données viennent de ce que Statify a en mémoire';
+  return h.includes(mk)?h.replace(mk,'<h3>5. 🎙️ Trame vidéo (voix off)</h3><p class="mut" style="font-size:12.5px;margin:0 0 8px">Un texte minuté à lire sur ta vidéo TikTok pour commenter les résultats.</p><div id="stuScr"></div>'+mk):h; };
+const _dw=stuDraw;
+stuDraw=async function(sport){ await _dw(sport); try{ draw(); }catch(e){ console.error(e); } };
+window.stuTrame={build,cur,draw};
+})();
+
 </script>
 </body>
 </html>
