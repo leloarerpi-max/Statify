@@ -1249,7 +1249,7 @@ async function newsGet(url,src){
   const newest=a=>Math.max(0,...a.map(i=>i.d||0));
   for(const f of tries){ const u=f(); try{ let items;
       if(u==='rss2json'){ const r=await fetch('https://api.rss2json.com/v1/api.json?rss_url='+enc+'&t='+Date.now()); if(!r.ok) throw new Error('HTTP '+r.status); const j=await r.json(); if(j.status!=='ok') throw new Error('flux illisible'); items=(j.items||[]).map(i=>({t:newsStrip(i.title),l:i.link,d:Date.parse(String(i.pubDate||'').replace(' ','T')+'Z')||0,e:newsClean(newsStrip(i.description)).slice(0,190),c:newsBody(i.content),s:src})).filter(i=>i.t&&/^https?:/.test(i.l)); }
-      else { const c=new AbortController(), to=setTimeout(()=>c.abort(),9000); let r; try{ r=await fetch(u,{signal:c.signal,cache:'no-store'}); } finally{ clearTimeout(to); }
+      else { const c=new AbortController(), to=setTimeout(()=>c.abort(),9000); let r; try{ r=await fetch(u,{signal:c.signal}); } finally{ clearTimeout(to); }
         if(!r.ok) throw new Error('HTTP '+r.status); items=newsParseXml(await r.text(),src); }
       if(!items.length) throw new Error('aucun article lu');
       if(!best||newest(items)>newest(best)) best=items;
@@ -1264,7 +1264,7 @@ async function newsRefresh(auto,pages){
     // le flux ne contient que ~10 articles : on lit aussi les pages suivantes (?paged=2, 3…) pour remonter ~1 jour en arrière
     await Promise.all(NEWS_SRC.map(async ([src,url])=>{ for(let pg=1;pg<=pages;pg++){ try{ const it=await newsGet(pg===1?url:url+'?paged='+pg,src); all=all.concat(it); if(!it.length||Date.now()-Math.min(...it.map(i=>i.d||Date.now()))>4*864e5) break; }catch(e){ if(pg===1) bad.push(src+' ('+(e.message||e)+')'); break; } } }));
     if(all.length){ const seen=new Set(); all=all.concat(news.items||[]).filter(i=>!seen.has(i.l)&&seen.add(i.l)&&(!i.d||Date.now()-i.d<21*864e5)).sort((a,b)=>b.d-a.d).slice(0,400); all.forEach((i,k)=>{ if(k>=60) delete i.c; }); news={t:Date.now(),items:all,err:bad.join(' ; ')}; saveJ(KEYNEWS,news); if(!auto) say(`✓ ${all.length} article(s) — dernier : ${newsAgo(all[0]&&all[0].d)}${bad.length?' — indisponible : '+esc(bad.join(' ; ')):''}.`,bad.length?'warn':'ok'); }
-    else { news={...news,t:Date.now(),err:bad.join(' ; ')}; saveJ(KEYNEWS,news); if(!auto) say('⚠️ Actus : lecture directe refusée par le navigateur. Utilise le favori « Actus » sur basketusa.com puis Ctrl+V ici.','err'); }
+    else { news={...news,t:Date.now(),err:bad.join(' ; ')}; saveJ(KEYNEWS,news); if(!auto) say('⚠️ Actus : impossible de lire les flux — '+esc(bad.join(' ; '))+'. Réessaie dans un instant.','err'); }
     if(ui.sport!=='foot'&&(ui.tab==='home'||ui.openGame)&&(ui.openGame||!$('#modal').classList.contains('on'))) render();
   } finally { newsBusy=false; } }
 function newsIngest(o){ try{ const it=newsParseXml(String(o.xml||''),o.src||'Actus'); if(!it.length) return 0; const seen=new Set(); const all=it.concat(news.items||[]).filter(i=>!seen.has(i.l)&&seen.add(i.l)&&(!i.d||Date.now()-i.d<21*864e5)).sort((a,b)=>b.d-a.d).slice(0,150); news={t:Date.now(),items:all,err:''}; saveJ(KEYNEWS,news); return it.length; }catch(e){ return 0; } }
