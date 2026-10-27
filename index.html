@@ -5243,6 +5243,32 @@ document.addEventListener('click',e=>{ const b=e.target.closest&&e.target.closes
 })();
 
 
+/* ===== NBA : actualisation fiable (matchs manquants, blocage, délais) =====
+   - le bouton 🔄 rattrape aussi les matchs manquants depuis le début de saison (via ESPN)
+   - un chargement bloqué ne verrouille plus le bouton, et on voit toujours un message
+   - chaque requête réseau a un délai maximum pour ne plus rester figée */
+(function(){
+  const f0=window.fetch.bind(window);
+  window.fetch=function(u,o){
+    const url=typeof u==='string'?u:(u&&u.url)||'';
+    if((o&&o.signal)||(u&&u.signal)) return f0(u,o);
+    const c=new AbortController(), ms=/generativelanguage\.googleapis\.com/.test(url)?90000:25000, t=setTimeout(()=>c.abort(),ms);
+    return f0(u,{...(o||{}),signal:c.signal}).finally(()=>clearTimeout(t));
+  };
+  const KC='suivi-nba-catchup', _nbr=nbaRefresh; let at=0;
+  nbaRefresh=async function(){
+    if(nbaBusy&&Date.now()-at>60000) nbaBusy=false;
+    if(nbaBusy){ say('⏳ Actualisation déjà en cours… patiente quelques secondes.','warn'); return; }
+    at=Date.now();
+    try{ await _nbr(); }catch(e){ console.error(e); say('⚠️ Actualisation NBA : '+esc(e.message||e),'err'); }
+    try{
+      let last=0; try{ last=+localStorage.getItem(KC)||0; }catch(e){}
+      const n=await espnCatchUp(Date.now()-last>20*6e4);
+      if(n){ cleanDup(false); render(); say(`✓ ${n} match(s) manquant(s) récupéré(s) depuis le début de saison.`,'ok'); }
+    }catch(e){ console.error(e); }
+  };
+})();
+
 /* ===== STUDIO : TRAME VIDÉO (voix off TikTok) =====
    Construit un texte à lire sur la vidéo, minuté, à partir des vrais scores / buteurs / stats
    du modèle affiché. Sans IA par défaut ; « Réécrire avec l'IA » utilise la clé Gemini si elle existe. */
