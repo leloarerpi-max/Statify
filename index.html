@@ -1264,7 +1264,7 @@ async function newsRefresh(auto,pages){
     // le flux ne contient que ~10 articles : on lit aussi les pages suivantes (?paged=2, 3…) pour remonter ~1 jour en arrière
     await Promise.all(NEWS_SRC.map(async ([src,url])=>{ for(let pg=1;pg<=pages;pg++){ try{ const it=await newsGet(pg===1?url:url+'?paged='+pg,src); all=all.concat(it); if(!it.length||Date.now()-Math.min(...it.map(i=>i.d||Date.now()))>4*864e5) break; }catch(e){ if(pg===1) bad.push(src+' ('+(e.message||e)+')'); break; } } }));
     if(all.length){ const seen=new Set(); all=all.concat(news.items||[]).filter(i=>!seen.has(i.l)&&seen.add(i.l)&&(!i.d||Date.now()-i.d<21*864e5)).sort((a,b)=>b.d-a.d).slice(0,400); all.forEach((i,k)=>{ if(k>=60) delete i.c; }); news={t:Date.now(),items:all,err:bad.join(' ; ')}; saveJ(KEYNEWS,news); if(!auto) say(`✓ ${all.length} article(s) — dernier : ${newsAgo(all[0]&&all[0].d)}${bad.length?' — indisponible : '+esc(bad.join(' ; ')):''}.`,bad.length?'warn':'ok'); }
-    else { news={...news,t:Date.now(),err:bad.join(' ; ')}; saveJ(KEYNEWS,news); if(!auto) say('⚠️ Actus : impossible de lire les flux — '+esc(bad.join(' ; '))+'. Réessaie dans un instant.','err'); }
+    else { news={...news,err:bad.join(' ; '),fail:Date.now()}; saveJ(KEYNEWS,news); if(!auto) say('⚠️ Actus : impossible de lire les flux — '+esc(bad.join(' ; '))+'. Réessaie dans un instant.','err'); }
     if(ui.sport!=='foot'&&(ui.tab==='home'||ui.openGame)&&(ui.openGame||!$('#modal').classList.contains('on'))) render();
   } finally { newsBusy=false; } }
 function newsIngest(o){ try{ const it=newsParseXml(String(o.xml||''),o.src||'Actus'); if(!it.length) return 0; const seen=new Set(); const all=it.concat(news.items||[]).filter(i=>!seen.has(i.l)&&seen.add(i.l)&&(!i.d||Date.now()-i.d<21*864e5)).sort((a,b)=>b.d-a.d).slice(0,150); news={t:Date.now(),items:all,err:''}; saveJ(KEYNEWS,news); return it.length; }catch(e){ return 0; } }
@@ -1771,7 +1771,7 @@ function legendsHtml(kind,key,name){
 /* --- Ce soir --- */
 function tonightNba(S){
   if(!sched||!sched.length) return '';
-  const now=Date.now(), L=upcoming().filter(x=>Date.parse(x.t)>=now-3*36e5&&Date.parse(x.t)<=now+30*36e5);
+  const now=Date.now(); let L=upcoming().filter(x=>Date.parse(x.t)>=now-3*36e5&&Date.parse(x.t)<=now+30*36e5); { const nk=x=>parisDK(x.t), up=[...L].sort((a,b)=>Date.parse(a.t)-Date.parse(b.t)).find(x=>Date.parse(x.t)>now); if(up){ const k=nk(up); L=L.filter(x=>nk(x)===k); } }
   let big=new Set(); try{ const b=bigMatches(S); if(b) b.items.forEach(i=>big.add(i.x.id)); }catch(e){}
   const mine=x=>fav.teams.includes(x.h)||fav.teams.includes(x.a);
   const rows=[...L].sort((a,b)=>mine(b)-mine(a)||Date.parse(a.t)-Date.parse(b.t)).map(x=>`<div class="liverow" style="grid-template-columns:auto 1fr auto"><div><b>${esc(parisT(x.t))}</b></div><div class="lt">${teamLogo(x.a,22)}<span class="nfull">${esc(tname(x.a))}</span><span class="ntri">${esc(x.a)}</span> <span class="mut">@</span> ${teamLogo(x.h,22)}<span class="nfull">${esc(tname(x.h))}</span><span class="ntri">${esc(x.h)}</span>${mine(x)?' ⭐':''}${big.has(x.id)?' 🔥':''}</div><div><span class="link" data-act="cmpgo" data-sp="nba" data-a="${esc(x.h)}" data-b="${esc(x.a)}" title="Comparer ces deux équipes">⚖️</span></div></div>`).join('');
@@ -4167,7 +4167,7 @@ function stuFootProg(lg){
 }
 var STU_LGOK=lg=>!!foot.leagues[lg];
 function stuNbaProg(){
-  const L=stuNbaPreList().filter(x=>Date.parse(x.t)<Date.now()+30*36e5); if(!L.length) return {empty:'Aucun match NBA dans les prochaines 30 h. Charge le calendrier.'};
+  let L=stuNbaPreList().filter(x=>Date.parse(x.t)<Date.now()+30*36e5); { const nk=x=>parisDK(x.t), up=L.find(x=>Date.parse(x.t)>Date.now()); if(up){ const k=nk(up); L=L.filter(x=>nk(x)===k); } } if(!L.length) return {empty:'Aucun match NBA dans les prochaines 30 h. Charge le calendrier.'};
   const S=stuNbaStats(), rec=t=>{ const x=S.T[t]; return x?`${x.w}-${x.l}`:''; };
   const rows=L.map(x=>({k:'prog',t:parisT(x.t),h:stuNick(x.a),a:stuNick(x.h),htri:x.a,atri:x.h,hc:tcolor(x.a),ac:tcolor(x.h),big:stuNbaBig(x.a,x.h),sub:[rec(x.a),rec(x.h)]}));
   const big=L.filter(x=>stuNbaBig(x.a,x.h)).slice(0,2).map(x=>({h:stuNick(x.a),a:stuNick(x.h),htri:x.a,atri:x.h,hc:tcolor(x.a),ac:tcolor(x.h),b:stuNbaBig(x.a,x.h),t:parisT(x.t)}));
@@ -5268,7 +5268,75 @@ document.addEventListener('click',e=>{ const b=e.target.closest&&e.target.closes
     }catch(e){ console.error(e); }
   };
   const _r=render; render=function(){ const a=document.activeElement, id=a&&a.id, p=a&&a.selectionStart; const r=_r.apply(this,arguments);
-    if(id==='aiKeyIn'){ const n=document.getElementById(id); if(n&&document.activeElement!==n){ n.focus(); try{ n.setSelectionRange(p,p); }catch(e){} } } return r; };
+    if(id==='aiKeyIn'||id==='relayIn'){ const n=document.getElementById(id); if(n&&document.activeElement!==n){ n.focus(); try{ n.setSelectionRange(p,p); }catch(e){} } } return r; };
+})();
+
+/* ===== ACTUS : relais perso, lecture directe WordPress, état honnête ===== */
+(function(){
+  const KP='statify-proxy', relay=()=>{ try{ return (localStorage.getItem(KP)||'').trim().replace(/\/+$/,''); }catch(e){ return ''; } };
+  const HOSTS=/^https:\/\/(trashtalk\.co|(www\.)?basketusa\.com|cdn\.nba\.com|site\.api\.espn\.com|a1?\.espncdn\.com)\//;
+  const PUB=[/^https:\/\/corsproxy\.io\/\?url=(.+)$/,/^https:\/\/api\.allorigins\.win\/(?:raw|get)\?(?:[^#]*?&)?url=([^&]+)/,/^https:\/\/api\.codetabs\.com\/v1\/proxy\/?\?quest=(.+)$/];
+  const f1=window.fetch.bind(window);
+  window.fetch=function(u,o){
+    const url=typeof u==='string'?u:(u&&u.url)||'', base=relay();
+    if(base&&url){
+      let target=''; for(const re of PUB){ const m=url.match(re); if(m){ target=m[1]; try{ target=decodeURIComponent(target); }catch(e){} break; } }
+      if(!target&&HOSTS.test(url)&&!/\/wp-json\//.test(url)) target=url;
+      if(target) return f1(base+'/?url='+encodeURIComponent(target),o).then(r=>r.ok?r:f1(u,o)).catch(()=>f1(u,o));
+    }
+    return f1(u,o);
+  };
+
+  /* lecture directe de l'API WordPress des sites (contenu complet, sans relais) */
+  const REST={'https://trashtalk.co/feed/':'https://trashtalk.co/wp-json/wp/v2/posts','https://www.basketusa.com/feed/':'https://www.basketusa.com/wp-json/wp/v2/posts'};
+  const newest=a=>Math.max(0,...a.map(i=>i.d||0));
+  const _ng=newsGet;
+  newsGet=async function(url,src){
+    const m=String(url).match(/^(https:\/\/[^?]+\/feed\/)(?:\?paged=(\d+))?$/), api=m&&REST[m[1]]; let rest=null, restErr='';
+    if(api){ try{
+      const u=`${api}?per_page=30&page=${m[2]||1}&_fields=date_gmt,link,title,excerpt,content&_=${Date.now()}`;
+      const r=await fetch(u,{cache:'no-store'}); if(!r.ok) throw new Error('HTTP '+r.status);
+      const j=await r.json(); if(!Array.isArray(j)||!j.length) throw new Error('aucun article lu');
+      rest=j.map(p=>({t:newsStrip((p.title||{}).rendered),l:p.link,d:Date.parse((p.date_gmt||'')+'Z')||0,e:newsClean(newsStrip((p.excerpt||{}).rendered)).slice(0,190),c:newsBody((p.content||{}).rendered),s:src})).filter(i=>i.t&&/^https?:/.test(i.l));
+      if(rest.length&&Date.now()-newest(rest)<36*36e5) return rest;
+    }catch(e){ restErr=e.message||String(e); } }
+    try{ const it=await _ng(url,src); if(rest&&rest.length&&newest(rest)>=newest(it)) return rest; return it; }
+    catch(e){ if(rest&&rest.length) return rest; throw e; }
+  };
+
+  /* affichage : jamais de « cet article est apparu en premier sur… », même sur d'anciens extraits */
+  const cl=s=>newsClean(s).replace(/\s*(Cet article|L.article)\s*[«"“][^]*$/i,'').trim();
+  newsClean=function(t){ return String(t||'').replace(/\s*(Cet article|L.article|Le post|The post|Cet billet)\b[^]*?(est apparu en premier sur|appeared first on|first appeared on)[^]*$/i,'').replace(/\s*(Cet article|L.article)\s*[«"“][^]*$/i,'').replace(/\s*\[…\]\s*$/,'…').trim(); };
+  try{ if(news&&news.items) news.items.forEach(i=>{ if(i.e) i.e=cl(i.e); }); }catch(e){}
+
+  /* panneau « actus à jour » : état réel + mise en place du relais perso */
+  let draft=null;
+  const _nc=newsCard;
+  newsCard=function(){
+    let h=_nc(); try{
+      const items=(news&&news.items)||[], nw=newest(items), age=nw?Date.now()-nw:Infinity, stale=age>36*36e5, base=relay();
+      let st='';
+      if(!items.length) st='<b>⚠️ Aucune actu chargée.</b> Les relais gratuits sont bloqués par ton navigateur.';
+      else if(stale) st=`<b>⚠️ Les actus ne sont pas à jour</b> : le dernier article date de ${esc(newsAgo(nw))}.${news.fail?` Dernière tentative ${esc(newsAgo(news.fail))} : échec.`:''}`;
+      if(!st&&!base) return h;
+      const val=draft!=null?draft:base;
+      h+=`<div class="card" style="${st?'border-color:var(--warn)':''}"><div style="font-size:13.5px;margin-bottom:6px">${st||'✅ <b>Relais perso actif</b> : les actus passent par ton relais.'}</div>
+      <details ${st&&!base?'open':''}><summary style="cursor:pointer;font-size:13.5px"><b>🔧 ${base?'Changer':'Mettre en place'} mon relais gratuit (5 min)</b></summary>
+      <ol style="font-size:13px;margin:8px 0;padding-left:18px;line-height:1.5"><li>Crée un compte gratuit sur <a href="https://dash.cloudflare.com/sign-up" target="_blank" rel="noopener">cloudflare.com</a>, puis va dans <b>Workers &amp; Pages</b> → <b>Create</b> → <b>Hello World</b> → <b>Deploy</b>.</li><li>Touche <b>Edit code</b>, efface tout, colle le contenu du fichier <b>statify-relais.js</b> (fourni avec le site), puis <b>Deploy</b>.</li><li>Copie l'adresse de ton relais (elle finit par <b>.workers.dev</b>) et colle-la ici :</li></ol>
+      <div class="row" style="gap:6px;flex-wrap:nowrap"><input id="relayIn" type="text" value="${esc(val)}" placeholder="https://statify-relais.ton-nom.workers.dev" autocomplete="off" autocapitalize="off" spellcheck="false" style="flex:1;min-width:0"><button data-act="newsrelaysave">Enregistrer</button></div>
+      ${base?'<p style="margin:6px 0 0"><span class="link" data-act="newsrelayoff">Retirer mon relais</span></p>':''}</details></div>`;
+    }catch(e){ console.error(e); } return h; };
+  document.addEventListener('input',e=>{ if(e.target&&e.target.id==='relayIn') draft=e.target.value; });
+  document.addEventListener('click',async e=>{
+    const b=e.target.closest&&e.target.closest('[data-act=newsrelaysave],[data-act=newsrelayoff]'); if(!b) return; e.stopImmediatePropagation(); e.preventDefault();
+    if(b.dataset.act==='newsrelayoff'){ try{ localStorage.removeItem(KP); }catch(x){} draft=null; render(); say('Relais retiré.','ok'); return; }
+    let v=((document.getElementById('relayIn')||{}).value||'').trim().replace(/\/+$/,'');
+    if(!/^https:\/\/[^\s]+\.[^\s]+$/.test(v)){ say('⚠️ Colle l\'adresse complète de ton relais (elle commence par https://).','err'); return; }
+    say('⏳ Test du relais…','warn');
+    try{ const r=await f1(v+'/?url='+encodeURIComponent('https://trashtalk.co/feed/?_='+Date.now())); const t=await r.text(); if(!r.ok||!/<item>/.test(t)) throw new Error(r.ok?'le relais répond mais ne renvoie pas le flux':'HTTP '+r.status);
+      try{ localStorage.setItem(KP,v); }catch(x){} draft=null; say('✓ Relais enregistré. Chargement des actus…','ok'); await newsRefresh(false); render();
+    }catch(err){ say('⚠️ Relais inutilisable : '+esc(err.message||err)+'. Vérifie l\'adresse et que le code est bien déployé.','err'); }
+  },true);
 })();
 
 /* ===== STUDIO : TRAME VIDÉO (voix off TikTok) =====
