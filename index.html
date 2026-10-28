@@ -5267,6 +5267,8 @@ document.addEventListener('click',e=>{ const b=e.target.closest&&e.target.closes
       if(n){ cleanDup(false); render(); say(`✓ ${n} match(s) manquant(s) récupéré(s) depuis le début de saison.`,'ok'); }
     }catch(e){ console.error(e); }
   };
+  const _r=render; render=function(){ const a=document.activeElement, id=a&&a.id, p=a&&a.selectionStart; const r=_r.apply(this,arguments);
+    if(id==='aiKeyIn'){ const n=document.getElementById(id); if(n&&document.activeElement!==n){ n.focus(); try{ n.setSelectionRange(p,p); }catch(e){} } } return r; };
 })();
 
 /* ===== STUDIO : TRAME VIDÉO (voix off TikTok) =====
@@ -5384,19 +5386,19 @@ const plain=T=>T.blocks.map(b=>b.txt).filter(Boolean).join('\n\n');
 const full=T=>T.blocks.map(b=>`[${b.s0}–${b.s1} s] ${b.k.toUpperCase()}  (à l'écran : ${b.vis})\n${b.txt}`).join('\n\n');
 
 function draw(){
-  const box=document.getElementById('stuScr'); if(!box) return; const S=stuS(), T=cur(), dur=S.scrDur||30;
+  const box=document.getElementById('stuScr'); if(!box) return; { const ae=document.activeElement; if(ae&&ae.id==='aiKeyIn') return; } const S=stuS(), T=cur(), dur=S.scrDur||30;
   if(!T){ box.innerHTML='<p class="mut" style="font-size:13px">Choisis un modèle avec des données pour générer la trame.</p>'; return; }
   const fail=(S.scrFail||{})[T.key];
   if(aiKey&&!T.ai&&!S.scrBusy&&!fail) setTimeout(()=>aiWrite(null,true),50);
-  const st=!aiKey?`<div style="background:var(--field);border-radius:12px;padding:10px 12px;margin-bottom:8px;font-size:13px"><b>✨ Pour un texte naturel, écrit comme un vrai créateur</b><div class="mut" style="margin:4px 0 6px">Le texte ci-dessous est un brouillon construit avec les vrais chiffres. Ajoute ta clé Google Gemini (gratuite, une seule fois) et l'IA le réécrira en français parlé, sans effet robot.</div><div class="mut" style="font-size:12.5px;margin-bottom:6px">1. Ouvre <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> · 2. « Create API key » · 3. Colle-la ici :</div><div class="row" style="gap:6px;flex-wrap:nowrap"><input id="aiKeyIn" type="password" placeholder="Clé Gemini (AIza…)" autocomplete="off" style="flex:1;min-width:0"><button data-act="aikeysave">Enregistrer</button></div></div>`
+  const st=!aiKey?`<div style="background:var(--field);border-radius:12px;padding:10px 12px;margin-bottom:8px;font-size:13px"><b>✨ Pour un texte naturel, écrit comme un vrai créateur</b><div class="mut" style="margin:4px 0 6px">Le texte ci-dessous est un brouillon construit avec les vrais chiffres. Ajoute ta clé Google Gemini (gratuite, une seule fois) et l'IA le réécrira en français parlé, sans effet robot.</div><div class="mut" style="font-size:12.5px;margin-bottom:6px">1. Ouvre <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> · 2. « Create API key » · 3. Colle-la ici :</div><div class="row" style="gap:6px;flex-wrap:nowrap"><input id="aiKeyIn" type="text" value="${esc(aiDraft||'')}" placeholder="Clé Gemini (AIza…)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" style="flex:1;min-width:0"><button data-act="aikeysave">Enregistrer</button></div></div>`
    :S.scrBusy?`<div class="mut" style="font-size:13px;margin-bottom:8px">✨ L'IA écrit ton texte en français naturel…</div>`
-   :fail?`<div class="err" style="font-size:13px;margin-bottom:8px">⚠️ ${esc(fail)} <span class="mut">(le brouillon ci-dessous reste utilisable)</span></div>`:'';
+   :fail?`<div class="err" style="font-size:13px;margin-bottom:8px">⚠️ ${esc(fail)} <span class="mut">(le brouillon ci-dessous reste utilisable)</span>${/cl[ée]/i.test(fail)?' <button class="sec" data-act="aikeyreset" style="margin-top:6px">🔑 Changer de clé</button>':''}</div>`:'';
   const ds=DURS.map(v=>`<button class="${dur===v?'':'sec'} fbtn" data-act="stuscrdur" data-k="${v}" style="padding:4px 10px">${v} s</button>`).join('');
   box.innerHTML=`<div class="row" style="gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span class="mut" style="font-size:12.5px">Durée visée :</span>${ds}</div>
   ${st}<div class="mut" style="font-size:12.5px;margin-bottom:8px">≈ ${T.secs} s · ${T.words} mots · rythme TikTok (~150 mots/min)${T.ai?' · ✨ texte écrit par l\'IA':aiKey?'':' · brouillon automatique'}${T.left>0?` · ${T.left} élément${T.left>1?'s':''} non repris (durée trop courte)`:''}</div>
   ${T.blocks.map(b=>`<div style="background:var(--field);border-radius:12px;padding:10px 12px;margin-bottom:6px"><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;font-size:12px"><b>${b.s0}–${b.s1} s · ${esc(b.k)}</b><span class="mut">🖼 ${esc(b.vis)}</span></div><div style="font-size:14px;margin-top:3px">${esc(b.txt)||'<span class="mut">—</span>'}</div></div>`).join('')}
-  <div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="sec" data-act="stuscrcopy">📋 Copier la trame</button><button class="sec" data-act="stuscrtxt">📋 Texte seul</button><button class="sec" data-act="stuscrsay">${window.speechSynthesis&&speechSynthesis.speaking?'⏹ Stop':'🔊 Écouter'}</button><button class="sec" data-act="stuscrseed">🔀 ${aiKey?'Autre version':'Autre formulation'}</button>${aiKey?'<button class="sec" data-act="stuscrai">✨ Réécrire avec l\'IA</button>':''}${T.ai?'<button class="sec" data-act="stuscrorig">↩ Version d\'origine</button>':''}</div>
-  <p class="mut" style="font-size:12px;margin:8px 0 0">Les phrases sont construites avec les vrais scores, buteurs et stats de ce modèle. « Texte seul » est fait pour coller dans CapCut ou TikTok (voix automatique).</p>`;
+  <div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="sec" data-act="stuscrcopy">📋 Copier la trame</button><button class="sec" data-act="stuscrtxt">📋 Texte seul</button><button data-act="stuvoixrec">🎙️ M'enregistrer</button><button class="sec" data-act="stuscrsay">${window.speechSynthesis&&speechSynthesis.speaking?'⏹ Stop':'🔊 Écouter'}</button><button class="sec" data-act="stuscrseed">🔀 ${aiKey?'Autre version':'Autre formulation'}</button>${aiKey?'<button class="sec" data-act="stuscrai">✨ Réécrire avec l\'IA</button>':''}${T.ai?'<button class="sec" data-act="stuscrorig">↩ Version d\'origine</button>':''}</div>
+  ${(window.stuRec&&window.stuRec.last())?`<div style="background:var(--field);border-radius:12px;padding:10px 12px;margin-top:8px"><div style="font-size:13px;margin-bottom:6px"><b>🎧 Ta dernière voix</b></div><audio controls src="${window.stuRec.last().url}" style="width:100%"></audio><div class="row" style="gap:6px;margin-top:6px"><button class="sec" data-act="stuvoixshare">↗ Partager</button><button class="sec" data-act="stuvoixdl">⬇ Télécharger</button></div></div>`:''}<p class="mut" style="font-size:12px;margin:8px 0 0">Les phrases sont construites avec les vrais scores, buteurs et stats de ce modèle. « Texte seul » est fait pour coller dans CapCut ou TikTok (voix automatique).</p>`;
 }
 
 async function aiWrite(btn,auto){
@@ -5410,11 +5412,14 @@ Style : français oral et naturel, phrases courtes, rythme qui respire, contract
 Interdits : emojis, hashtags, listes, "Match 1" ou "Point 2", clichés de robot ("il convient de noter"), pronostics, et toute information qui n'est pas dans les faits donnés. Dis les scores à l'oral ("3 à 0"), cite les joueurs par leur nom de famille.
 Le premier bloc est une accroche qui donne envie de rester dès la première seconde. Le dernier invite à commenter${f?' et à s\'abonner':''} sans demander de pronostic.
 Garde exactement ${base.blocks.length} blocs, avec à peu près le nombre de mots indiqué pour chacun.
-Réponds uniquement en JSON : {"blocs":["texte du bloc 1","texte du bloc 2"]}
+Réponds uniquement en JSON : {"blocs":[{"n":1,"texte":"texte du bloc 1"},{"n":2,"texte":"texte du bloc 2"}]}
 
 `+base.blocks.map((b,i)=>`${i+1}. [${b.k}] (~${b.w} mots) FAITS : ${b.f||b.txt}\n   Brouillon : ${b.txt}`).join('\n');
     let raw=await aiCall(prompt); raw=raw.replace(/^\s*```(json)?/i,'').replace(/```\s*$/,''); let o; try{ o=JSON.parse(raw); }catch(e){ const a=raw.indexOf('{'), z=raw.lastIndexOf('}'); o=JSON.parse(raw.slice(a,z+1)); }
-    const L=(o.blocs||o.blocks||[]).map(x=>noEmo(String(x))); if(L.length!==base.blocks.length||L.some(x=>!x)) throw new Error('Réponse de l\'IA incomplète. Touche « Réécrire avec l\'IA ».');
+    const arr=Array.isArray(o)?o:(o.blocs||o.blocks||o.texte||[]), M={};
+    (Array.isArray(arr)?arr:[]).forEach((x,i)=>{ const n=(x&&typeof x==='object')?+(x.n||x.bloc||i+1):i+1, t=(x&&typeof x==='object')?(x.texte||x.text||x.txt||''):String(x||''); if(t&&String(t).trim()) M[n]=noEmo(String(t)); });
+    if(!Object.keys(M).length) throw new Error('L\'IA n\'a rien renvoyé d\'utilisable. Touche « Réécrire avec l\'IA » pour réessayer.');
+    const L=base.blocks.map((bk,i)=>M[i+1]||bk.txt);
     S.scrAI={key,txt:L}; if(!auto) say('✓ Texte réécrit par l\'IA.','ok');
   }catch(e){ (S.scrFail||(S.scrFail={}))[key]=e.message||String(e); }
   S.scrBusy=false; draw();
@@ -5446,6 +5451,75 @@ viewStudio=function(sport){ let h=_vw(sport); const mk='<p class="mut" style="fo
 const _dw=stuDraw;
 stuDraw=async function(sport){ await _dw(sport); try{ draw(); }catch(e){ console.error(e); } };
 window.stuTrame={build,cur,draw};
+})();
+
+/* ===== STUDIO : enregistrer sa voix (prompteur + micro) ===== */
+(function(){
+  const $e=id=>document.getElementById(id);
+  let R=null, LAST=null;
+  const sup=()=>!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.MediaRecorder);
+  const mime=()=>['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus'].find(m=>{ try{ return MediaRecorder.isTypeSupported(m); }catch(e){ return false; } })||'';
+  const ext=m=>/mp4/.test(m)?'m4a':/ogg/.test(m)?'ogg':'webm';
+  const mmss=s=>{ s=Math.max(0,Math.floor(s)); return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); };
+  const fname=()=>`statify-voix-${new Date().toISOString().slice(0,16).replace(/[-:T]/g,'')}.${LAST?LAST.ext:'m4a'}`;
+
+  function cum(){ let t=0; return R.blocks.map(b=>(t+=Math.max(1,b.s)/R.speed)); }
+  function mark(){ if(!R) return; R.ov.querySelectorAll('[data-b]').forEach(el=>{ const on=+el.dataset.b===R.i; el.style.opacity=on?'1':'.32'; el.style.transform=on?'scale(1)':'scale(.97)'; el.style.borderColor=on?'#34b64f':'transparent'; });
+    const c=R.ov.querySelector(`[data-b="${R.i}"]`); if(c&&R.state==='rec') c.scrollIntoView({block:'center',behavior:'smooth'}); }
+  function draw(){
+    if(!R) return; const st=R.state, btn=(t,a,cls)=>`<button data-rec="${a}" class="${cls||''}" style="flex:1;min-height:52px;font-size:16px">${t}</button>`;
+    const txt=R.blocks.map((b,i)=>`<div data-b="${i}" style="border:2px solid transparent;border-radius:14px;padding:12px 14px;margin:0 0 10px;font-size:25px;line-height:1.35;font-weight:600;transition:.25s"><div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.6;margin-bottom:4px">${esc(b.k)}</div>${esc(b.txt)}</div>`).join('');
+    let ctl='';
+    if(st==='idle') ctl=`<div class="row" style="gap:6px;justify-content:center;margin-bottom:8px"><span class="mut" style="align-self:center;font-size:13px">Vitesse du texte :</span>${[[0.8,'🐢 Lent'],[1,'Normal'],[1.25,'🐇 Rapide']].map(([v,l])=>`<button data-rec="speed" data-v="${v}" class="${R.speed===v?'':'sec'}" style="padding:6px 12px">${l}</button>`).join('')}</div><div class="row" style="gap:8px">${btn('● Enregistrer','start','')}</div><p class="mut" style="font-size:12.5px;text-align:center;margin:8px 0 0">Mets-toi dans un endroit calme, micro à 15 cm. Le texte défile tout seul ; touche « Suivant » si tu veux aller plus vite.</p>`;
+    else if(st==='ask') ctl='<p class="mut" style="text-align:center">Autorise le micro quand ton téléphone te le demande…</p>';
+    else if(st==='count') ctl=`<div style="text-align:center;font-size:64px;font-weight:900">${R.cd}</div>`;
+    else if(st==='rec') ctl=`<div style="text-align:center;font-size:18px;margin-bottom:8px"><span style="color:#ff5a45">●</span> <b id="recT">00:00</b></div><div class="row" style="gap:8px">${btn('■ Stop','stop','danger')}${btn('Suivant ▶','next','sec')}</div>`;
+    else if(st==='done'&&LAST) ctl=`<div style="font-size:14px;margin-bottom:6px;text-align:center">✓ Enregistré · ${mmss(LAST.dur)}</div><audio controls src="${LAST.url}" style="width:100%;margin-bottom:8px"></audio><div class="row" style="gap:8px;margin-bottom:8px">${btn('↗ Partager','share','')}${btn('⬇ Télécharger','dl','sec')}</div><div class="row" style="gap:8px">${btn('↻ Refaire','redo','sec')}${btn('✓ Terminer','close','sec')}</div>`;
+    R.ov.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="font-size:17px">🎙️ Enregistre ta voix</b><button data-rec="close" class="sec" style="padding:6px 12px">✕</button></div><div id="recTxt" style="flex:1;overflow-y:auto;padding:4px 0 90px;-webkit-overflow-scrolling:touch">${txt}</div><div style="padding-top:8px">${ctl}</div>`;
+    mark();
+  }
+  function cleanup(){ try{ if(R&&R.timer) clearInterval(R.timer); }catch(e){} try{ if(R&&R.stream) R.stream.getTracks().forEach(t=>t.stop()); }catch(e){} try{ if(R&&R.wl) R.wl.release(); }catch(e){} }
+  function close(){ if(!R) return; if(R.mr&&R.mr.state!=='inactive'){ R.discard=true; try{ R.mr.stop(); }catch(e){} } cleanup(); R.ov.remove(); R=null; document.body.style.overflow=''; try{ draw0(); }catch(e){} }
+  function open(){
+    const T=stuTrame.cur(); if(!T){ say('Choisis d\'abord un modèle avec des données.','warn'); return; }
+    if(!sup()){ say('Ce navigateur ne peut pas enregistrer la voix (ou la page n\'est pas en https). Essaie avec Safari ou Chrome à jour.','err'); return; }
+    const ov=document.createElement('div'); ov.id='stuRec'; ov.style.cssText='position:fixed;inset:0;z-index:9800;background:#050d18;color:#fff;display:flex;flex-direction:column;padding:calc(12px + env(safe-area-inset-top)) 16px calc(12px + env(safe-area-inset-bottom));font-family:inherit';
+    R={ov,blocks:T.blocks.map(b=>({k:b.k,txt:b.txt,s:Math.max(1,b.s1-b.s0)})),i:0,speed:1,state:'idle',cd:3,chunks:[],shift:0};
+    document.body.appendChild(ov); document.body.style.overflow='hidden'; ov.addEventListener('click',onClick); draw();
+  }
+  async function start(){
+    R.state='ask'; draw();
+    try{ R.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}); }
+    catch(e){ R.state='idle'; draw(); say('⚠️ Micro refusé ou introuvable : autorise-le dans les réglages du navigateur pour ce site.','err'); return; }
+    try{ if(navigator.wakeLock) R.wl=await navigator.wakeLock.request('screen'); }catch(e){}
+    R.i=0; R.state='count'; R.cd=3; draw();
+    const iv=setInterval(()=>{ if(!R||R.state!=='count'){ clearInterval(iv); return; } R.cd--; if(R.cd<=0){ clearInterval(iv); go(); } else draw(); },1000);
+  }
+  function go(){
+    const m=mime(); R.chunks=[]; let mr;
+    try{ mr=m?new MediaRecorder(R.stream,{mimeType:m}):new MediaRecorder(R.stream); }catch(e){ R.state='idle'; draw(); say('⚠️ Enregistrement impossible : '+esc(e.message||e),'err'); cleanup(); return; }
+    R.mr=mr; R.mime=mr.mimeType||m||'audio/mp4';
+    mr.ondataavailable=e=>{ if(e.data&&e.data.size) R.chunks.push(e.data); };
+    mr.onstop=()=>{ const rr=R; if(!rr||rr.discard) return; const dur=(Date.now()-rr.t0)/1000, blob=new Blob(rr.chunks,{type:rr.mime}); cleanup(); if(LAST&&LAST.url) URL.revokeObjectURL(LAST.url);
+      if(!blob.size){ rr.state='idle'; draw(); say('⚠️ Rien n\'a été enregistré. Réessaie.','err'); return; }
+      LAST={blob,url:URL.createObjectURL(blob),ext:ext(rr.mime),dur}; rr.state='done'; draw(); };
+    mr.start(1000); R.t0=Date.now(); R.state='rec'; R.shift=0; draw();
+    R.timer=setInterval(()=>{ if(!R||R.state!=='rec') return; const e=(Date.now()-R.t0)/1000, t=$e('recT'); if(t) t.textContent=mmss(e);
+      const c=cum(), a=e+R.shift; let i=c.findIndex(x=>a<x); if(i<0) i=c.length-1; if(i!==R.i){ R.i=i; mark(); } },200);
+  }
+  function next(){ if(!R||R.state!=='rec') return; const c=cum(); if(R.i>=c.length-1) return; const e=(Date.now()-R.t0)/1000; R.i++; R.shift=c[R.i-1]-e; mark(); }
+  function stop(){ if(R&&R.mr&&R.mr.state!=='inactive'){ clearInterval(R.timer); R.mr.stop(); } }
+  async function share(){ if(!LAST) return; const f=new File([LAST.blob],fname(),{type:LAST.blob.type||'audio/mp4'});
+    try{ if(navigator.canShare&&navigator.canShare({files:[f]})){ await navigator.share({files:[f]}); return; } }catch(e){ if(e&&e.name==='AbortError') return; }
+    dl(); }
+  function dl(){ if(!LAST) return; const a=document.createElement('a'); a.href=LAST.url; a.download=fname(); document.body.appendChild(a); a.click(); setTimeout(()=>a.remove(),3000); say('✓ Voix téléchargée.','ok'); }
+  function onClick(e){ const b=e.target.closest('[data-rec]'); if(!b) return; e.stopPropagation(); const a=b.dataset.rec;
+    if(a==='start') start(); else if(a==='stop') stop(); else if(a==='next') next(); else if(a==='close') close();
+    else if(a==='speed'){ R.speed=+b.dataset.v; draw(); } else if(a==='redo'){ R.state='idle'; R.i=0; draw(); } else if(a==='share') share(); else if(a==='dl') dl(); }
+  function draw0(){ try{ stuTrame.draw(); }catch(e){} }
+  window.stuRec={open,last:()=>LAST,share,dl};
+  document.addEventListener('click',e=>{ const b=e.target.closest&&e.target.closest('.stu [data-act=stuvoixrec],.stu [data-act=stuvoixshare],.stu [data-act=stuvoixdl]'); if(!b) return; e.stopImmediatePropagation(); e.preventDefault();
+    const a=b.dataset.act; if(a==='stuvoixrec') open(); else if(a==='stuvoixshare') share(); else dl(); },true);
 })();
 
 </script>
