@@ -616,7 +616,16 @@ let liveData={items:[],t:0,err:'',busy:false}, liveMem={}, liveLast=0, liveSeen=
 let notes = loadJ(KEYN,{});
 let backup = loadJ(KEYB,{last:null,snooze:0});
 let homeCfg = loadJ(KEYH,{order:HOME_BLOCKS.map(b=>b[0]),hidden:[]});
-const save = () => bigSave(KEY,games);
+/* Anti-doublons : un même match (mêmes équipes, à moins de 30 h d'écart) ne peut exister qu'une fois ; on garde la version officielle (id NBA) */
+function dedupeGames(){ const by={}; let n=0;
+  for(const g of Object.values(games)){ if(g.status!==3||!g.time||!g.home||!g.away) continue; (by[g.home.tri+'|'+g.away.tri] ||= []).push(g); }
+  for(const k in by){ const L=by[k].sort((a,b)=>tms(a)-tms(b));
+    for(let i=0;i<L.length;i++) for(let j=i+1;j<L.length;j++){ const a=L[i], b=L[j]; if(!games[a.id]||!games[b.id]) continue;
+      if(Math.abs(tms(b)-tms(a))>=30*36e5) continue;
+      const esp=g=>/^espn/.test(String(g.id)), np=g=>(g.home.players||[]).length+(g.away.players||[]).length;
+      const drop=(esp(a)!==esp(b))?(esp(a)?a:b):(np(a)>=np(b)?b:a); delete games[drop.id]; n++; } }
+  return n; }
+const save = () => { try{ dedupeGames(); }catch(e){} return bigSave(KEY,games); };
 const saveFav = () => saveJ(KEYF,fav);
 
 const ui = {tab:'home', openGame:null, openPlayer:null, openTeam:null, gTeam:'',
@@ -782,7 +791,7 @@ async function nbaEspnRefresh(why){
     catch(e){ ko++; errm=e.message||String(e); } })); }
   if(!okReq){ say(`⚠️ ESPN ne répond pas non plus (${esc(errm)}). Utilise le <b>favori NBA</b> sur nba.com, puis Ctrl+V ici.`,'err'); return; }
   const seen=new Set(); let todo=[]; const calKo=ko;
-  for(const c of cand){ if(seen.has(c.eid)) continue; seen.add(c.eid);
+  for(const c of cand){ if(seen.has(c.eid)) continue; seen.add(c.eid); if(Object.values(games).some(g=>g.status===3&&g.home.tri===c.h&&g.away.tri===c.a&&Math.abs(tms(g)-c.t)<30*36e5)) continue;
     const m=sched.filter(x=>x.h===c.h&&x.a===c.a).sort((x,y)=>Math.abs(Date.parse(x.t)-c.t)-Math.abs(Date.parse(y.t)-c.t))[0];
     const nid=(m&&Math.abs(Date.parse(m.t)-c.t)<36*36e5)?m.id:'espn'+c.eid;
     if(games[nid]&&games[nid].status===3) continue; todo.push({...c,nid}); }
@@ -806,7 +815,7 @@ async function nbaRefresh(){
     sched=sc; saveJ(KEYS,sched);
     const now=Date.now(), fin=Object.values(games).filter(g=>g.status===3).map(tms).filter(Boolean), last=fin.length?Math.max(...fin):0;
     const days=nbaDays(last), from=now-days*864e5;
-    const all=sched.filter(x=>!/^001/.test(x.id)&&Date.parse(x.t)<=now-3*36e5&&Date.parse(x.t)>=from&&!(games[x.id]&&games[x.id].status===3)).sort((a,b)=>Date.parse(a.t)-Date.parse(b.t)), more=all.length>60, todo=all.slice(0,60);
+    const all=sched.filter(x=>!/^001/.test(x.id)&&Date.parse(x.t)<=now-3*36e5&&Date.parse(x.t)>=from&&!(games[x.id]&&games[x.id].status===3)&&!Object.values(games).some(g=>g.status===3&&g.home.tri===x.h&&g.away.tri===x.a&&Math.abs(tms(g)-Date.parse(x.t))<30*36e5)).sort((a,b)=>Date.parse(a.t)-Date.parse(b.t)), more=all.length>60, todo=all.slice(0,60);
     if(!todo.length){ nbaBfDone(); save(); render(); say('✓ NBA : calendrier mis à jour, aucun nouveau match terminé à récupérer.','ok'); return; }
     let ok=0,ko=0,errm=''; const gs=[];
     for(let i=0;i<todo.length;i+=4){ say(`⏳ NBA : matchs ${i}/${todo.length}…`,'warn'); await Promise.all(todo.slice(i,i+4).map(async x=>{ try{ const g=await fetchGame(x.id); if(g.status===3||g.status===2){ games[x.id]=g; ok++; } }catch(e){ ko++; errm=e.message||String(e); } })); }
@@ -4599,7 +4608,7 @@ var autoHidden=0;
 async function autoRun(){ autoBadge('🔄 Mise à jour…'); try{ liveFetch(false); }catch(e){} await Promise.all([footAuto().catch(()=>{}),nbaAuto().catch(()=>{})]); autoBadge(''); }
 document.addEventListener('visibilitychange',()=>{ if(document.hidden){ autoHidden=Date.now(); bigFlush(); } else if(autoHidden&&Date.now()-autoHidden>5*6e4) autoRun(); });
 window.addEventListener('pagehide',bigFlush);
-setTimeout(async()=>{ try{ await Promise.race([bigLoad(),new Promise(r=>setTimeout(r,1200))]); }catch(e){} autoRun(); },0);
+setTimeout(async()=>{ try{ await Promise.race([bigLoad(),new Promise(r=>setTimeout(r,1200))]); }catch(e){} try{ if(dedupeGames()){ save(); render(); } }catch(e){} autoRun(); },0);
 </script>
 </body>
 </html>
