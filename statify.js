@@ -1197,8 +1197,8 @@ function legendsHtml(kind,key,name){
 function tonightNba(S){
   if(!sched||!sched.length) return '';
   const now=Date.now(); let L=upcoming().filter(x=>Date.parse(x.t)>=now-3*36e5&&Date.parse(x.t)<=now+30*36e5);
-  // une « nuit » NBA = tous les matchs du même jour américain (ex. 20h → 3h30 du matin, heure de Paris) : on n'affiche que la prochaine
-  { const nk=x=>parisDK(new Date(Date.parse(x.t)-12*36e5).toISOString()); if(L.length){ const k0=L.map(nk).sort()[0]; L=L.filter(x=>nk(x)===k0); } }
+  // une « nuit » = de 18h à 6h du matin (heure de Paris) : on n'affiche que la prochaine (un match avant 18h compte pour la nuit qui suit)
+  { const nk=x=>parisDK(new Date(Date.parse(x.t)-6*36e5).toISOString()); if(L.length){ const k0=L.map(nk).sort()[0]; L=L.filter(x=>nk(x)===k0); } }
   let big=new Set(); try{ const b=bigMatches(S); if(b) b.items.forEach(i=>big.add(i.x.id)); }catch(e){}
   const mine=x=>fav.teams.includes(x.h)||fav.teams.includes(x.a);
   const rows=[...L].sort((a,b)=>mine(b)-mine(a)||Date.parse(a.t)-Date.parse(b.t)).map(x=>`<div class="liverow" style="grid-template-columns:auto 1fr auto"><div><b>${esc(parisT(x.t))}</b></div><div class="lt">${teamLogo(x.a,22)}<span class="nfull">${esc(tname(x.a))}</span><span class="ntri">${esc(x.a)}</span> <span class="mut">@</span> ${teamLogo(x.h,22)}<span class="nfull">${esc(tname(x.h))}</span><span class="ntri">${esc(x.h)}</span>${mine(x)?' ⭐':''}${big.has(x.id)?' 🔥':''}</div><div><span class="link" data-act="cmpgo" data-sp="nba" data-a="${esc(x.h)}" data-b="${esc(x.a)}" title="Comparer ces deux équipes">⚖️</span></div></div>`).join('');
