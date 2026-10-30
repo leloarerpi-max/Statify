@@ -712,10 +712,10 @@ function newsIngest(o){ try{ const it=newsParseXml(String(o.xml||''),o.src||'Act
 /* ---- Lecteur d'article intégré : l'article s'ouvre dans une fenêtre de Statify ---- */
 const KEYNF2='suivi-nba-news-full'; let newsFull=loadJ(KEYNF2,{});
 const NEWS_OK={P:1,H1:1,H2:1,H3:1,H4:1,UL:1,OL:1,LI:1,BLOCKQUOTE:1,STRONG:1,B:1,EM:1,I:1,BR:1,A:1,IMG:1,FIGURE:1,FIGCAPTION:1};
-function newsClean(html){
+function newsClean(html,base){
   try{
     const src=new DOMParser().parseFromString('<body>'+String(html||'')+'</body>','text/html').body, out=document.createElement('div'); let budget=18000;
-    const safeUrl=u=>{ try{ const x=new URL(u,'https://www.basketusa.com/'); return /^https?:$/.test(x.protocol)?x.href:''; }catch(e){ return ''; } };
+    const safeUrl=u=>{ try{ const x=new URL(u,base||'https://www.basketusa.com/'); return /^https?:$/.test(x.protocol)?x.href:''; }catch(e){ return ''; } };
     const walk=(from,to)=>{ for(const n of [...from.childNodes]){
       if(budget<=0) return;
       if(n.nodeType===3){ const t=n.textContent; budget-=t.length; to.appendChild(document.createTextNode(t)); }
@@ -744,9 +744,48 @@ function newsReaderHtml(l){
   const i=(news.items||[]).find(x=>x.l===l); if(!i) return '';
   const c=newsFull[l];
   const body=c?`<div class="nrd">${newsClean(c)}</div>`
-    :`<div class="nrd"><p class="mut">Le flux de ${esc(i.s)} ne contient pas le texte complet de cet article.</p>${i.e?`<p>${esc(i.e)}${i.e.length>=189?'…':''}</p>`:''}</div>`;
+    :ui.newsLoad===l?`<div class="nrd"><p class="mut">⏳ Chargement de l'article complet…</p>${i.e?`<p>${esc(i.e)}${i.e.length>=189?'…':''}</p>`:''}</div>`
+    :`<div class="nrd"><p class="mut">${ui.newsFail===l?'Impossible de charger l\'article complet pour l\'instant (la page ou le relais ne répond pas).':'Le texte complet de cet article n\'est pas disponible dans le flux.'}</p>${i.e?`<p>${esc(i.e)}${i.e.length>=189?'…':''}</p>`:''}<p><button class="sec" data-act="newsretry" data-l="${esc(l)}">🔄 Réessayer</button></p></div>`;
   const btns=`<div class="row" style="margin-top:14px;gap:8px"><a class="nrd-open" href="${esc(i.l)}" target="_blank" rel="noopener">Lire sur le site d'origine ↗</a><button class="sec" data-act="newsclose">Fermer</button></div>`;
   return `<div class="card nrd-card"><div class="mut" style="font-size:12px;margin-bottom:8px;padding-right:48px">${esc(i.s)}${i.d?' · '+esc(newsAgo(i.d)):''}</div><h2 style="margin:0 0 12px;line-height:1.3;padding-right:44px">${esc(i.t)}</h2>${body}${btns}</div>`;
+}
+
+/* ---- Article complet : le flux n'a qu'un résumé, on lit la page de l'article et on en extrait le texte ---- */
+function newsExtract(txt,base){
+  if(txt.length<30000&&/Just a moment|cf-browser-verification|Enable JavaScript and cookies|Attention Required/i.test(txt.slice(0,8000))) return '';
+  const doc=new DOMParser().parseFromString(txt,'text/html');
+  doc.querySelectorAll('img').forEach(im=>{ const s=im.getAttribute('data-src')||im.getAttribute('data-lazy-src')||im.getAttribute('data-original');
+    if(s) im.setAttribute('src',s); else { const ss=im.getAttribute('data-srcset')||im.getAttribute('srcset'); if(!im.getAttribute('src')&&ss) im.setAttribute('src',ss.split(',')[0].trim().split(' ')[0]); } });
+  let el=null;
+  for(const s of ['article .entry-content','.entry-content','.post-content','.td-post-content','[itemprop=articleBody]','.article-content','.single-content','.post-body','article']){
+    for(const c of doc.querySelectorAll(s)){ if((c.textContent||'').trim().length>400){ el=c; break; } } if(el) break; }
+  if(!el){ let best=0; doc.querySelectorAll('div,section,main').forEach(c=>{ let n=0; c.querySelectorAll(':scope > p').forEach(p=>{ n+=(p.textContent||'').trim().length; }); if(n>best){ best=n; el=c; } }); if(best<400) el=null; }
+  if(!el) return '';
+  const junk=/share|social|related|newsletter|comment|advert|\bads?\b|promo|sidebar|widget|breadcrumb|author|tags|pagination|sponsor|subscribe|read-more|lire-aussi|yarpp|jp-relatedposts|wp-block-buttons/i;
+  el.querySelectorAll('script,style,noscript,iframe,form,nav,aside,button,svg,video,audio').forEach(n=>n.remove());
+  el.querySelectorAll('[class],[id]').forEach(n=>{ if(n!==el&&junk.test((n.getAttribute('class')||'')+' '+(n.getAttribute('id')||''))) n.remove(); });
+  const h=newsClean(el.innerHTML,base);
+  return h.replace(/<[^>]+>/g,'').trim().length>=300?h:'';
+}
+async function newsFetchArticle(url){
+  const enc=encodeURIComponent(url), tries=[()=>url,()=>'https://api.allorigins.win/raw?url='+enc,()=>'https://corsproxy.io/?url='+enc], errs=[];
+  for(const f of tries){
+    try{ const c=new AbortController(), to=setTimeout(()=>c.abort(),12000); let r; try{ r=await fetch(f(),{signal:c.signal}); } finally{ clearTimeout(to); }
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const h=newsExtract(await r.text(),url); if(h) return h; throw new Error('texte introuvable');
+    }catch(e){ errs.push(e.message||String(e)); } }
+  throw new Error(errs.join(' | '));
+}
+async function newsLoadFull(l){
+  if(newsFull[l]||ui.newsLoad===l) return;
+  ui.newsLoad=l; ui.newsFail=null;
+  try{
+    const h=await newsFetchArticle(l); newsFull[l]=h;
+    const keep=new Set((news.items||[]).slice().sort((a,b)=>(b.d||0)-(a.d||0)).slice(0,30).map(i=>i.l)); keep.add(l);
+    for(const k of Object.keys(newsFull)) if(!keep.has(k)) delete newsFull[k];
+    saveJ(KEYNF2,newsFull);
+  }catch(e){ ui.newsFail=l; }
+  finally{ if(ui.newsLoad===l) ui.newsLoad=null; if(ui.newsRead===l) render(); }
 }
 function newsAgo(t){ if(!t) return ''; const m=Math.max(0,Math.round((Date.now()-t)/6e4)); return m<60?`il y a ${m} min`:m<1440?`il y a ${Math.round(m/60)} h`:`il y a ${Math.round(m/1440)} j`; }
 function newsCard(){
@@ -2423,7 +2462,8 @@ function toggleFav(type,id,name){
   else if(a==='fclose'){ closeModals(); render(); }
   else if(a==='newsrefresh') newsRefresh(false);
   else if(a==='newsfav'){ ui.newsFav=!ui.newsFav; render(); }
-  else if(a==='newsopen'){ if(e.ctrlKey||e.metaKey||e.shiftKey) return; e.preventDefault(); ui.newsRead=el.dataset.l; render(); $('#modal').scrollTop=0; }
+  else if(a==='newsopen'){ if(e.ctrlKey||e.metaKey||e.shiftKey) return; e.preventDefault(); ui.newsRead=el.dataset.l; newsLoadFull(ui.newsRead); render(); $('#modal').scrollTop=0; }
+  else if(a==='newsretry'){ ui.newsFail=null; newsLoadFull(el.dataset.l); render(); }
   else if(a==='newsclose'){ ui.newsRead=null; render(); }
   else if(a==='newsmore'){ ui.newsMore=1; render(); }
   else if(a==='fcarddl') footCardDownload(id);
