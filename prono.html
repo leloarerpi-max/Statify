@@ -2,12 +2,13 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
+  <script>try{var t=localStorage.getItem('suivi-nba-theme');if(!t)t=(window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark';document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme='dark'}</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>PronoTracker Pro - Suivi & Performance</title>
 
   <!-- PWA : icône + nom sur écran d'accueil (aucun impact sur le fonctionnement de l'appli) -->
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#ea580c">
+  <meta name="theme-color" content="#0a192c">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Statify">
@@ -16,10 +17,9 @@
     <script src="chart.umd.min.js"></script>
   <link rel="stylesheet" href="fa.css">
   <link rel="stylesheet" href="prono.css">
-<style id="gnav-css">#gnav{display:flex;gap:6px;justify-content:center;padding:calc(env(safe-area-inset-top,0px) + 6px) 10px 6px;background:#0a192c;border-bottom:1px solid #1f3d5e;font:600 13px/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}#gnav a{color:#8ea5c0;text-decoration:none;padding:9px 18px;border-radius:999px;-webkit-tap-highlight-color:transparent}#gnav a[aria-current=page]{background:#ea580c;color:#fff}#gnav a:active{opacity:.7}body{padding-top:0!important}#gnav{margin-bottom:12px}@media(min-width:768px){#gnav{margin-left:-2rem;margin-right:-2rem}}@media(max-width:767px){#gnav{margin-left:-1rem;margin-right:-1rem}}</style>
 </head>
 <body class="p-4 md:p-8 min-h-screen">
-<nav id="gnav" aria-label="Navigation"><a href="./">📊 Stats</a><a href="prono.html" aria-current="page">🎯 Pronos</a></nav>
+<nav id="gnav" aria-label="Navigation"><a href="./"><i>🏠</i><span>Accueil</span></a><a href="prono.html" aria-current="page"><i>🎯</i><span>Pronos</span></a></nav>
 
 
   <div id="appRoot" class="max-w-7xl mx-auto space-y-8">
@@ -38,6 +38,7 @@
       
       <div class="flex items-center gap-2 w-full md:w-auto">
         <button id="syncBtn" onclick="openSyncModal()" title="Synchronisation entre appareils" class="flex-1 md:flex-none justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 sm:px-3.5 py-2.5 rounded-xl border border-slate-200 flex items-center gap-1.5 transition shadow-sm"><i id="syncIcon" class="fa-solid fa-cloud text-slate-400"></i><span id="syncLabel">Sync</span><span id="syncDot" class="w-2 h-2 rounded-full bg-slate-300"></span></button>
+        <button id="btnTheme" type="button" title="Thème clair / sombre" aria-label="Thème clair / sombre" class="flex-1 md:flex-none justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 sm:px-3.5 py-2.5 rounded-xl border border-slate-200 flex items-center gap-1.5 transition">🌓</button>
         <select id="ambianceSelect" onchange="changerAmbiance(this.value)" title="Ambiance du fond" class="flex-1 md:flex-none"></select>
         <button onclick="exportCSV()" class="flex-1 md:flex-none justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 sm:px-3.5 py-2.5 rounded-xl border border-slate-200 flex items-center gap-1.5 transition shadow-sm">
           <i class="fa-solid fa-file-excel text-emerald-600"></i> <span class="hidden sm:inline">Export</span>CSV

@@ -2433,7 +2433,7 @@ function render(){
     { const ICO={home:'🏠',games:'📋',matches:'📋',players:'👤',teams:'🛡️',standings:'📊',table:'📊',multi:'🔥',race:'🎯',records:'🏅',compare:'⚖️',rest:'😴',cal:'📅',tiktok:'📱',studio:'🎨'}, cl=l=>l.replace(/^🔥\s*/,'');
       const PRI=FT?['home','multi','matches','table']:['home','games','players','teams'], pri=TT.filter(([k])=>PRI.includes(k)), rest=TT.filter(([k])=>!PRI.includes(k)), inRest=rest.some(([k])=>k===cur);
       const tb=([k,l])=>`<button data-act="tab" data-t="${k}" class="${cur===k?'on':''}"><i>${ICO[k]||'•'}</i><span>${esc(cl(l))}</span></button>`;
-      $('#tabs').innerHTML=pri.map(tb).join('')+`<button data-act="tabmore" class="${inRest||ui.tabMore?'on':''}"><i>⋯</i><span>Plus</span></button>`+(ui.tabMore?`<div class="tabsheet">${rest.map(tb).join('')}</div>`:''); }
+      $('#tabs').innerHTML=pri.map(tb).join('')+`<button data-act="pronos"><i>🎯</i><span>Pronos</span></button><button data-act="tabmore" class="${inRest||ui.tabMore?'on':''}"><i>⋯</i><span>Plus</span></button>`+(ui.tabMore?`<div class="tabsheet">${rest.map(tb).join('')}</div>`:''); }
     const v={home:viewHome,games:viewGames,players:viewPlayers,teams:viewTeams,standings:viewStandings,race:viewRace,records:viewRecords,compare:viewCompare,rest:viewRest,cal:viewCal,studio:()=>viewStudio('nba')}[ui.tab];
     $('#view').innerHTML=FT?viewFoot():v(S);
     const M=$('#modal'), mb=M.firstElementChild, keep=M.classList.contains('on')?M.scrollTop:0;
@@ -2576,7 +2576,7 @@ $('#modal').addEventListener('click',e=>{ if(e.target.id==='modal'){ closeModals
 $('#mclose').addEventListener('click',()=>{ closeModals(); render(); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&$('#welcome').classList.contains('on')){ closeWelcome(); return; } if(e.key==='Escape'&&!tv.on&&(ui.openPlayer||ui.openTeam||ui.openGame||ui.fMatch||ui.fTeam||ui.fPlayer)){ closeModals(); render(); } });
 $('#modal').addEventListener('change',e=>{ const t=e.target; if(t.dataset&&t.dataset.note){ setNote(t.dataset.note,t.dataset.name,t.value); t.style.borderColor='var(--ok)'; setTimeout(()=>{ t.style.borderColor=''; },900); } });
-$('#tabs').addEventListener('click',e=>{ if(e.target.closest('[data-act=tabmore]')){ ui.tabMore=!ui.tabMore; render(); return; } const b=e.target.closest('[data-act=tab]'); if(b){ ui.tabMore=false; if(ui.sport==='foot'){ if(b.dataset.t!=='multi'||ui.ftab!=='multi'){ ui.fMultiDay=null; if(b.dataset.t==='multi') ui.fMulti='all'; } ui.ftab=b.dataset.t; } else ui.tab=b.dataset.t; closeModals(); render(); } });
+$('#tabs').addEventListener('click',e=>{ if(e.target.closest('[data-act=pronos]')){ location.href='prono.html'; return; } if(e.target.closest('[data-act=tabmore]')){ ui.tabMore=!ui.tabMore; render(); return; } const b=e.target.closest('[data-act=tab]'); if(b){ ui.tabMore=false; if(ui.sport==='foot'){ if(b.dataset.t!=='multi'||ui.ftab!=='multi'){ ui.fMultiDay=null; if(b.dataset.t==='multi') ui.fMulti='all'; } ui.ftab=b.dataset.t; } else ui.tab=b.dataset.t; closeModals(); render(); } });
 $('#view').addEventListener('change',e=>{
   const t=e.target, id=t.id;
   if(t.dataset&&t.dataset.note){ setNote(t.dataset.note,t.dataset.name,t.value); t.style.borderColor='var(--ok)'; setTimeout(()=>{ t.style.borderColor=''; },900); return; }

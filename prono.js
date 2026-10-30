@@ -1,3 +1,7 @@
+    // Couleurs des graphiques selon le thème clair/sombre (même réglage que Statify)
+    const chartGrid = () => document.documentElement.dataset.theme === 'light' ? '#f1f5f9' : '#1b3a5c';
+    const chartTick = () => document.documentElement.dataset.theme === 'light' ? '#64748b' : '#8eaac8';
+    try { if (window.Chart) Chart.defaults.color = chartTick(); } catch (e) {}
     let currentSport = 'football';
     let state = JSON.parse(localStorage.getItem('prono_tracker_multisport_data')) || { football: [] };
     // Le tennis n'existe plus dans l'appli : on purge toute donnée tennis restante.
@@ -259,10 +263,10 @@
 
     function applyTheme() {
       const theme = {
-        main: '#2563eb', mainHover: '#1d4ed8', iconColor: '#2563eb',
-        cardBg: 'rgba(239, 246, 255, 0.6)', cardBorder: '#dbeafe', dividerBorder: 'rgba(219, 234, 254, 0.6)',
-        badgeBg: '#2563eb',
-        boxFrom: '#eff6ff', boxTo: '#f0f9ff', boxBorder: '#bfdbfe', boxText: '#1e3a8a', boxHint: 'rgba(30, 64, 175, 0.7)',
+        main: 'var(--acc)', mainHover: 'color-mix(in srgb, var(--acc) 85%, #000)', iconColor: 'var(--blue)',
+        cardBg: 'color-mix(in srgb, var(--blue) 8%, transparent)', cardBorder: 'color-mix(in srgb, var(--blue) 25%, transparent)', dividerBorder: 'color-mix(in srgb, var(--blue) 18%, transparent)',
+        badgeBg: 'var(--acc)',
+        boxFrom: 'color-mix(in srgb, var(--blue) 11%, transparent)', boxTo: 'color-mix(in srgb, var(--blue) 5%, transparent)', boxBorder: 'color-mix(in srgb, var(--blue) 28%, transparent)', boxText: 'var(--blue)', boxHint: 'var(--mut)',
         shadowRgb: '37, 99, 235'
       };
 
@@ -275,11 +279,11 @@
       setStyle('perfIcon', { color: theme.iconColor });
       setStyle('perfCard', { backgroundColor: theme.cardBg, borderColor: theme.cardBorder });
       setStyle('perfDivider', { borderColor: theme.dividerBorder });
-      setStyle('detailedStatsTitle', { color: theme.main });
+      setStyle('detailedStatsTitle', { color: theme.iconColor });
       setStyle('quickAddBox', { backgroundImage: `linear-gradient(to bottom right, ${theme.boxFrom}, ${theme.boxTo})`, borderColor: theme.boxBorder });
       setStyle('quickAddLabel', { color: theme.boxText });
       setStyle('quickAddHint', { color: theme.boxHint });
-      setStyle('quickAddBtn', { backgroundColor: theme.main, boxShadow: `0 4px 10px rgba(${theme.shadowRgb}, 0.25)` });
+      setStyle('quickAddBtn', { backgroundColor: theme.main, color: 'var(--onacc)', boxShadow: `0 4px 10px rgba(${theme.shadowRgb}, 0.25)` });
 
       const btn = document.getElementById('quickAddBtn');
       if (btn) {
@@ -3674,8 +3678,8 @@
             legend: { display: false }
           },
           scales: {
-            x: { grid: { color: '#f1f5f9' }, ticks: { color: '#64748b', font: { size: 9, weight: 'bold' } } },
-            y: { grid: { color: '#f1f5f9' }, ticks: { color: '#64748b', font: { size: 9, weight: 'bold' } } }
+            x: { grid: { color: chartGrid() }, ticks: { color: chartTick(), font: { size: 9, weight: 'bold' } } },
+            y: { grid: { color: chartGrid() }, ticks: { color: chartTick(), font: { size: 9, weight: 'bold' } } }
           }
         }
       });
@@ -3762,8 +3766,8 @@
             }
           },
           scales: {
-            x: { grid: { color: '#f1f5f9' }, ticks: { color: '#64748b', font: { size: 10, weight: 'bold' }, maxTicksLimit: 12 } },
-            y: { grid: { color: '#f1f5f9' }, ticks: { color: '#64748b', font: { size: 10, weight: 'bold' } } }
+            x: { grid: { color: chartGrid() }, ticks: { color: chartTick(), font: { size: 10, weight: 'bold' }, maxTicksLimit: 12 } },
+            y: { grid: { color: chartGrid() }, ticks: { color: chartTick(), font: { size: 10, weight: 'bold' } } }
           }
         }
       });
@@ -5094,3 +5098,25 @@ service cloud.firestore {
     try { if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {}); } catch (e) {}
 
     window.onload = function() { switchSport('football'); };
+
+/* ===== Bouton thème clair / sombre (même mémoire que Statify : suivi-nba-theme) ===== */
+(function () {
+  function recolor() {
+    try {
+      if (window.Chart) Chart.defaults.color = chartTick();
+      [...Object.values(categoryChartInstances || {}), globalBankrollChartInstance].filter(Boolean).forEach(c => {
+        const s = c.options && c.options.scales;
+        if (s) ['x', 'y'].forEach(k => { if (s[k]) { s[k].grid = s[k].grid || {}; s[k].ticks = s[k].ticks || {}; s[k].grid.color = chartGrid(); s[k].ticks.color = chartTick(); } });
+        c.update('none');
+      });
+    } catch (e) {}
+  }
+  const btn = document.getElementById('btnTheme');
+  if (btn) btn.onclick = () => {
+    const n = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = n;
+    try { localStorage.setItem('suivi-nba-theme', n); } catch (e) {}
+    recolor();
+  };
+  recolor();
+})();
