@@ -764,27 +764,33 @@ function espnParseSummary(sm,nbaId,maps){
   const home=side('home'), away=side('away'); if(!home.players.length||!away.players.length) throw new Error('aucun joueur lu');
   return {id:nbaId,status:3,statusText:'Final',time:hd.date||'',home,away};
 }
+function nbaSeasonY(){ const d=new Date(); return d.getMonth()>=8?d.getFullYear():d.getFullYear()-1; }
+function nbaDays(last){ const day=864e5, now=Date.now(); let bf=''; try{ bf=localStorage.getItem('suivi-nba-bf')||''; }catch(e){}
+  if(bf!==String(nbaSeasonY())) return Math.min(240,Math.ceil((now-Date.UTC(nbaSeasonY(),9,1))/day)+1);
+  return last?Math.min(14,Math.ceil((now-last)/day)+1):3; }
+function nbaBfDone(){ try{ localStorage.setItem('suivi-nba-bf',String(nbaSeasonY())); }catch(e){} }
 async function nbaEspnRefresh(why){
   const f=t=>new Date(t).toISOString().slice(0,10).replace(/-/g,''), day=864e5, now=Date.now();
   const fin=Object.values(games).filter(g=>g.status===3).map(tms).filter(Boolean), last=fin.length?Math.max(...fin):0;
-  const days=last?Math.min(14,Math.ceil((now-last)/day)+1):3, maps=espnIdMaps();
+  const days=nbaDays(last), maps=espnIdMaps();
   say(`⏳ NBA via ESPN : calendrier (${days} jour(s))…`,'warn');
   const cand=[]; let ko=0, errm='', okReq=0;
   for(let a=-days;a<=0;a+=4){ await Promise.all([0,1,2,3].filter(k=>a+k<=0).map(async k=>{ const u=`https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${f(now+(a+k)*day-6*36e5)}`;
     try{ const r=await fetch(u); if(!r.ok) throw new Error('HTTP '+r.status); const j=await r.json(); okReq++;
-      for(const e of (j.events||[])){ if(!(e.status&&e.status.type&&e.status.type.completed)) continue; const cs=((e.competitions||[])[0]||{}).competitors||[]; const h=cs.find(c=>c.homeAway==='home'), w=cs.find(c=>c.homeAway==='away'); if(!h||!w) continue;
+      for(const e of (j.events||[])){ if(!(e.status&&e.status.type&&e.status.type.completed)) continue; if(e.season&&e.season.type===1) continue; const cs=((e.competitions||[])[0]||{}).competitors||[]; const h=cs.find(c=>c.homeAway==='home'), w=cs.find(c=>c.homeAway==='away'); if(!h||!w) continue;
         cand.push({eid:e.id,t:Date.parse(e.date)||0,h:etri(h.team.abbreviation),a:etri(w.team.abbreviation)}); } }
     catch(e){ ko++; errm=e.message||String(e); } })); }
   if(!okReq){ say(`⚠️ ESPN ne répond pas non plus (${esc(errm)}). Utilise le <b>favori NBA</b> sur nba.com, puis Ctrl+V ici.`,'err'); return; }
-  const seen=new Set(), todo=[];
+  const seen=new Set(); let todo=[]; const calKo=ko;
   for(const c of cand){ if(seen.has(c.eid)) continue; seen.add(c.eid);
     const m=sched.filter(x=>x.h===c.h&&x.a===c.a).sort((x,y)=>Math.abs(Date.parse(x.t)-c.t)-Math.abs(Date.parse(y.t)-c.t))[0];
     const nid=(m&&Math.abs(Date.parse(m.t)-c.t)<36*36e5)?m.id:'espn'+c.eid;
     if(games[nid]&&games[nid].status===3) continue; todo.push({...c,nid}); }
-  if(!todo.length){ render(); say('✓ NBA (ESPN) : rien de nouveau, tes matchs sont à jour.','ok'); return; }
-  todo.sort((a,b)=>a.t-b.t); let ok=0; errm='';
+  if(!todo.length){ if(!calKo) nbaBfDone(); render(); say('✓ NBA (ESPN) : rien de nouveau, tes matchs sont à jour.','ok'); return; }
+  todo.sort((a,b)=>a.t-b.t); const more=todo.length>80; todo=todo.slice(0,80); let ok=0; errm='';
   for(let i=0;i<todo.length;i+=3){ say(`⏳ NBA via ESPN : matchs ${i}/${todo.length}…`,'warn'); await Promise.all(todo.slice(i,i+3).map(async x=>{ try{ const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${x.eid}`); if(!r.ok) throw new Error('HTTP '+r.status); games[x.nid]=espnParseSummary(await r.json(),x.nid,maps); const sc=sched.find(z=>z.id===x.nid); if(sc) sc.s=3; ok++; }catch(e){ ko++; errm=e.message||String(e); } })); }
   save(); saveJ(KEYS,sched); render();
+  if(!more&&!calKo) nbaBfDone(); else if(more&&ok) setTimeout(()=>{ if(!nbaBusy) nbaRefresh(); },800);
   if(!ok) say(`⚠️ NBA (ESPN) : aucun match lu (${esc(errm)}). Utilise le <b>favori NBA</b> sur nba.com, puis Ctrl+V ici.`,'err');
   else say(`✓ NBA (via ESPN) : ${ok} match(s) ajouté(s)${ko?`, ${ko} échec(s) (${esc(errm)})`:''}.`,ko?'warn':'ok');
 }
@@ -799,12 +805,13 @@ async function nbaRefresh(){
     const sc=parseSchedule(sj); if(!sc||!sc.length){ say('Calendrier NBA illisible. Utilise le favori NBA.','err'); return; }
     sched=sc; saveJ(KEYS,sched);
     const now=Date.now(), fin=Object.values(games).filter(g=>g.status===3).map(tms).filter(Boolean), last=fin.length?Math.max(...fin):0;
-    const days=last?Math.min(14,Math.ceil((now-last)/864e5)+1):3, from=now-days*864e5;
-    const todo=sched.filter(x=>!/^001/.test(x.id)&&Date.parse(x.t)<=now-3*36e5&&Date.parse(x.t)>=from&&!(games[x.id]&&games[x.id].status===3)).sort((a,b)=>Date.parse(a.t)-Date.parse(b.t)).slice(0,60);
-    if(!todo.length){ save(); render(); say('✓ NBA : calendrier mis à jour, aucun nouveau match terminé à récupérer.','ok'); return; }
+    const days=nbaDays(last), from=now-days*864e5;
+    const all=sched.filter(x=>!/^001/.test(x.id)&&Date.parse(x.t)<=now-3*36e5&&Date.parse(x.t)>=from&&!(games[x.id]&&games[x.id].status===3)).sort((a,b)=>Date.parse(a.t)-Date.parse(b.t)), more=all.length>60, todo=all.slice(0,60);
+    if(!todo.length){ nbaBfDone(); save(); render(); say('✓ NBA : calendrier mis à jour, aucun nouveau match terminé à récupérer.','ok'); return; }
     let ok=0,ko=0,errm=''; const gs=[];
     for(let i=0;i<todo.length;i+=4){ say(`⏳ NBA : matchs ${i}/${todo.length}…`,'warn'); await Promise.all(todo.slice(i,i+4).map(async x=>{ try{ const g=await fetchGame(x.id); if(g.status===3||g.status===2){ games[x.id]=g; ok++; } }catch(e){ ko++; errm=e.message||String(e); } })); }
     save(); render();
+    if(!more&&!ko) nbaBfDone(); else if(more&&ok) setTimeout(()=>{ if(!nbaBusy) nbaRefresh(); },800);
     if(!ok&&ko) say(`⚠️ NBA : aucun match lu (${esc(errm)}). Utilise le <b>favori NBA</b> sur nba.com, puis Ctrl+V ici.`,'err');
     else say(`✓ NBA : ${ok} match(s) ajouté(s)/mis à jour${ko?`, ${ko} échec(s) (${esc(errm)})`:''}.`,ko?'warn':'ok');
   } finally { nbaBusy=false; }
@@ -4576,7 +4583,16 @@ async function footAuto(force){
 async function nbaAuto(force){
   const last=+(localStorage.getItem('suivi-nba-auto')||0); if(!force&&Date.now()-last<30*6e4) return; if(navigator.onLine===false||nbaBusy) return;
   try{ localStorage.setItem('suivi-nba-auto',String(Date.now())); }catch(e){}
-  sayMute=ui.sport==='foot'; try{ await nbaRefresh(); }catch(e){} finally{ sayMute=false; }
+  sayMute=ui.sport==='foot'; try{ await nbaRefresh(); }catch(e){}
+  try{ const m=await nbaCheck(); if(m>0){ const lk=loadJ('suivi-nba-chk',{}); if(!(lk.m===m&&Date.now()-lk.t<6*36e5)){ saveJ('suivi-nba-chk',{m,t:Date.now()}); try{ localStorage.removeItem('suivi-nba-bf'); }catch(e){} await nbaRefresh(); } } }catch(e){} finally{ sayMute=false; }
+}
+/* Contrôle : compare le nombre de matchs en mémoire au bilan V-D officiel (classement ESPN) ; renvoie le nombre de matchs manquants */
+async function nbaCheck(){
+  const r=await fetch('https://site.api.espn.com/apis/v2/sports/basketball/nba/standings',{cache:'no-store'}); if(!r.ok) return 0; const j=await r.json(), rec={};
+  const walk=(o,d)=>{ if(!o||typeof o!=='object'||d>9) return; if(o.team&&Array.isArray(o.stats)){ const g=n=>{ const x=o.stats.find(z=>z.name===n); return x?+x.value:NaN; }; const w=g('wins'), l=g('losses'); if(Number.isFinite(w)&&Number.isFinite(l)) rec[etri(o.team.abbreviation)]=w+l; } for(const k in o) walk(o[k],d+1); };
+  walk(j,0); if(Object.keys(rec).length<20) return 0;
+  const have={}; for(const g of Object.values(games)) if(g.status===3){ have[g.home.tri]=(have[g.home.tri]||0)+1; have[g.away.tri]=(have[g.away.tri]||0)+1; }
+  let miss=0; for(const t in rec) miss+=Math.max(0,rec[t]-(have[t]||0)); return miss;
 }
 function autoBadge(t){ let el=document.getElementById('autoBadge'); if(!el){ el=document.createElement('div'); el.id='autoBadge'; document.body.appendChild(el); } el.textContent=t; el.classList.toggle('on',!!t); }
 var autoHidden=0;
