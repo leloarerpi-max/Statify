@@ -1,5 +1,5 @@
-const C='statify-v6';
-const ASSETS=['./','index.html','manifest.webmanifest','icon-192.png','icon-512.png','icon-180.png'];
+const C='statify-v7';
+const ASSETS=['./','index.html','prono.html','manifest.webmanifest','icon-192.png','icon-512.png','icon-180.png'];
 // un fichier manquant ne doit pas faire échouer toute l'installation
 self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>Promise.all(ASSETS.map(a=>c.add(a).catch(()=>{})))).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
@@ -19,8 +19,19 @@ function netFirst(req){
     });
   });
 }
+// bibliothèques externes de PronoTracker (Tailwind, Chart.js, FontAwesome) : copie en cache dès la 2e ouverture
+const CDN=['cdn.tailwindcss.com','cdn.jsdelivr.net','cdnjs.cloudflare.com'];
+async function cacheFirst(req){
+  const c=await caches.open(C), hit=await c.match(req);
+  if(hit) return hit;
+  const r=await fetch(req);
+  if(r&&(r.ok||r.type==='opaque')) c.put(req,r.clone()).catch(()=>{});
+  return r;
+}
 self.addEventListener('fetch',e=>{
   if(e.request.method!=='GET') return;
-  const u=new URL(e.request.url); if(u.origin!==location.origin) return;
+  const u=new URL(e.request.url);
+  if(CDN.includes(u.hostname)){ e.respondWith(cacheFirst(e.request)); return; }
+  if(u.origin!==location.origin) return;
   e.respondWith(netFirst(e.request));
 });
