@@ -352,7 +352,7 @@ function recordsBroken(S,sinceMs){
   return out;
 }
 const fv=(k,v)=>k==='gs'?f1(v):v;
-function alertCard(S){ const a=alerts(S); return a.length?`<div class="card"><div class="row between"><h2 style="margin:0">🔔 Alertes sur tes favoris</h2><button class="sec" data-act="welcome">🎉 Revoir en plein écran</button></div>${a.map(x=>`<div class="alert">${x}</div>`).join('')}</div>`:''; }
+function alertCard(S){ const a=alerts(S); return a.length?`<div class="card"><div class="row between"><h2 style="margin:0">🔔 Alertes sur tes favoris</h2></div>${a.map(x=>`<div class="alert">${x}</div>`).join('')}</div>`:''; }
 const noteBox=(key,name,ph)=>`<h3>Mes notes</h3><textarea class="note" data-note="${esc(key)}" data-name="${esc(name||'')}" placeholder="${esc(ph)}">${esc((notes[key]||{}).t||'')}</textarea><div class="mut">Enregistré automatiquement quand tu cliques en dehors de la zone.</div>`;
 const noteMark=key=>notes[key]?' <span title="Tu as une note">📝</span>':'';
 function setNote(key,name,val){ val=val.trim(); if(val) notes[key]={t:val,n:name||''}; else delete notes[key]; saveJ(KEYN,notes); }
@@ -680,17 +680,18 @@ const teamLink=(tri,name)=>`<span class="link" data-act="openteam" data-id="${es
 const playerLink=(id,name)=>`<span class="link" data-act="openplayer" data-id="${esc(id)}">${esc(name)}</span>`;
 
 /* ---------- Actus NBA en français (flux RSS Basket USA / TrashTalk) ---------- */
-const KEYNEWS='suivi-nba-news', NEWS_SRC=[['Basket USA','https://www.basketusa.com/feed/'],['TrashTalk','https://trashtalk.co/feed/']];
+const KEYNEWS='suivi-nba-news', NEWS_SRC=[['Basket USA','https://www.basketusa.com/feed/']];
 let news=loadJ(KEYNEWS,{t:0,items:[],err:''}), newsBusy=false;
+news.items=(news.items||[]).filter(i=>i.s!=='TrashTalk');   // TrashTalk retiré
 function newsStrip(h){ try{ const d=new DOMParser().parseFromString('<body>'+String(h||'')+'</body>','text/html'); return (d.body.textContent||'').replace(/\s+/g,' ').trim(); }catch(e){ return String(h||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(); } }
 function newsParseXml(txt,src){ const doc=new DOMParser().parseFromString(txt,'text/xml'); const out=[];
   for(const it of doc.querySelectorAll('item')){ const g=n=>{ const e=it.getElementsByTagName(n)[0]; return e?e.textContent:''; }; const l=g('link').trim(), t=newsStrip(g('title')); if(!t||!/^https?:/.test(l)) continue;
-    out.push({t,l,d:Date.parse(g('pubDate'))||0,e:newsStrip(g('description')).slice(0,190),s:src}); }
+    out.push({t,l,d:Date.parse(g('pubDate'))||0,e:newsStrip(g('description')).slice(0,190),s:src,c:newsClean(g('content:encoded'))}); }
   return out; }
 async function newsGet(url,src){
   const enc=encodeURIComponent(url), tries=[()=>url,()=>'https://api.allorigins.win/raw?url='+enc,()=>'https://corsproxy.io/?url='+enc,()=>'rss2json'], errs=[];
   for(const f of tries){ const u=f(); try{
-      if(u==='rss2json'){ const r=await fetch('https://api.rss2json.com/v1/api.json?rss_url='+enc); if(!r.ok) throw new Error('HTTP '+r.status); const j=await r.json(); if(j.status!=='ok') throw new Error('flux illisible'); return (j.items||[]).map(i=>({t:newsStrip(i.title),l:i.link,d:Date.parse(String(i.pubDate||'').replace(' ','T')+'Z')||0,e:newsStrip(i.description).slice(0,190),s:src})).filter(i=>i.t&&/^https?:/.test(i.l)); }
+      if(u==='rss2json'){ const r=await fetch('https://api.rss2json.com/v1/api.json?rss_url='+enc); if(!r.ok) throw new Error('HTTP '+r.status); const j=await r.json(); if(j.status!=='ok') throw new Error('flux illisible'); return (j.items||[]).map(i=>({t:newsStrip(i.title),l:i.link,d:Date.parse(String(i.pubDate||'').replace(' ','T')+'Z')||0,e:newsStrip(i.description).slice(0,190),s:src,c:newsClean(i.content||'')})).filter(i=>i.t&&/^https?:/.test(i.l)); }
       const c=new AbortController(), to=setTimeout(()=>c.abort(),9000); let r; try{ r=await fetch(u,{signal:c.signal}); } finally{ clearTimeout(to); }
       if(!r.ok) throw new Error('HTTP '+r.status); const items=newsParseXml(await r.text(),src); if(!items.length) throw new Error('aucun article lu'); return items;
     }catch(e){ errs.push(e.message||String(e)); } }
@@ -701,18 +702,59 @@ async function newsRefresh(auto,pages){
   try{ let all=[], bad=[];
     // le flux ne contient que ~10 articles : on lit aussi les pages suivantes (?paged=2, 3…) pour remonter ~1 jour en arrière
     await Promise.all(NEWS_SRC.map(async ([src,url])=>{ for(let pg=1;pg<=pages;pg++){ try{ const it=await newsGet(pg===1?url:url+'?paged='+pg,src); all=all.concat(it); if(!it.length||Date.now()-Math.min(...it.map(i=>i.d||Date.now()))>4*864e5) break; }catch(e){ if(pg===1) bad.push(src+' ('+(e.message||e)+')'); break; } } }));
+    newsKeep(all);
     if(all.length){ const seen=new Set(); all=all.concat(news.items||[]).filter(i=>!seen.has(i.l)&&seen.add(i.l)&&(!i.d||Date.now()-i.d<21*864e5)).sort((a,b)=>b.d-a.d).slice(0,400); news={t:Date.now(),items:all,err:bad.join(' ; ')}; saveJ(KEYNEWS,news); if(!auto) say(`✓ ${all.length} article(s) récupéré(s)${bad.length?' — indisponible : '+esc(bad.join(' ; ')):''}.`,bad.length?'warn':'ok'); }
     else { news={...news,t:Date.now(),err:bad.join(' ; ')}; saveJ(KEYNEWS,news); if(!auto) say('⚠️ Actus : lecture directe refusée par le navigateur. Utilise le favori « Actus » sur basketusa.com puis Ctrl+V ici.','err'); }
     if(ui.sport!=='foot'&&(ui.tab==='home'||ui.openGame)&&(ui.openGame||!$('#modal').classList.contains('on'))) render();
   } finally { newsBusy=false; } }
-function newsIngest(o){ try{ const it=newsParseXml(String(o.xml||''),o.src||'Actus'); if(!it.length) return 0; const seen=new Set(); const all=it.concat(news.items||[]).filter(i=>!seen.has(i.l)&&seen.add(i.l)&&(!i.d||Date.now()-i.d<21*864e5)).sort((a,b)=>b.d-a.d).slice(0,150); news={t:Date.now(),items:all,err:''}; saveJ(KEYNEWS,news); return it.length; }catch(e){ return 0; } }
+function newsIngest(o){ try{ const it=newsParseXml(String(o.xml||''),o.src||'Actus'); if(!it.length) return 0; newsKeep(it); const seen=new Set(); const all=it.concat(news.items||[]).filter(i=>!seen.has(i.l)&&seen.add(i.l)&&(!i.d||Date.now()-i.d<21*864e5)).sort((a,b)=>b.d-a.d).slice(0,150); news={t:Date.now(),items:all,err:''}; saveJ(KEYNEWS,news); return it.length; }catch(e){ return 0; } }
+
+/* ---- Lecteur d'article intégré : l'article s'ouvre dans une fenêtre de Statify ---- */
+const KEYNF2='suivi-nba-news-full'; let newsFull=loadJ(KEYNF2,{});
+const NEWS_OK={P:1,H1:1,H2:1,H3:1,H4:1,UL:1,OL:1,LI:1,BLOCKQUOTE:1,STRONG:1,B:1,EM:1,I:1,BR:1,A:1,IMG:1,FIGURE:1,FIGCAPTION:1};
+function newsClean(html){
+  try{
+    const src=new DOMParser().parseFromString('<body>'+String(html||'')+'</body>','text/html').body, out=document.createElement('div'); let budget=18000;
+    const safeUrl=u=>{ try{ const x=new URL(u,'https://www.basketusa.com/'); return /^https?:$/.test(x.protocol)?x.href:''; }catch(e){ return ''; } };
+    const walk=(from,to)=>{ for(const n of [...from.childNodes]){
+      if(budget<=0) return;
+      if(n.nodeType===3){ const t=n.textContent; budget-=t.length; to.appendChild(document.createTextNode(t)); }
+      else if(n.nodeType===1){ const tag=n.tagName;
+        if(/^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|FORM|NOSCRIPT|SVG|BUTTON|INPUT|TEXTAREA|SELECT|LINK|META|VIDEO|AUDIO|CANVAS)$/.test(tag)) continue;
+        if(!NEWS_OK[tag]){ walk(n,to); continue; }
+        const el=document.createElement(tag.toLowerCase());
+        if(tag==='A'){ const h=safeUrl(n.getAttribute('href')); if(!h){ walk(n,to); continue; } el.href=h; el.target='_blank'; el.rel='noopener noreferrer'; }
+        if(tag==='IMG'){ const s=safeUrl(n.getAttribute('src')||n.getAttribute('data-src')); if(!s) continue; el.src=s; el.alt=(n.getAttribute('alt')||'').slice(0,200); el.loading='lazy'; el.referrerPolicy='no-referrer'; budget-=300; to.appendChild(el); continue; }
+        if(tag!=='BR') walk(n,el);
+        to.appendChild(el); } } };
+    walk(src,out);
+    [...out.querySelectorAll('p')].forEach(p=>{ const t=p.textContent.trim(); if((!t&&!p.querySelector('img'))||/est apparu en premier sur|appeared first on/i.test(t)) p.remove(); });
+    return out.innerHTML;
+  }catch(e){ return ''; }
+}
+function newsKeep(arr){
+  try{
+    for(const i of arr){ if(i.c){ if(i.c.length>=300) newsFull[i.l]=i.c; delete i.c; } }
+    const keep=new Set((news.items||[]).concat(arr).sort((a,b)=>(b.d||0)-(a.d||0)).slice(0,30).map(i=>i.l));
+    for(const k of Object.keys(newsFull)) if(!keep.has(k)) delete newsFull[k];
+    saveJ(KEYNF2,newsFull);
+  }catch(e){}
+}
+function newsReaderHtml(l){
+  const i=(news.items||[]).find(x=>x.l===l); if(!i) return '';
+  const c=newsFull[l];
+  const body=c?`<div class="nrd">${newsClean(c)}</div>`
+    :`<div class="nrd"><p class="mut">Le flux de ${esc(i.s)} ne contient pas le texte complet de cet article.</p>${i.e?`<p>${esc(i.e)}${i.e.length>=189?'…':''}</p>`:''}</div>`;
+  const btns=`<div class="row" style="margin-top:14px;gap:8px"><a class="nrd-open" href="${esc(i.l)}" target="_blank" rel="noopener">Lire sur le site d'origine ↗</a><button class="sec" data-act="newsclose">Fermer</button></div>`;
+  return `<div class="card nrd-card"><div class="mut" style="font-size:12px;margin-bottom:8px;padding-right:48px">${esc(i.s)}${i.d?' · '+esc(newsAgo(i.d)):''}</div><h2 style="margin:0 0 12px;line-height:1.3;padding-right:44px">${esc(i.t)}</h2>${body}${btns}</div>`;
+}
 function newsAgo(t){ if(!t) return ''; const m=Math.max(0,Math.round((Date.now()-t)/6e4)); return m<60?`il y a ${m} min`:m<1440?`il y a ${Math.round(m/60)} h`:`il y a ${Math.round(m/1440)} j`; }
 function newsCard(){
   if(!ui.newsTried&&(!news.t||Date.now()-news.t>30*6e4)){ ui.newsTried=1; setTimeout(()=>newsRefresh(true),300); }
   const kw=[...fav.teams.flatMap(t=>{ const n=tname(t).toLowerCase(); return [n,n.split(' ').slice(-1)[0]]; }),...Object.values(fav.players).map(n=>String(n).toLowerCase().split(' ').slice(-1)[0]).filter(w=>w.length>=4)];
   const onlyFav=!!ui.newsFav&&kw.length, list=news.items.filter(i=>!onlyFav||kw.some(k=>(i.t+' '+i.e).toLowerCase().includes(k))).slice(0,ui.newsMore?20:8);
-  const rows=list.map(i=>`<div class="alert"><a href="${esc(i.l)}" target="_blank" rel="noopener"><b>${esc(i.t)}</b></a> <span class="mut" style="font-size:12px">· ${esc(i.s)} · ${i.d?esc(newsAgo(i.d)):''}</span>${i.e?`<div class="mut" style="margin-top:2px">${esc(i.e)}${i.e.length>=189?'…':''}</div>`:''}</div>`).join('');
-  return `<div class="card"><div class="row between"><h2 style="margin:0">📰 Actus NBA en français</h2><div class="row">${kw.length?`<label class="mut"><input type="checkbox" data-act="newsfav" ${onlyFav?'checked':''}> mes favoris</label>`:''}<button class="sec" data-act="newsrefresh">🔄 Actualiser</button></div></div>${rows||`<p class="mut" style="margin:10px 0 0">${news.items.length?'Aucun article ne parle de tes favoris pour le moment.':(news.err?'Lecture directe refusée par le navigateur. Installe le favori « Actus » (fichier <b>bouton-favori-actus.html</b>), va sur <b>basketusa.com</b> (ou trashtalk.co), clique dessus, puis fais <b>Ctrl+V</b> ici.':'Chargement des actus…')}</p>`}${news.items.length>list.length&&!onlyFav?`<p style="margin:8px 0 0"><span class="link" data-act="newsmore">Voir plus d'articles</span></p>`:''}<p class="mut" style="margin:8px 0 0;font-size:11px">Titres et extraits des flux publics de Basket USA et TrashTalk ; l'article complet s'ouvre sur leur site.${news.t?' Mis à jour '+esc(newsAgo(news.t))+'.':''}</p></div>`;
+  const rows=list.map(i=>`<div class="alert"><a href="${esc(i.l)}" data-act="newsopen" data-l="${esc(i.l)}" target="_blank" rel="noopener"><b>${esc(i.t)}</b></a> <span class="mut" style="font-size:12px">· ${esc(i.s)} · ${i.d?esc(newsAgo(i.d)):''}</span>${i.e?`<div class="mut" style="margin-top:2px">${esc(i.e)}${i.e.length>=189?'…':''}</div>`:''}</div>`).join('');
+  return `<div class="card"><div class="row between"><h2 style="margin:0">📰 Actus NBA en français</h2><div class="row">${kw.length?`<label class="mut"><input type="checkbox" data-act="newsfav" ${onlyFav?'checked':''}> mes favoris</label>`:''}<button class="sec" data-act="newsrefresh">🔄 Actualiser</button></div></div>${rows||`<p class="mut" style="margin:10px 0 0">${news.items.length?'Aucun article ne parle de tes favoris pour le moment.':(news.err?'Lecture directe refusée par le navigateur. Installe le favori « Actus » (fichier <b>bouton-favori-actus.html</b>), va sur <b>basketusa.com</b>, clique dessus, puis fais <b>Ctrl+V</b> ici.':'Chargement des actus…')}</p>`}${news.items.length>list.length&&!onlyFav?`<p style="margin:8px 0 0"><span class="link" data-act="newsmore">Voir plus d'articles</span></p>`:''}<p class="mut" style="margin:8px 0 0;font-size:11px">Articles du flux public de Basket USA : un clic ouvre l'article ici (lien vers le site d'origine en bas).${news.t?' Mis à jour '+esc(newsAgo(news.t))+'.':''}</p></div>`;
 }
 /* ---- Grand bloc d'accueil (dernier résultat de ton équipe) ---- */
 function heroHtml(o){
@@ -783,7 +825,7 @@ function viewGames(S){
 const NICK={ATL:'Hawks',BOS:'Celtics',BKN:'Nets',CHA:'Hornets',CHI:'Bulls',CLE:'Cavaliers',DAL:'Mavericks',DEN:'Nuggets',DET:'Pistons',GSW:'Warriors',HOU:'Rockets',IND:'Pacers',LAC:'Clippers',LAL:'Lakers',MEM:'Grizzlies',MIA:'Heat',MIL:'Bucks',MIN:'Timberwolves',NOP:'Pelicans',NYK:'Knicks',OKC:'Thunder',ORL:'Magic',PHI:'Sixers',PHX:'Suns',POR:'Trail Blazers',SAC:'Kings',SAS:'Spurs',TOR:'Raptors',UTA:'Jazz',WAS:'Wizards'};
 
 const NALT={PHI:['76ers','sixers'],POR:['trail blazers','blazers'],MIN:['timberwolves','wolves'],CLE:['cavaliers','cavs'],DAL:['mavericks','mavs']};
-const NEWS_SEARCH=[['Basket USA',q=>'https://www.basketusa.com/?s='+encodeURIComponent(q)],['TrashTalk',q=>'https://trashtalk.co/?s='+encodeURIComponent(q)]];
+const NEWS_SEARCH=[['Basket USA',q=>'https://www.basketusa.com/?s='+encodeURIComponent(q)]];
 function nbaKeys(t){ const n=(NICK[t]||tname(t)).toLowerCase(); return [n,...(NALT[t]||[])]; }
 function nbaHas(txt,keys){ return keys.some(k=>new RegExp('(^|[^a-zà-ÿ0-9])'+k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'([^a-zà-ÿ0-9]|$)','i').test(txt)); }
 function gameNews(g){
@@ -806,7 +848,7 @@ function nbaRecapHtml(g){
   const L=gameNews(g), q=(NICK[g.away.tri]||g.away.tri)+' '+(NICK[g.home.tri]||g.home.tri);
   const deep=(ui.newsDeep ||= {}); if(!L.length&&!deep[g.id]&&Date.now()-(Date.parse(g.time)||0)<5*864e5){ deep[g.id]=1; setTimeout(()=>newsRefresh(true,6),300); }
   const links=NEWS_SEARCH.map(([n,f])=>`<a href="${esc(f(q))}" target="_blank" rel="noopener">${n} ↗</a>`).join(' · ');
-  const body=L.length?L.map(i=>`<div class="alert"><a href="${esc(i.l)}" target="_blank" rel="noopener"><b>${esc(i.t)}</b></a> <span class="mut" style="font-size:12px">· ${esc(i.s)}</span>${i.e?`<div class="mut" style="margin-top:2px">${esc(i.e)}${i.e.length>=189?'…':''}</div>`:''}</div>`).join('')
+  const body=L.length?L.map(i=>`<div class="alert"><a href="${esc(i.l)}" data-act="newsopen" data-l="${esc(i.l)}" target="_blank" rel="noopener"><b>${esc(i.t)}</b></a> <span class="mut" style="font-size:12px">· ${esc(i.s)}</span>${i.e?`<div class="mut" style="margin-top:2px">${esc(i.e)}${i.e.length>=189?'…':''}</div>`:''}</div>`).join('')
     :`<p class="mut" style="margin:6px 0">${news.items&&news.items.length?(newsBusy?'⏳ Recherche du résumé dans les derniers articles…':'Pas encore d\'article trouvé pour ce match dans les derniers articles.'):'Actus pas encore chargées.'} <span class="link" data-act="newsrefresh">🔄 Chercher</span></p>`;
   return `<div class="card" style="background:var(--field);margin:10px 0"><h3 style="margin:0 0 6px">📰 Le match vu par la presse française</h3>${body}<p class="mut" style="margin:6px 0 0;font-size:12px">Chercher le résumé complet : ${links}</p></div>`;
 }
@@ -1052,7 +1094,6 @@ function viewCompare(S){
 
 /* --- Calendrier --- */
 /* ---- Qualification, calendrier restant, gros matchs, duel ---- */
-const KEYNOT='suivi-nba-notif';
 const isReg=x=>/^002/.test(x.id);
 const early=x=>{ const d=new Date(x.t), m=d.getHours()*60+d.getMinutes(); return m>=360&&m<=1290; };
 const stubT=tri=>({tri,name:tname(tri),w:0,l:0,g:0,pf:0,pa:0,log:[]});
@@ -1118,9 +1159,8 @@ function bigMatches(S){
 }
 function bigCard(S){
   const b=bigMatches(S); if(!b) return '';
-  let nb=''; try{ if('Notification' in window) nb=`<button class="sec" data-act="notiftoggle">${localStorage.getItem(KEYNOT)==='1'?'🔔 Résumé à l\'ouverture : activé':'🔔 Me prévenir à l\'ouverture'}</button>`; }catch(e){}
   const lab=new Date(b.day+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
-  return `<div class="card"><div class="row between"><h2 style="margin:0">🔥 À ne pas manquer — soirée du ${esc(lab)}</h2>${nb}</div><p class="mut">${b.total} match(s) au programme.</p>${b.items.length?b.items.map(i=>`<div class="alert"><b>${teamLogo(i.x.a,18)}${esc(tname(i.x.a))} @ ${teamLogo(i.x.h,18)}${esc(tname(i.x.h))}</b> <span class="mut">${esc(fmtDT(i.x.t))}</span><br>${i.tags.map(t=>`<span class="chip">${esc(t)}</span>`).join(' ')}</div>`).join(''):'<p class="mut">Pas de gros match repéré (programme calme, ou pas encore assez de matchs dans ta base).</p>'}</div>`;
+  return `<div class="card"><div class="row between"><h2 style="margin:0">🔥 À ne pas manquer — soirée du ${esc(lab)}</h2></div><p class="mut">${b.total} match(s) au programme.</p>${b.items.length?b.items.map(i=>`<div class="alert"><b>${teamLogo(i.x.a,18)}${esc(tname(i.x.a))} @ ${teamLogo(i.x.h,18)}${esc(tname(i.x.h))}</b> <span class="mut">${esc(fmtDT(i.x.t))}</span><br>${i.tags.map(t=>`<span class="chip">${esc(t)}</span>`).join(' ')}</div>`).join(''):'<p class="mut">Pas de gros match repéré (programme calme, ou pas encore assez de matchs dans ta base).</p>'}</div>`;
 }
 
 /* ================= Statify+ : Ce soir, légendes, face-à-face, buts par minute ================= */
@@ -1276,12 +1316,6 @@ function renderLeaders(S){
   root.setProperty('--lE',L[0]?tcolor(L[0].tri):'transparent'); root.setProperty('--lW',L[1]?tcolor(L[1].tri):'transparent');
   $('#leaders').innerHTML=L.map((r,i)=>r?`<span class="lchip" style="border-color:${tcolor(r.tri)}" data-act="openteam" data-id="${r.tri}" title="Équipe en tête de la conférence ${i?'Ouest':'Est'}">${teamLogo(r.tri,22)}<b>${i?'Ouest':'Est'}</b> ${esc(r.tri)} ${r.w}-${r.l}</span>`:'').join('');
 }
-function notifyBig(){
-  try{ if(!('Notification' in window)||Notification.permission!=='granted'||localStorage.getItem(KEYN)!=='1') return;
-    const b=bigMatches(buildStats()); if(!b||!b.items.length||localStorage.getItem(KEYNOT+'-day')===b.day) return;
-    localStorage.setItem(KEYNOT+'-day',b.day);
-    new Notification('🏀 À ne pas manquer ce soir',{body:b.items.slice(0,3).map(i=>tname(i.x.a)+' @ '+tname(i.x.h)).join('\n')}); }catch(e){}
-}
 function duelData(S){
   const times=S.fin.map(g=>Date.parse(g.time)).filter(Boolean); if(!times.length) return null;
   const cut=Math.max(...times)-7*86400e3, arr=[];
@@ -1323,8 +1357,8 @@ function viewCal(S){
 }
 
 /* ================= Foot (ESPN) : données ================= */
-function closeModals(){ ui.openPlayer=ui.openTeam=ui.openGame=ui.fMatch=ui.fPlayer=ui.fTeam=null; }
-function setSport(x){ const ch=ui.sport!==x; ui.sport=x; try{ localStorage.setItem('suivi-sport',x); }catch(e){} if(ch) setTimeout(()=>{ try{ showWelcome(false); liveRender(); }catch(e){} },400); }
+function closeModals(){ ui.openPlayer=ui.openTeam=ui.openGame=ui.fMatch=ui.fPlayer=ui.fTeam=ui.newsRead=null; }
+function setSport(x){ const ch=ui.sport!==x; ui.sport=x; try{ localStorage.setItem('suivi-sport',x); }catch(e){} if(ch) setTimeout(()=>{ try{ liveRender(); }catch(e){} },400); }
 const KEYFO='suivi-foot-v1', KEYFF='suivi-foot-fav', KEYFP='suivi-foot-favp', KEYSP='suivi-sport';
 const FLG=[['fra.1','Ligue 1'],['eng.1','Premier League'],['esp.1','Liga'],['ita.1','Serie A'],['ger.1','Bundesliga'],['uefa.champions','Ligue des champions'],['uefa.europa','Europa League'],['uefa.europa.conf','Conférence League']];
 const isEU=lg=>/^uefa\./.test(lg||'');
@@ -1550,7 +1584,7 @@ function footAlertsCard(){
   const rows=[...G.values()].map(g=>{ const t=T[g.tid], lo=t?footLogo(t.lo,30):'';
     const lines=(g.crush.length?[`<div class="fal-i"><span>💥</span><div>A écrasé ${g.crush.join(' et ')}</div></div>`]:[]).concat(g.lines.map(i=>`<div class="fal-i"><span>${i.icon}</span><div>${i.short}</div></div>`));
     return `<div class="fal"><div class="fal-h"><span class="fal-lg">${lo}</span><b>${tlink(g.tid,g.name)}</b><span class="fal-ch">${g.chips.map(c=>`<span class="fal-c ${c.chip}">${c.icon} ${esc(c.short)}</span>`).join('')}</span></div>${lines.join('')}</div>`; }).join('');
-  return `<div class="card"><div class="row between"><h2 style="margin:0">🔔 Alertes foot <span class="mut" style="font-size:13px;font-weight:400">· ${items.length} · ${G.size} club${G.size>1?'s':''}</span></h2><button class="sec" data-act="welcome">🎉 Plein écran</button></div><div class="fal-list">${rows}</div></div>`;
+  return `<div class="card"><div class="row between"><h2 style="margin:0">🔔 Alertes foot <span class="mut" style="font-size:13px;font-weight:400">· ${items.length} · ${G.size} club${G.size>1?'s':''}</span></h2></div><div class="fal-list">${rows}</div></div>`;
 }
 
 /* ---- gros matchs foot ---- */
@@ -2440,6 +2474,7 @@ function render(){
     const M=$('#modal'), mb=M.firstElementChild, keep=M.classList.contains('on')?M.scrollTop:0;
     let mh='';
     if(FT) mh=footModalHtml();
+    else if(ui.newsRead) mh=newsReaderHtml(ui.newsRead);
     else if(ui.openPlayer&&S.P[ui.openPlayer]) mh=playerDetail(S,S.P[ui.openPlayer]);
     else if(ui.openTeam&&S.T[ui.openTeam]) mh=teamDetail(S,S.T[ui.openTeam]);
     else if(ui.openGame&&gameOrSched(ui.openGame)) mh=boxScore(gameOrSched(ui.openGame));
@@ -2530,11 +2565,12 @@ function toggleFav(type,id,name){
   else if(a==='closeteam'){ ui.openTeam=null; render(); }
   else if(a==='sort'){ const k=el.dataset.k; ui.pSort=ui.pSort.k===k?{k,d:-ui.pSort.d}:{k,d:(k==='name'||k==='tri')?1:-1}; render(); }
   else if(a==='csv') exportCsv();
-  else if(a==='welcome') showWelcome(true);
   else if(a==='fmatch'||a==='fteam'||a==='fplayer'){ setSport('foot'); closeModals(); ui[a==='fmatch'?'fMatch':a==='fteam'?'fTeam':'fPlayer']=id; $('#modal').scrollTop=0; render(); }
   else if(a==='fclose'){ closeModals(); render(); }
   else if(a==='newsrefresh') newsRefresh(false);
   else if(a==='newsfav'){ ui.newsFav=!ui.newsFav; render(); }
+  else if(a==='newsopen'){ if(e.ctrlKey||e.metaKey||e.shiftKey) return; e.preventDefault(); ui.newsRead=el.dataset.l; render(); $('#modal').scrollTop=0; }
+  else if(a==='newsclose'){ ui.newsRead=null; render(); }
   else if(a==='newsmore'){ ui.newsMore=1; render(); }
   else if(a==='fcarddl') footCardDownload(id);
   else if(a==='fcdel'){ if(ui.fCurve&&ui.fCurve.sel) ui.fCurve.sel=ui.fCurve.sel.filter(i=>i!==id); render(); }
@@ -2561,7 +2597,6 @@ function toggleFav(type,id,name){
   else if(a==='mbanx'){ mhide[el.dataset.k]=Date.now(); for(const k in mhide) if(Date.now()-mhide[k]>4*864e5) delete mhide[k]; saveJ(KEYMH,mhide); render(); }
   else if(a==='cmpgo'){ closeModals(); if(el.dataset.sp==='foot'){ ui.ftab='compare'; ui.fCmpMode='teams'; ui.fCmpA=el.dataset.a; ui.fCmpB=el.dataset.b; ui.fLg=''; } else { ui.tab='compare'; ui.cmpMode='teams'; ui.cmpA=el.dataset.a; ui.cmpB=el.dataset.b; } render(); window.scrollTo(0,0); }
   else if(a==='cmpopen'){ closeModals(); ui.tab='compare'; ui.cmpMode='players'; ui.cmpA=el.dataset.a; ui.cmpB=el.dataset.b; render(); }
-  else if(a==='notiftoggle'){ try{ if(localStorage.getItem(KEYNOT)==='1'){ localStorage.setItem(KEYNOT,'0'); render(); } else Notification.requestPermission().then(r=>{ if(r==='granted'){ localStorage.setItem(KEYNOT,'1'); localStorage.removeItem(KEYNOT+'-day'); } else alert('Notifications refusées par le navigateur.'); render(); }); }catch(e){ alert('Ton navigateur ne permet pas les notifications ici.'); } }
   else if(a==='fhomeedit'){ ui.fHomeEdit=!ui.fHomeEdit; render(); }
   else if(a==='fhometoggle'){ const cf=fhomeNorm(), i=cf.hidden.indexOf(id); if(i>=0) cf.hidden.splice(i,1); else cf.hidden.push(id); fhomeCfg=cf; saveJ(KEYFH,fhomeCfg); render(); }
   else if(a==='fhomemove'){ const cf=fhomeNorm(), i=cf.order.indexOf(id), j=i+(+el.dataset.d); if(i>=0&&j>=0&&j<cf.order.length){ [cf.order[i],cf.order[j]]=[cf.order[j],cf.order[i]]; fhomeCfg=cf; saveJ(KEYFH,fhomeCfg); render(); } }
@@ -2575,7 +2610,7 @@ function toggleFav(type,id,name){
 }));
 $('#modal').addEventListener('click',e=>{ if(e.target.id==='modal'){ closeModals(); render(); } });
 $('#mclose').addEventListener('click',()=>{ closeModals(); render(); });
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&$('#welcome').classList.contains('on')){ closeWelcome(); return; } if(e.key==='Escape'&&!tv.on&&(ui.openPlayer||ui.openTeam||ui.openGame||ui.fMatch||ui.fTeam||ui.fPlayer)){ closeModals(); render(); } });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&$('#welcome').classList.contains('on')){ closeWelcome(); return; } if(e.key==='Escape'&&!tv.on&&(ui.openPlayer||ui.openTeam||ui.openGame||ui.fMatch||ui.fTeam||ui.fPlayer||ui.newsRead)){ closeModals(); render(); } });
 $('#modal').addEventListener('change',e=>{ const t=e.target; if(t.dataset&&t.dataset.note){ setNote(t.dataset.note,t.dataset.name,t.value); t.style.borderColor='var(--ok)'; setTimeout(()=>{ t.style.borderColor=''; },900); } });
 $('#tabs').addEventListener('click',e=>{ if(e.target.closest('[data-act=pronos]')){ location.href='prono.html'; return; } if(e.target.closest('[data-act=tabmore]')){ ui.tabMore=!ui.tabMore; render(); return; } const b=e.target.closest('[data-act=tab]'); if(b){ ui.tabMore=false; if(ui.sport==='foot'){ if(b.dataset.t!=='multi'||ui.ftab!=='multi'){ ui.fMultiDay=null; if(b.dataset.t==='multi') ui.fMulti='all'; } ui.ftab=b.dataset.t; } else ui.tab=b.dataset.t; closeModals(); render(); } });
 $('#view').addEventListener('change',e=>{
@@ -2630,8 +2665,6 @@ $('#btnMore').onclick=()=>document.body.classList.toggle('menu-open');
 $('#btnRefresh').onclick=()=>{ if(ui.sport==='foot'){ if(footBusy) return; ui.fMenu=true; render(); window.scrollTo({top:0,behavior:'smooth'}); } else nbaRefresh(); };
 ['#msg','#fmsg'].forEach(q=>{ const n=$(q); if(n) n.addEventListener('click',()=>{ n.innerHTML=''; n.style.display='none'; }); });
 window.addEventListener('afterprint',()=>document.body.classList.remove('print-one'));
-setTimeout(notifyBig,1200);
-setTimeout(()=>showWelcome(false),700);
 $('#welcome').addEventListener('click',e=>{ if(e.target.id==='welcome') closeWelcome(); });
 $('#sportSeg').addEventListener('click',e=>{ const b=e.target.closest('[data-sport]'); if(b){ setSport(b.dataset.sport); closeModals(); render(); } });
 /* ================= Recherche globale ================= */
@@ -2713,7 +2746,7 @@ function notifConfig(){
     for(const id of Object.keys(mpick||{})){ const m=byId.get(String(id)); if(m&&Date.parse(m.d)>lim){ picks.push(String(m.id)); lgs.add(m.lg); } } }catch(e){}
   let leagues=[...lgs].filter(l=>order.includes(l)).sort((a,b)=>order.indexOf(a)-order.indexOf(b));
   if(!leagues.length&&(names.length||picks.length)) leagues=['fra.1'];
-  const cfg={ntfyTopic:'le-nom-secret-est-dans-le-secret-GitHub-NTFY_TOPIC',nba,foot:{teams:[...new Set(names)],leagues,matches:picks},multiplex:{enabled:true,leagues:['fra.1','uefa.champions']},alerts:{kickoff:true,score:true,final:true},live:{everySeconds:15,runMinutes:9}};
+  const cfg={nba,foot:{teams:[...new Set(names)],leagues,matches:picks},multiplex:{enabled:true,leagues:['fra.1','uefa.champions']},alerts:{kickoff:true,score:true,final:true},live:{everySeconds:15,runMinutes:9}};
   return {cfg,unk,text:JSON.stringify(cfg,null,2)};
 }
 async function notifSync(force){
@@ -2742,7 +2775,7 @@ function cloudRender(){
   ${(()=>{ const n=notifConfig(), none=!n.cfg.nba.length&&!n.cfg.foot.teams.length&&!n.cfg.foot.matches.length, on=!!cloud.nid, when=cloud.nlast?new Date(cloud.nlast).toLocaleString('fr-FR'):'';
     return `<hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
   <h3 style="margin:0 0 6px">🔔 Alertes quand l'appli est fermée</h3>
-  <p class="mut" style="margin:0 0 6px">Le robot GitHub lit tes équipes à <b style="color:#f0b010">étoile dorée</b> (<b>${n.cfg.nba.length} en NBA, ${n.cfg.foot.teams.length} en foot, ${n.cfg.foot.matches.length} match(s) choisi(s) dans le multiplex</b>) dans un petit espace « Statify - alertes » de ton compte. Il est <b>public</b> mais ne contient que les noms de tes équipes.</p>
+  <p class="mut" style="margin:0 0 6px">Ton robot Telegram lit tes équipes à <b style="color:#f0b010">étoile dorée</b> (<b>${n.cfg.nba.length} en NBA, ${n.cfg.foot.teams.length} en foot, ${n.cfg.foot.matches.length} match(s) choisi(s) dans le multiplex</b>) dans un petit espace « Statify - alertes » de ton compte. Il est <b>public</b> mais ne contient que les noms de tes équipes.</p>
   ${none?'<p class="mut"><b>Aucune équipe à étoile dorée pour l\'instant.</b> Touche la ☆ dorée à côté d\'une équipe ou d\'un club (la bleue sert aux favoris), puis reviens ici.</p>':''}
   ${n.unk.length?`<p class="mut">⚠️ ${n.unk.length} club(s) à étoile dorée non chargé(s) : ouvre l'onglet Foot, actualise (🔄), puis reviens ici.</p>`:''}
   <div class="row" style="margin:8px 0 0"><button id="nsend">🔔 ${on?'Mettre à jour maintenant':'Activer les alertes'}</button></div>
