@@ -1894,7 +1894,7 @@ ${facts}`;
   finally{ delete resBusy[id]; try{ render(); }catch(e){} }
 }
 function resAuto(){
-  if(window.__souf||!aiKey||Object.keys(resBusy).length) return;
+  if(!aiKey||Object.keys(resBusy).length) return;
   const mine=new Set([...ffav,...((nfav&&nfav.foot)||[])]), now=Date.now();
   const m=footIdx().done.filter(x=>(mine.has(x.hid)||mine.has(x.aid))&&now-Date.parse(x.d)<36*36e5&&now-Date.parse(x.d)>105*6e4&&!resumes[x.id]&&!resErr[x.id]).sort((a,b)=>Date.parse(b.d)-Date.parse(a.d))[0];
   if(m) resGen(m);
@@ -2266,7 +2266,7 @@ function footCalView(){
 
 
 
-/* ---------- Radio RMC en direct (écoute perso, coupée en mode Live TikTok) ---------- */
+/* ---------- Radio RMC en direct (écoute perso) ---------- */
 const RADIO={n:'RMC',u:['https://audio.bfmtv.com/rmcradio_128.mp3','http://audio.bfmtv.com/rmcradio_128.mp3']};
 const radio={el:null,on:false,load:false,err:'',i:0};
 function radioUI(){
@@ -2277,7 +2277,6 @@ function radioUI(){
   document.querySelectorAll('.rb-btn').forEach(x=>{ x.textContent=radio.on?'⏸ Couper RMC':'📻 Écouter RMC en direct'; });
 }
 function radioPlay(){
-  if(ttk.on){ say('📻 La radio est coupée pendant le Live TikTok : diffuser RMC en live est interdit (droits d\'auteur).','warn'); return; }
   if(!radio.el){ const a=radio.el=new Audio(); a.preload='none';
     a.addEventListener('playing',()=>{ radio.load=false; radio.err=''; radioUI(); });
     a.addEventListener('waiting',()=>{ if(radio.on){ radio.load=true; radioUI(); } });
@@ -2288,152 +2287,9 @@ function radioPlay(){
 function radioStart(){ radio.load=true; radioUI(); const a=radio.el; a.src=RADIO.u[radio.i]+(RADIO.u[radio.i].includes('?')?'&':'?')+'t='+Date.now(); a.play().catch(e=>{ if(!radio.on) return; radio.on=false; radio.load=false; radio.err=/NotAllowed/i.test(e&&e.name||'')?'Touche ▶ pour lancer la radio.':'Lecture impossible.'; radioUI(); }); }
 function radioStop(){ radio.on=false; radio.load=false; if(radio.el){ try{ radio.el.pause(); radio.el.removeAttribute('src'); radio.el.load(); }catch(e){} } radioUI(); }
 document.addEventListener('click',e=>{ const b=e.target.closest('[data-act=radio],[data-act=radiox]'); if(!b) return; e.stopPropagation(); if(b.dataset.act==='radiox'){ radioStop(); radio.err=''; radioUI(); } else if(radio.on) radioStop(); else radioPlay(); },true);
-/* ---------- Mode « Live TikTok » : multiplex plein écran au format vertical 9:16 ---------- */
-const KEYTT='suivi-ttk'; const ttk={on:false,timer:null,cache:{},wl:null,ctl:false,focus:null,votes:null,voteRes:null,cam:true,guide:false,lg:'all',handle:'',...loadJ(KEYTT,{})};
-const ttkSave=()=>saveJ(KEYTT,{cam:ttk.cam,guide:ttk.guide,lg:ttk.lg,handle:ttk.handle,chatz:!!ttk.chatz});
-function ttkSet(){ const lg=ttk.lg||'all'; return multiSet(lg==='pick'||lg==='all'||foot.leagues[lg]?lg:'all'); }
-const ttkShows=it=>{ try{ return ttk.on&&ttkSet().some(m=>String(m.id)===String(it.id)); }catch(e){ return false; } };
-const ttkHT=m=>m.st==='in'&&/mi-?temps|half/i.test(String(m.txt||''));
-function ttkProj(ms){
-  const out=[];
-  for(const lg of [...new Set(ms.filter(m=>m.st==='in').map(m=>m.lg))]){ const LG=foot.leagues[lg]; if(!LG||!LG.standings.length) continue;
-    const rows=LG.standings.map(r=>({...r,np:r.pts,ngd:r.gd,ngf:r.gf,live:0})), by=Object.fromEntries(rows.map(r=>[r.id,r]));
-    for(const m of ms.filter(x=>x.lg===lg&&x.st==='in')) for(const [id,gf,ga] of [[m.hid,m.hs,m.as],[m.aid,m.as,m.hs]]){ const r=by[id]; if(!r) continue; r.np+=gf>ga?3:gf===ga?1:0; r.ngd+=gf-ga; r.ngf+=gf; r.live=1; }
-    const srt=[...rows].sort((a,b)=>b.np-a.np||b.ngd-a.ngd||b.ngf-a.ngf||a.rank-b.rank); srt.forEach((r,i)=>{ r.nr=i+1; });
-    for(const r of srt) if(r.live&&r.nr!==r.rank) out.push({r,mv:r.rank-r.nr,lg}); }
-  return out.sort((a,b)=>a.r.nr-b.r.nr).slice(0,4);
-}
-function ttkSec(el,key,html){ if(!el||ttk.cache[key]===html) return; ttk.cache[key]=html; el.innerHTML=html; }
-const ttkEvs=(m,sd)=>m.ev.filter(e=>e.s===sd).sort((x,y)=>x.min-y.min).map(e=>`<div>${e.t==='rc'?'🟥':'⚽'} ${esc(e.p||'?')} <span>${esc(e.ms||e.min+"'")}${e.t==='og'?' (csc)':e.t==='pg'?' (pen.)':''}</span></div>`).join('');
-const ttkPill=m=>m.st==='pre'?`<span class="ttk-p pre">${esc(parisT(m.d))}</span>`:m.st==='post'?'<span class="ttk-p fin">FIN</span>':ttkHT(m)?'<span class="ttk-p ht">MI-TEMPS</span>':`<span class="ttk-p live">${esc(m.txt||'LIVE')}</span>`;
-// ---- zoom sur un match ----
-function ttkFocusHtml(m){
-  const fm=footIdx().mt.find(x=>String(x.id)===String(m.id)), x=fm&&fm.x, ts=x&&x.ts&&x.ts.h&&Object.keys(x.ts.h).length?x.ts:null;
-  const SN=[['poss','Possession',1],['sh','Tirs'],['sot','Tirs cadrés'],['cor','Corners'],['fl','Fautes'],['yc','Cartons jaunes']];
-  const bars=ts?SN.filter(([k])=>ts.h[k]!=null&&ts.a[k]!=null).map(([k,l,pc])=>{ const a=+ts.h[k]||0, b=+ts.a[k]||0, t=a+b||1; return `<div class="ttk-zs"><b>${a}${pc?'%':''}</b><div><span>${l}</span><div class="ttk-zb"><i style="width:${a/t*100}%"></i><i style="width:${b/t*100}%"></i></div></div><b>${b}${pc?'%':''}</b></div>`; }).join(''):'';
-  const r=m.st==='post'?resumes[String(m.id)]:null;
-  const res=m.st==='post'?(r?`<div class="ttk-zr"><div class="ttk-zt">📰 ${resMd(r.t)}</div>${r.p.slice(0,2).map(t=>`<p>${resMd(t)}</p>`).join('')}</div>`:aiKey?`<div class="ttk-zr"><button data-act="ttkres" data-id="${esc(m.id)}">${resBusy[String(m.id)]?'✍️ Rédaction du résumé…':'✍️ Afficher le résumé IA'}</button></div>`:''):'';
-  return `<div class="ttk-z"><div class="ttk-zh"><span>${esc(footLgName(m.lg))}</span>${ttkPill(m)}<button data-act="ttkfocus" data-id="">✕ Multiplex</button></div>
-  <div class="ttk-zm"><div class="ttk-zt2">${footLogo(m.hl,64)}<b>${esc(m.hn)}</b></div><div class="ttk-zsc">${m.st==='pre'?'<i>vs</i>':`${m.hs}<i>-</i>${m.as}`}</div><div class="ttk-zt2">${footLogo(m.al,64)}<b>${esc(m.an)}</b></div></div>
-  ${m.ev.length?`<div class="ttk-ze"><div>${ttkEvs(m,'h')}</div><div class="r">${ttkEvs(m,'a')}</div></div>`:''}${bars?`<div class="ttk-zst">${bars}</div>`:''}${res}</div>`;
-}
-// ---- écran de mi-temps ----
-function ttkHalf(ms){
-  return `<div class="ttk-big ht"><div class="ttk-bt2">⏸ MI-TEMPS</div><div class="ttk-bs">Le point à la pause</div></div><div class="ttk-hl2">${ms.filter(m=>m.st!=='pre').map(m=>`<div class="ttk-hr"><div class="ttk-row"><span class="ttk-t">${footLogo(m.hl,24)}<b>${esc(m.hn)}</b></span><span class="ttk-sc">${m.hs}<i>-</i>${m.as}</span><span class="ttk-t r"><b>${esc(m.an)}</b>${footLogo(m.al,24)}</span></div>${m.ev.length?`<div class="ttk-ze sm"><div>${ttkEvs(m,'h')}</div><div class="r">${ttkEvs(m,'a')}</div></div>`:''}</div>`).join('')}</div>`;
-}
-// ---- écran de fin de soirée ----
-function ttkEnd(ms){
-  const sc={}; let goals=0, best=null;
-  for(const m of ms){ goals+=(+m.hs||0)+(+m.as||0); for(const e of m.ev) if(e.p&&(e.t==='g'||e.t==='pg')) sc[e.p]=(sc[e.p]||0)+1; if(!best||m.hs+m.as>best.hs+best.as) best=m; }
-  const top=Object.entries(sc).sort((a,b)=>b[1]-a[1]), tb=top.length?top.filter(x=>x[1]===top[0][1]).map(x=>x[0]).slice(0,3):[];
-  const withRes=ms.filter(m=>resumes[String(m.id)]).sort((a,b)=>(b.hs+b.as)-(a.hs+a.as))[0], r=withRes&&resumes[String(withRes.id)];
-  return `<div class="ttk-big end"><div class="ttk-bt2">🏁 FIN DU MULTIPLEX</div><div class="ttk-bs">${ms.length} matchs · ${goals} buts</div></div>
-  <div class="ttk-res">${ms.map(m=>`<div class="ttk-row sm"><span class="ttk-t">${footLogo(m.hl,20)}<b>${esc(m.hn)}</b></span><span class="ttk-sc">${m.hs}<i>-</i>${m.as}</span><span class="ttk-t r"><b>${esc(m.an)}</b>${footLogo(m.al,20)}</span></div>`).join('')}</div>
-  ${tb.length?`<div class="ttk-tag">👑 Meilleur buteur : <b>${tb.map(esc).join(', ')}</b> (${top[0][1]} but${top[0][1]>1?'s':''})</div>`:''}${best&&best.hs+best.as>=3?`<div class="ttk-tag">🔥 Match le plus fou : <b>${esc(best.hn)} ${best.hs}-${best.as} ${esc(best.an)}</b></div>`:''}
-  ${r?`<div class="ttk-zr"><div class="ttk-zt">📰 ${resMd(r.t)}</div><p>${resMd(r.c||r.p[0])}</p></div>`:''}`;
-}
-// ---- votes « Prochain but ? » ----
-function ttkVoteHtml(m){
-  const VB=(ttk.vby ||= {}), v=ttk.votes=VB[String(m.id)] ||= {mid:String(m.id),h:0,a:0,n:0,sc:m.hs+'-'+m.as};
-  const t=v.h+v.a+v.n, pc=k=>t?Math.round(v[k]/t*100):0;
-  const res=ttk.voteRes&&Date.now()-ttk.voteRes.t<25000?`<div class="ttk-vres">🎉 Bravo à ceux qui avaient dit <b>${esc(ttk.voteRes.who)}</b> !</div>`:'';
-  const b=(k,l)=>`<button class="ttk-vb ${k}" data-act="ttkvote" data-k="${k}"><span class="ttk-vf" style="width:${pc(k)}%"></span><b>${esc(l)}</b><em>${pc(k)}%</em></button>`;
-  return `${res}<div class="ttk-vote"><div class="ttk-vq">⚽ Qui marque le prochain but ?<small>${esc(m.hn)} – ${esc(m.an)} · vote dans le chat !</small></div><div class="ttk-vbs">${b('h',m.hn)}${b('n','Personne')}${b('a',m.an)}</div><div class="ttk-vt"><span>${t} vote${t>1?'s':''}</span><span class="link" data-act="ttkvreset">↺ Remettre à zéro</span></div></div>`;
-}
-function ttkVoteCheck(ms){
-  for(const v of Object.values(ttk.vby||{})){ const m=ms.find(x=>String(x.id)===v.mid); if(!m) continue;
-    const sc=m.hs+'-'+m.as; if(sc===v.sc) continue;
-    const [oh,oa]=v.sc.split('-').map(Number); const sd=m.hs>oh?'h':m.as>oa?'a':'';
-    if(sd&&(v.h+v.a+v.n)>0) ttk.voteRes={who:sd==='h'?m.hn:m.an,t:Date.now()};
-    v.h=v.a=v.n=0; v.sc=sc; }
-}
-function ttkDraw(){
-  const R=document.getElementById('ttk'); if(!R||!ttk.on) return;
-  const now=Date.now(), ms=ttkSet(), live=ms.filter(m=>m.st==='in'), pre=ms.filter(m=>m.st==='pre').sort((a,b)=>Date.parse(a.d)-Date.parse(b.d)), post=ms.filter(m=>m.st==='post');
-  const lgs=[...new Set(ms.map(m=>m.lg))].map(footLgName), lgTxt=ttk.lg==='pick'?'Ma sélection':lgs.length>2?lgs.slice(0,2).join(' · ')+' …':lgs.join(' · ')||'Foot';
-  const clock=new Date().toLocaleTimeString('fr-FR',{...PARIS,hour:'2-digit',minute:'2-digit'});
-  const allHT=live.length>0&&live.every(ttkHT), state=live.length?(allHT?'ht':'live'):pre.length?'pre':post.length?'post':'none';
-  const fm=ttk.focus?ms.find(m=>String(m.id)===String(ttk.focus)):null; if(ttk.focus&&!fm) ttk.focus=null;
-  ttkVoteCheck(ms);
-  const badge=state==='live'?'<span class="ttk-live"><i></i>MULTIPLEX EN DIRECT</span>':state==='ht'?'<span class="ttk-live pre">MULTIPLEX · MI-TEMPS</span>':state==='pre'?'<span class="ttk-live pre">MULTIPLEX · BIENTÔT</span>':state==='post'?'<span class="ttk-live post">MULTIPLEX · TERMINÉ</span>':'<span class="ttk-live post">MULTIPLEX STATIFY</span>';
-  ttkSec(R.querySelector('.ttk-top span'),'brand',`STATIFY${ttk.handle?` <b>· @${esc(ttk.handle.replace(/^@/,''))}</b>`:''}`);
-  ttkSec(R.querySelector('.ttk-head'),'head',`<div class="ttk-hl">${badge}<div class="ttk-sub">${esc(lgTxt)}</div><div class="ttk-sub2">${ms.length} match${ms.length>1?'s':''}${live.length?` · <b>${live.length}</b> en cours`:''} · ${ms.reduce((n,m)=>n+(m.st==='pre'?0:(+m.hs||0)+(+m.as||0)),0)} buts · ${esc(clock)}</div></div>${ttk.cam?'<div class="ttk-cam"><span>📷<br>Ta caméra ici</span></div>':''}`);
-  let main;
-  if(fm) main=ttkFocusHtml(fm);
-  else if(state==='ht') main=ttkHalf(ms);
-  else if(state==='post') main=ttkEnd(ms);
-  else {
-    let cd=''; if(!live.length&&pre.length){ const t=Date.parse(pre[0].d)-now; if(t>0&&t<24*36e5){ const h=Math.floor(t/36e5), mn=Math.floor(t%36e5/6e4), sc=Math.floor(t%6e4/1e3), k=pre.filter(x=>x.d===pre[0].d).length; cd=`<div class="ttk-cd"><span>Coup d'envoi dans</span><b>${h?h+':':''}${String(mn).padStart(h?2:1,'0')}:${String(sc).padStart(2,'0')}</b><span>${esc(pre[0].hn)} – ${esc(pre[0].an)}${k>1?' et '+(k-1)+' autre'+(k>2?'s':''):''}</span></div>`; } }
-    const rank=m=>{ const c=liveMem['f'+m.id]; return (c&&c.chg&&now-c.chg<90000)?0:m.st==='in'?1:m.st==='pre'?2:3; };
-    // pendant le direct : seulement les matchs en cours + ceux qui commencent dans les 30 min (les autres sont dans le bandeau et le zoom)
-    let C=[...ms]; if(live.length) C=C.filter(m=>m.st==='in'||(m.st==='pre'&&Date.parse(m.d)-now<30*6e4)||rank(m)===0);
-    C.sort((a,b)=>rank(a)-rank(b)||(rank(a)===3?Date.parse(b.d)-Date.parse(a.d):Date.parse(a.d)-Date.parse(b.d)));
-    const dense=C.length>5;
-    const row=m=>{ const c=liveMem['f'+m.id], gl=c&&c.chg&&now-c.chg<90000, last=[...m.ev].filter(e=>e.t!=='rc').sort((x,y)=>y.min-x.min)[0], rc=m.ev.some(e=>e.t==='rc');
-      if(dense) return `<div class="ttk-r d ${m.st}${gl?' gl':''}" data-act="ttkfocus" data-id="${esc(m.id)}"><span class="ttk-dp">${gl?'<span class="ttk-bt">BUT</span>':ttkHT(m)?'<span class="ttk-p ht">MT</span>':ttkPill(m)}</span><span class="ttk-t">${footLogo(m.hl,24)}<b>${esc(m.hn)}</b></span><span class="ttk-sc">${m.st==='pre'?'<i>vs</i>':`${m.hs}<i>-</i>${m.as}`}</span><span class="ttk-t r"><b>${esc(m.an)}</b>${rc?'🟥':''}${footLogo(m.al,24)}</span></div>`;
-      return `<div class="ttk-r ${m.st}${gl?' gl':''}" data-act="ttkfocus" data-id="${esc(m.id)}"><div class="ttk-row"><span class="ttk-t">${footLogo(m.hl,30)}<b>${esc(m.hn)}</b></span><span class="ttk-sc">${m.st==='pre'?'<i>vs</i>':`${m.hs}<i>-</i>${m.as}`}</span><span class="ttk-t r"><b>${esc(m.an)}</b>${footLogo(m.al,30)}</span></div><div class="ttk-meta">${gl?'<span class="ttk-bt">⚽ BUT !</span>':''}${ttkPill(m)}${last&&m.st!=='pre'?`<span>⚽ ${esc(last.p||'?')} ${esc(last.ms||last.min+"'")}</span>`:''}${rc?'<span>🟥</span>':''}</div></div>`; };
-    let L, pg='';
-    if(dense){ // pages qui tournent toutes les 8 s ; les buts récents restent épinglés en haut
-      const pin=C.filter(m=>rank(m)===0), rest=C.filter(m=>rank(m)!==0), per=Math.max(1,(ttk.per||9)-pin.length), np=Math.max(1,Math.ceil(rest.length/per)), pb=per, pi=Math.floor(now/8000)%np;
-      L=[...pin,...rest.slice(pi*pb,pi*pb+pb)];
-      if(np>1) pg=`<div class="ttk-pg">${Array.from({length:np},(_,k)=>`<i class="${k===pi?'on':''}"></i>`).join('')}<span>${rest.length+pin.length} matchs · page ${pi+1}/${np}</span></div>`;
-    } else L=C.slice(0,cd?5:8);
-    const n=L.length+(cd?2:0)+(live.length?2:0), sz=dense?'dn':n<=3?'xl':n<=4?'l':n<=6?'m':'s';
-    main=cd+`<div class="ttk-rows ${sz}">${L.map(row).join('')||'<div class="ttk-empty">Aucun match aujourd\'hui</div>'}</div>${pg}`;
-  }
-  ttkSec(R.querySelector('.ttk-list'),'list',main);
-  { const box=R.querySelector('.ttk-list'), rs=box?box.querySelectorAll('.ttk-r.d'):[]; if(rs.length){ const cs=getComputedStyle(rs[0].parentNode), gap=parseFloat(cs.rowGap||cs.gap)||4, rh=rs[0].offsetHeight, top=rs[0].getBoundingClientRect().top-box.getBoundingClientRect().top, pg=box.querySelector('.ttk-pg'), pgH=pg?pg.offsetHeight+8:22;
-    const fit=Math.max(3,Math.min(16,Math.floor((box.clientHeight-top-pgH+gap)/(rh+gap)))); if(fit!==(ttk.per||9)){ ttk.per=fit; ttk.cache.list=''; setTimeout(ttkDraw,30); } } }
-  const P=fm||state==='post'?[]:ttkProj(ms).slice(0,live.length>3?2:4);
-  ttkSec(R.querySelector('.ttk-proj'),'proj',P.length?`<div class="ttk-pt">📈 Si ça reste comme ça…</div>${P.map(x=>`<div class="ttk-pr">${footLogo(x.r.logo,18)}<b>${esc(x.r.name)}</b><span class="${x.mv>0?'up':'dn'}">${x.mv>0?'▲':'▼'}${Math.abs(x.mv)}</span><span>${x.r.nr}${x.r.nr===1?'er':'e'}</span></div>`).join('')}`:'');
-  // votes pendant le direct, sinon question pour le chat (change toutes les 12 s)
-  const vm=(fm&&fm.st==='in')?fm:live.find(m=>!ttkHT(m))||null;
-  if(vm&&state==='live') ttkSec(R.querySelector('.ttk-ask'),'ask',ttkVoteHtml(vm));
-  else { const Q=[];
-    if(state==='ht') Q.push('☕ C\'est la pause !<br><small>Ton meilleur joueur de la 1re période ?</small>');
-    if(state==='post') Q.push('🏁 Ton homme du match ce soir ?<br><small>Dis-le dans le chat</small>','➕ Abonne-toi<br><small>pour le prochain multiplex</small>');
-    if(pre.length&&state!=='post') Q.push(`🎯 Ton prono pour<br><b>${esc(pre[0].hn)} – ${esc(pre[0].an)}</b> ?`);
-    if(state!=='post') Q.push('🔥 C\'est quoi TON match ce soir ?<br><small>Dis-le dans le chat</small>','➕ Abonne-toi<br><small>pour le multiplex de chaque week-end</small>');
-    ttkSec(R.querySelector('.ttk-ask'),'ask',`<div class="ttk-q">${Q[Math.floor(now/12000)%Q.length]}</div>`); }
-  // bandeau défilant
-  const ev=[]; for(const m of ms) for(const e of m.ev) ev.push({m,e}); ev.sort((a,b)=>(b.m.st==='in')-(a.m.st==='in')||b.e.min-a.e.min);
-  const items=ev.slice(0,10).map(({m,e})=>`${e.t==='rc'?'🟥':'⚽'} ${esc(e.ms||e.min+"'")} ${esc(e.p||'?')} · ${esc(m.hn)} ${m.hs}-${m.as} ${esc(m.an)}`);
-  if(!items.length) items.push('Bienvenue sur le multiplex Statify','Scores en direct','Classement live','Pose ta question dans le chat');
-  const tx=items.join('<i>•</i>');
-  ttkSec(R.querySelector('.ttk-tick'),'tick',`<div class="ttk-tk" style="animation-duration:${Math.max(18,items.length*7)}s"><span>${tx}</span><span>${tx}</span></div>`);
-  ttkSec(R.querySelector('.ttk-ctl'),'ctl',`<button data-act="ttkx">✕ Quitter</button><button data-act="ttkcam">${ttk.cam?'📷 Caméra : oui':'📷 Caméra : non'}</button><button data-act="ttkguide">${ttk.guide?'🧭 Repères : oui':'🧭 Repères : non'}</button><button data-act="ttkchatz">${ttk.chatz?'💬 Place pour le chat : oui':'💬 Place pour le chat : non'}</button><button data-act="ttkfs">⛶ Plein écran</button><button data-act="ttksouf">📝 Souffleur</button><select id="ttkLg">${[['all','🌍 Tous les championnats'],['pick','⭐ Ma sélection'],...FLG].map(([c,n])=>`<option value="${esc(c)}" ${c===(ttk.lg||'all')?'selected':''}>${esc(n)}</option>`).join('')}</select><input id="ttkHandle" placeholder="@ton pseudo TikTok" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="ttk-hint">Touche un match pour le zoomer</span>`);
-  const hi=R.querySelector('#ttkHandle'); if(hi&&document.activeElement!==hi) hi.value=ttk.handle||'';
-  R.classList.toggle('guide',!!ttk.guide); R.classList.toggle('chatz',!!ttk.chatz); R.classList.toggle('ctl',!!ttk.ctl);
-}
-function ttkOpen(){
-  if(ttk.on) return; if(radio.on){ radioStop(); say('📻 Radio coupée : RMC ne doit pas passer dans ton live TikTok (droits d\'auteur).','warn'); } ttk.on=true; ttk.cache={}; ttk.ctl=true; ttk.focus=null; document.body.classList.add('ttk-on');
-  const R=document.createElement('div'); R.id='ttk';
-  R.innerHTML=`<div class="ttk-f"><div class="ttk-top"><span>STATIFY</span><button class="ttk-gear" data-act="ttkctl" title="Réglages">⚙</button></div><div class="ttk-head"></div><div class="ttk-list"></div><div class="ttk-proj"></div><div class="ttk-ask"></div><div class="ttk-tick"></div><div class="ttk-chat"><span>Zone des commentaires TikTok<br><small>(rien d'important ici)</small></span></div><div class="ttk-side"><span>Boutons TikTok</span></div></div><div class="ttk-ctl"></div>`;
-  document.body.appendChild(R); ttkDraw(); clearInterval(ttk.timer); ttk.timer=setInterval(ttkDraw,1000);
-  try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').then(w=>{ ttk.wl=w; }).catch(()=>{}); }catch(e){}
-  setTimeout(()=>{ if(ttk.on&&!(document.activeElement&&document.activeElement.id==='ttkHandle')){ ttk.ctl=false; ttkDraw(); } },6000);
-}
-function ttkClose(){ ttk.on=false; clearInterval(ttk.timer); const R=document.getElementById('ttk'); if(R) R.remove(); document.body.classList.remove('ttk-on'); try{ if(ttk.wl) ttk.wl.release(); }catch(e){} ttk.wl=null; try{ if(document.fullscreenElement) document.exitFullscreen(); }catch(e){} }
-document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&ttk.on&&navigator.wakeLock) navigator.wakeLock.request('screen').then(w=>{ ttk.wl=w; }).catch(()=>{}); });
-document.addEventListener('click',e=>{ const b=e.target.closest('#ttk [data-act]'); if(!b){ if(e.target.closest('#ttk')&&!e.target.closest('.ttk-ctl')){ ttk.ctl=!ttk.ctl; ttkDraw(); } return; } e.stopPropagation(); const a=b.dataset.act;
-  if(a==='ttkx') ttkClose(); else if(a==='ttkctl'){ ttk.ctl=!ttk.ctl; ttkDraw(); }
-  else if(a==='ttkcam'){ ttk.cam=!ttk.cam; ttkSave(); ttkDraw(); } else if(a==='ttkguide'){ ttk.guide=!ttk.guide; ttkSave(); ttkDraw(); }
-  else if(a==='ttksouf'){ soufLaunch(); }
-  else if(a==='ttkchatz'){ ttk.chatz=!ttk.chatz; ttkSave(); ttk.cache={}; ttkDraw(); }
-  else if(a==='ttkfs'){ try{ document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen(); }catch(err){} }
-  else if(a==='ttkfocus'){ ttk.focus=b.dataset.id||null; try{ localStorage.setItem('suivi-ttk-focus',ttk.focus||''); }catch(err){} if(ttk.focus) setTimeout(()=>{ try{ liveDetail(ttk.focus); }catch(err){} },50); ttkDraw(); }
-  else if(a==='ttkvote'){ if(ttk.votes){ ttk.votes[b.dataset.k]++; ttkDraw(); } }
-  else if(a==='ttkvreset'){ if(ttk.votes){ ttk.votes.h=ttk.votes.a=ttk.votes.n=0; ttkDraw(); } }
-  else if(a==='ttkres'){ const m=footIdx().mt.find(z=>String(z.id)===String(b.dataset.id)); if(m) resGen(m); setTimeout(ttkDraw,50); } },true);
-document.addEventListener('change',e=>{ if(e.target&&e.target.id==='ttkLg'){ ttk.lg=e.target.value; ttk.focus=null; ttkSave(); ttk.cache={}; ttkDraw(); } });
-document.addEventListener('input',e=>{ if(e.target&&e.target.id==='ttkHandle'){ ttk.handle=e.target.value.trim(); ttkSave(); ttkDraw(); } });
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&ttk.on){ if(ttk.focus){ ttk.focus=null; ttkDraw(); } else ttkClose(); } });
-function footTiktokView(){
-  return `<div class="card"><h2>📱 Live TikTok</h2><p>Un écran vertical (9:16) prévu pour diffuser le multiplex en live sur TikTok : scores en direct, bandeau « BUT ! » avec son et confettis, classement « si ça reste comme ça », questions pour le chat et bandeau défilant.</p><button data-act="ttkopen" style="width:100%;font-size:16px;padding:14px">▶ Lancer le mode Live TikTok</button><button class="sec" data-act="soufopen" style="width:100%;margin-top:8px">📝 Ouvrir le souffleur (fenêtre à part)</button><p class="mut" style="font-size:12.5px;margin:6px 0 0">Le souffleur s'ouvre dans une fenêtre séparée : laisse-la à côté de LIVE Studio. Comme LIVE Studio ne capture que la fenêtre Statify, tes spectateurs ne la voient pas. Sur iPhone, ouvre-le plutôt sur un autre appareil (même adresse + <b>#souffleur</b> à la fin).</p>
-  <h3 style="margin-top:16px">Comment diffuser</h3><ol style="padding-left:20px;line-height:1.55;margin:0"><li>Sur ton ordinateur, ouvre Statify dans le navigateur et lance ce mode (bouton ⛶ pour le plein écran).</li><li>Dans <b>TikTok LIVE Studio</b>, ajoute une source « Capture de fenêtre » sur le navigateur, puis ta webcam dans le cadre « Ta caméra ici ».</li><li>Touche l'écran (ou ⚙) pour afficher les réglages : championnats, caméra oui/non, repères.</li><li>Active <b>🧭 Repères</b> pour voir où TikTok place les commentaires et ses boutons, puis coupe-les avant de lancer le live.</li></ol>
-  <h3 style="margin-top:16px">Pendant le live</h3><ul style="padding-left:20px;line-height:1.55;margin:0"><li><b>Zoom</b> : touche un match pour l'afficher en grand (buteurs, stats, résumé IA s'il est terminé). « ✕ Multiplex » pour revenir.</li><li><b>Votes « Prochain but ? »</b> : tape sur l'équipe à chaque vote du chat. Quand un but tombe, l'écran félicite les bons pronostics et les votes repartent à zéro. Le vote porte sur le match zoomé, sinon sur le premier match en cours.</li><li><b>Mi-temps</b> et <b>fin du multiplex</b> : écrans automatiques avec le bilan.</li><li><b>Bandeaux télé</b> : but, but sur penalty, carton rouge et but refusé (VAR).</li><li>Ton <b>@pseudo TikTok</b> se règle dans la barre des réglages (⚙).</li></ul>
-  <p class="mut" style="font-size:12.5px;margin:12px 0 0">L'écran reste allumé tant que le mode est ouvert. Échap : sortir du zoom, puis du mode. La radio RMC est coupée automatiquement en mode Live TikTok : la diffuser dans un live est interdit.</p></div>`;
-}
+/* ---------- Pseudo affiché sur les images du Studio (gardé de l'ancien mode Live TikTok : même réglage mémorisé) ---------- */
+const KEYTT='suivi-ttk'; const ttk={handle:'',...loadJ(KEYTT,{})};
+const ttkSave=()=>saveJ(KEYTT,{handle:ttk.handle});
 function viewFoot(){
   const v={home:footHome,multi:footMultiView,matches:footMatchesView,table:footTableView,teams:footTeamsView,players:footPlayersView,records:footRecordsView,compare:footCompareView,cal:footCalView}[ui.ftab]||footHome;
   return v();
@@ -2465,7 +2321,7 @@ function render(){
     const FT=ui.sport==='foot', TT=FT?FTABS:TABS, cur=FT?ui.ftab:ui.tab;
     document.body.classList.toggle('sport-foot',FT);
     document.querySelectorAll('#sportSeg button').forEach(b=>b.classList.toggle('on',b.dataset.sport===ui.sport));
-    { const ICO={home:'🏠',games:'📋',matches:'📋',players:'👤',teams:'🛡️',standings:'📊',table:'📊',multi:'🔥',race:'🎯',records:'🏅',compare:'⚖️',rest:'😴',cal:'📅',tiktok:'📱',studio:'🎨'}, cl=l=>l.replace(/^🔥\s*/,'');
+    { const ICO={home:'🏠',games:'📋',matches:'📋',players:'👤',teams:'🛡️',standings:'📊',table:'📊',multi:'🔥',race:'🎯',records:'🏅',compare:'⚖️',rest:'😴',cal:'📅',studio:'🎨'}, cl=l=>l.replace(/^🔥\s*/,'');
       const PRI=FT?['home','multi','matches','table']:['home','games','players','teams'], pri=TT.filter(([k])=>PRI.includes(k)), rest=TT.filter(([k])=>!PRI.includes(k)), inRest=rest.some(([k])=>k===cur);
       const tb=([k,l])=>`<button data-act="tab" data-t="${k}" class="${cur===k?'on':''}"><i>${ICO[k]||'•'}</i><span>${esc(cl(l))}</span></button>`;
       $('#tabs').innerHTML=pri.map(tb).join('')+`<button data-act="pronos"><i>🎯</i><span>Pronos</span></button><button data-act="tabmore" class="${inRest||ui.tabMore?'on':''}"><i>⋯</i><span>Plus</span></button>`+(ui.tabMore?`<div class="tabsheet">${rest.map(tb).join('')}</div>`:''); }
@@ -2552,8 +2408,6 @@ function toggleFav(type,id,name){
   else if(a==='favplayer') toggleFav('player',id,el.dataset.name);
   else if(a==='opengame'){ closeModals(); ui.openGame=id; $('#modal').scrollTop=0; render(); }
   else if(a==='closegame'){ ui.openGame=null; render(); }
-  else if(a==='soufopen'){ soufLaunch(); }
-  else if(a==='ttkopen'){ ttkOpen(); }
   else if(a==='aikeysave'){ const v=((document.getElementById('aiKeyIn')||{}).value||'').trim().replace(/\s+/g,''); if(v.length<20){ say('⚠️ Cette clé paraît incomplète : copie-la en entier depuis Google AI Studio.','err'); return; } aiKey=v; aiDraft=''; aiModels=null; try{ localStorage.setItem(KEYAI,v); }catch(e){} for(const k in resErr) delete resErr[k]; say('✓ Clé Gemini enregistrée. Le résumé est en cours de rédaction…','ok'); render(); }
   else if(a==='aikeyreset'){ aiKey=''; aiModels=null; try{ localStorage.removeItem(KEYAI); }catch(e){} for(const k in resErr) delete resErr[k]; render(); }
   else if(a==='resgen'){ const m=footIdx().mt.find(z=>String(z.id)===String(id)); if(m){ delete resumes[String(id)]; resSave(); delete resErr[String(id)]; resGen(m); } }
@@ -2643,8 +2497,8 @@ $('#btnManual').onclick=()=>{ try{ report(ingest($('#manual').value)); $('#manua
 $('#btnTv').onclick=tvOpen;
 $('#btnXlsx').onclick=()=>{ if(!Object.keys(games).length){ say('Ajoute au moins un match avant d\'exporter.','warn'); return; } exportXlsx(); };
 function doBackup(){
-  download('statify-sauvegarde-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify({v:3,games,fav,sched,notes,foot,ffav,ffavP}),'application/json');
-  backup={last:Date.now(),snooze:0}; saveJ(KEYB,backup); renderBackup();
+  download('statify-sauvegarde-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify({v:4,app:'statify+prono',date:new Date().toISOString(),games,fav,sched,notes,foot,ffav,ffavP,...StatifyBackup.pronoPart()}),'application/json');
+  backup={last:Date.now(),snooze:0}; saveJ(KEYB,backup); try{ StatifyBackup.stamp(); }catch(e){} renderBackup();
 }
 $('#btnExport').onclick=doBackup;
 $('#backupBar').addEventListener('click',e=>{
@@ -2656,9 +2510,10 @@ $('#btnImport').onclick=()=>$('#fileImport').click();
 $('#fileImport').onchange=async e=>{
   try{
     const d=JSON.parse(await e.target.files[0].text());
+    let extra=''; if(d&&Array.isArray(d.football)){ try{ extra=StatifyBackup.restoreProno(d); }catch(err){ extra=' · Pronos : erreur de lecture'; } }
     if(d&&d.games){ Object.assign(games,d.games); if(d.fav){ fav.teams=[...new Set([...fav.teams,...(d.fav.teams||[])])]; Object.assign(fav.players,d.fav.players||{}); } if(d.sched&&d.sched.length) sched=d.sched; if(d.notes) Object.assign(notes,d.notes); if(d.foot&&d.foot.leagues){ foot=d.foot; foot.ph=foot.ph||{}; _fidx=null; footSave(); } if(Array.isArray(d.ffav)){ ffav=[...new Set([...ffav,...d.ffav])]; saveJ(KEYFF,ffav); } if(Array.isArray(d.ffavP)){ ffavP=[...new Set([...ffavP,...d.ffavP])]; saveJ(KEYFP,ffavP); } }
-    else Object.assign(games,d);
-    save(); saveFav(); saveJ(KEYS,sched); saveJ(KEYN,notes); render(); say('✓ Sauvegarde importée.','ok');
+    else if(!(d&&Array.isArray(d.football))) Object.assign(games,d);
+    save(); saveFav(); saveJ(KEYS,sched); saveJ(KEYN,notes); render(); say('✓ Sauvegarde importée.'+extra,'ok');
   }catch(err){ say('Fichier invalide.','err'); }
 };
 $('#btnMore').onclick=()=>document.body.classList.toggle('menu-open');
@@ -2877,7 +2732,7 @@ function sndEl(){ if(!goalSnd){ try{ goalSnd=new Audio(GOAL_SND); goalSnd.preloa
 function sndUnlock(){ if(sndUnlocked) return; const a=sndEl(); if(!a) return; sndUnlocked=true;
   try{ a.muted=true; const p=a.play(); if(p&&p.then) p.then(()=>{ a.pause(); a.currentTime=0; a.muted=false; }).catch(()=>{ sndUnlocked=false; a.muted=false; }); }catch(e){ sndUnlocked=false; } }
 ['pointerdown','touchend','click','keydown'].forEach(ev=>document.addEventListener(ev,sndUnlock,{passive:true}));
-function playGoal(force){ if(window.__souf) return; if(!force&&sndPref()==='0') return; const a=sndEl(); if(!a) return; try{ a.muted=false; a.currentTime=0; const p=a.play(); if(p&&p.catch) p.catch(()=>{}); }catch(e){} }
+function playGoal(force){ if(!force&&sndPref()==='0') return; const a=sndEl(); if(!a) return; try{ a.muted=false; a.currentTime=0; const p=a.play(); if(p&&p.catch) p.catch(()=>{}); }catch(e){} }
 // un but compte comme « multiplex » si le match est dans un multiplex en cours, dans ma sélection, ou si c'est un de mes clubs
 const goalSoundOk=it=>{ try{ return multiLive(it.lg)||!!mpick[it.id]||nfav.foot.includes(it.h.id)||nfav.foot.includes(it.a.id); }catch(e){ return false; } };
 /* ---- Bandeau « BUT ! » façon télé (appli ouverte) ---- */
@@ -2976,8 +2831,8 @@ async function liveFetch(manual,only){
     // changements de score
     const cur=new Set(); let changed=false;
     for(const it of items){ if(it.st!=='in') continue; const key=it.k+it.id; cur.add(it.k+':'+it.lg+':'+it.id); const sc=it.h.s+'-'+it.a.s, o=liveMem[key];
-      if(it.k==='f'){ const rcs=(it.ev||[]).filter(e=>e.rc), rk='r'+it.id, pr=liveMem[rk]; liveMem[rk]=rcs.length; if(pr!=null&&rcs.length>pr&&ttkShows(it)){ const e=rcs[rcs.length-1]; goalBanner(it,e.s,{p:e.p,m:e.m},'rc'); } }
-      if(!o||o.sc!==sc){ liveMem[key]={sc,chg:o?Date.now():0}; if(o){ changed=true; if(it.k==='f'&&((ttk.on&&ttkShows(it))||(ui.sport==='foot'&&liveAlertOk(it)))){ const [oh,oa]=String(o.sc).split('-').map(Number), sd=it.h.s>oh?'h':it.a.s>oa?'a':'', gl=(it.ev||[]).filter(e=>e.g&&e.s===sd), lg=(sd&&gl.length===(sd==='h'?it.h.s:it.a.s))?gl[gl.length-1]:null, tm=sd==='h'?it.h.n:sd==='a'?it.a.n:''; if(sd&&(goalSoundOk(it)||ttkShows(it))){ playGoal(); goalBanner(it,sd,lg); } else if(!sd&&ttkShows(it)){ const vs=it.h.s<oh?'h':it.a.s<oa?'a':''; if(vs) goalBanner(it,vs,null,'var'); } say(sd?`⚽ <b>BUT de ${esc(tm)} !</b> ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}${lg&&lg.p?' · '+esc(lg.p)+' '+esc(lg.m)+(lg.og?' (csc)':lg.pg?' (pen.)':''):''}`:`📝 <b>Score modifié</b> (VAR ?) : ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}`,sd?'ok':'warn'); } } } }
+      if(it.k==='f'){ const rcs=(it.ev||[]).filter(e=>e.rc), rk='r'+it.id, pr=liveMem[rk]; liveMem[rk]=rcs.length; }
+      if(!o||o.sc!==sc){ liveMem[key]={sc,chg:o?Date.now():0}; if(o){ changed=true; if(it.k==='f'&&ui.sport==='foot'&&liveAlertOk(it)){ const [oh,oa]=String(o.sc).split('-').map(Number), sd=it.h.s>oh?'h':it.a.s>oa?'a':'', gl=(it.ev||[]).filter(e=>e.g&&e.s===sd), lg=(sd&&gl.length===(sd==='h'?it.h.s:it.a.s))?gl[gl.length-1]:null, tm=sd==='h'?it.h.n:sd==='a'?it.a.n:''; if(sd&&goalSoundOk(it)){ playGoal(); goalBanner(it,sd,lg); } say(sd?`⚽ <b>BUT de ${esc(tm)} !</b> ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}${lg&&lg.p?' · '+esc(lg.p)+' '+esc(lg.m)+(lg.og?' (csc)':lg.pg?' (pen.)':''):''}`:`📝 <b>Score modifié</b> (VAR ?) : ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}`,sd?'ok':'warn'); } } } }
     const ended=[...liveSeen].filter(k=>!cur.has(k)); liveSeen=cur;
     liveData.items=items;
     for(const g of ing){ try{ footIngest({__foot:'scores',league:g.lg,data:g.d}); }catch(e){} }
@@ -2988,7 +2843,6 @@ async function liveFetch(manual,only){
     if(!changed&&items.some(x=>x.st==='in')&&Date.now()-liveRen>6e4) changed=true;
     liveRender(); if(changed&&!document.querySelector('input:focus')){ liveRen=Date.now(); render(); }
     if(ui.fMatch) await liveDetail(ui.fMatch);
-    if(ttk.on&&ttk.focus&&ttk.focus!==ui.fMatch) await liveDetail(ttk.focus);
     // fins de match : on complète les détails
     for(const k of ended){ const [kind,lg,id]=k.split(':'); const it=items.find(x=>x.k===kind&&x.id===id&&x.lg===lg);
       if(!it||!it.done) continue;
@@ -3025,237 +2879,6 @@ setTimeout(()=>liveFetch(false),2500);
 document.addEventListener('click',e=>{ const r=e.target.closest('#liveBox [data-act=fmatch]'); if(r) setTimeout(()=>liveDetail(r.dataset.id),80); },false);
 document.addEventListener('change',e=>{ if(e.target.matches&&e.target.matches('[data-act=livefav]')){ try{ localStorage.setItem('suivi-live-fav',e.target.checked?'1':'0'); }catch(x){} } });
 document.addEventListener('click',e=>{ if(e.target.closest('[data-act=liverefresh]')){ e.stopPropagation(); liveFetch(true); } },true);
-
-/* ---------- Souffleur : fenêtre à part (invisible pour les spectateurs) avec des phrases prêtes à dire ---------- */
-const souf={on:false,timer:null,snap:null,news:[],dismiss:{},pointAt:Date.now(),fi:0,qi:0,ri:0,cache:{}};
-const sfOrd=n=>n===1?'1er':n+'e';
-const sfMin=e=>e?(e.ms||e.min+"'"):'';
-function sfLead(m){ return m.hs>m.as?[m.hn,m.an]:m.as>m.hs?[m.an,m.hn]:null; }
-function sfPlayer(name,tids){ if(!name) return null; const P=footIdx().P, last=String(name).split(/[\s.]+/).filter(Boolean).pop().toLowerCase();
-  return Object.values(P).find(p=>tids.includes(p.tid)&&String(p.n).toLowerCase().split(/\s+/).pop()===last)||null; }
-function sfForm(t){ if(!t||!t.log||!t.log.length) return ''; const l=t.log; let w=0,u=0,nw=0;
-  for(let i=l.length-1;i>=0&&l[i].res==='w';i--) w++; for(let i=l.length-1;i>=0&&l[i].res!=='l';i--) u++; for(let i=l.length-1;i>=0&&l[i].res!=='w';i--) nw++;
-  if(w>=3) return `${t.n} reste sur ${w} victoires de suite`; if(u>=4) return `${t.n} n'a plus perdu depuis ${u} matchs`; if(nw>=4) return `${t.n} n'a plus gagné depuis ${nw} matchs`;
-  const r=l.slice(-5).map(x=>x.res==='w'?'V':x.res==='l'?'D':'N').join('-'); return `Forme de ${t.n} sur ses derniers matchs : ${r}`; }
-function sfScoreTxt(m){ if(m.hs===m.as) return m.hs===0?`toujours 0-0 entre ${m.hn} et ${m.an}`:`${m.hn} et ${m.an} à égalité, ${m.hs} partout`; const [w,l]=sfLead(m); return `${w} mène ${Math.max(m.hs,m.as)}-${Math.min(m.hs,m.as)} face à ${l}`; }
-function sfNews(ms){ // détecte les changements depuis le dernier passage
-  const now=Date.now(), cur={}; for(const m of ms) cur[m.id]={hs:m.hs,as:m.as,st:m.st,ht:ttkHT(m),rc:m.ev.filter(e=>e.t==='rc').length};
-  const prev=souf.snap; souf.snap=cur; if(!prev) return;
-  const proj=ttkProj(ms);
-  for(const m of ms){ const a=prev[m.id], b=cur[m.id]; if(!a) continue; const add=(k,t,x)=>souf.news.unshift({id:m.id+':'+k+':'+now,k,t,x:x||'',at:now});
-    if(a.st==='pre'&&b.st==='in') add('ko',`C'est parti entre ${m.hn} et ${m.an} !`);
-    if(b.hs+b.as>a.hs+a.as){ const sd=b.hs>a.hs?'h':'a', team=sd==='h'?m.hn:m.an, opp=sd==='h'?m.an:m.hn, e=[...m.ev].filter(x=>x.s===sd&&x.t!=='rc').sort((x,y)=>y.min-x.min)[0], who=e&&e.p?e.p:'';
-      const diff=sd==='h'?b.hs-b.as:b.as-b.hs; const sit=diff===0?'Égalisation !':diff===1&&(sd==='h'?a.hs-a.as:a.as-a.hs)===0?`${team} passe devant !`:diff>=2?`${team} fait le break !`:diff<0?`${team} réduit l'écart !`:'';
-      const p=sfPlayer(who,[m.hid,m.aid]), pf=p&&p.g>=1?` Il avait déjà marqué ${p.g} fois cette saison.`:'', pr=proj.find(x=>x.r.name===team||x.r.id===(sd==='h'?m.hid:m.aid)), prt=pr?` Si ça reste comme ça, ${team} passe ${sfOrd(pr.r.nr)} !`:'';
-      add('goal',`BUUUT ! ${team} marque${who?` par ${who}`:''}${e?` à la ${sfMin(e)}`:''} ! ${sit} ${m.hn} ${b.hs}-${b.as} ${m.an}.`,`${pf}${prt} Question au chat : qui avait vu venir ce but de ${team} ?`.trim()); }
-    else if(b.hs+b.as<a.hs+a.as) add('var',`But refusé ! Le score revient à ${m.hn} ${b.hs}-${b.as} ${m.an}. Sûrement la VAR…`,'Question au chat : bonne décision ou pas ?');
-    if(b.rc>a.rc){ const e=[...m.ev].filter(x=>x.t==='rc').sort((x,y)=>y.min-x.min)[0], tm=e?(e.s==='h'?m.hn:m.an):''; add('rc',`Carton rouge${e&&e.p?` pour ${e.p}`:''}${tm?` (${tm})`:''}${e?` à la ${sfMin(e)}`:''} ! ${tm||'Une équipe'} va devoir finir à 10.`,'Question au chat : ça change le match selon vous ?'); }
-    if(!a.ht&&b.ht) add('ht',`Mi-temps entre ${m.hn} et ${m.an} : ${b.hs}-${b.as}.`,'Question au chat : votre meilleur joueur de la 1re période ?');
-    if(a.st!=='post'&&b.st==='post') add('ft',`C'est terminé ! ${m.hn} ${b.hs}-${b.as} ${m.an}.${sfLead(m)?` Victoire de ${sfLead(m)[0]} !`:' Match nul.'}`,'Question au chat : votre homme du match ?'); }
-  souf.news=souf.news.slice(0,30);
-}
-function sfFacts(ms){
-  const {T,P,mt}=footIdx(), out=[], live=ms.filter(m=>m.st==='in'), pool=live.length?live:ms.filter(m=>m.st==='pre').slice(0,6);
-  for(const m of pool){ const th=T[m.hid], ta=T[m.aid];
-    if(th&&th.st&&ta&&ta.st) out.push(`${m.hn} (${sfOrd(th.st.rank)}, ${th.st.pts} pts) affronte ${m.an} (${sfOrd(ta.st.rank)}, ${ta.st.pts} pts).`);
-    for(const t of [th,ta]){ const f=sfForm(t); if(f) out.push(f+'.'); if(t&&t.g>=3) out.push(`${t.n} marque ${f1(t.gf/t.g).replace('.',',')} buts par match en moyenne et en encaisse ${f1(t.ga/t.g).replace('.',',')}.`); }
-    for(const id of [m.hid,m.aid]){ const p=Object.values(P).filter(x=>x.tid===id&&x.g>0).sort((a,b)=>b.g-a.g)[0]; if(p) out.push(`Meilleur buteur de ${p.tn} : ${p.n}, ${p.g} but${p.g>1?'s':''}${p.a?` et ${p.a} passe${p.a>1?'s':''} décisive${p.a>1?'s':''}`:''}.`); }
-    const h=mt.filter(x=>x.done&&x.id!==m.id&&((x.hid===m.hid&&x.aid===m.aid)||(x.hid===m.aid&&x.aid===m.hid))).sort((a,b)=>Date.parse(b.d)-Date.parse(a.d))[0];
-    if(h) out.push(`Dernier face à face : ${h.hn} ${h.hs}-${h.as} ${h.an}, le ${fmtD(h.d).replace(/\.$/,'')}.`); }
-  for(const x of ttkProj(ms)) out.push(`Si ça reste comme ça, ${x.r.name} ${x.mv>0?'gagne':'perd'} ${Math.abs(x.mv)} place${Math.abs(x.mv)>1?'s':''} et ${x.mv>0?'monte':'descend'} à la ${sfOrd(x.r.nr)} place !`);
-  return out.length?out:['Pas encore de stats en mémoire : actualise le foot avec « Depuis le début de saison » pour avoir plus d\'anecdotes.'];
-}
-function sfQuestions(ms){
-  const live=ms.filter(m=>m.st==='in'), pre=ms.filter(m=>m.st==='pre'), q=[];
-  const close=live.filter(m=>Math.abs(m.hs-m.as)<=1).sort((a,b)=>(b.hs+b.as)-(a.hs+a.as))[0];
-  if(close) q.push(`Qui marque le prochain but dans ${close.hn} – ${close.an} ? Écrivez 1 pour ${close.hn}, 2 pour personne, 3 pour ${close.an} !`);
-  if(pre[0]) q.push(`Votre prono pour ${pre[0].hn} – ${pre[0].an} ? Donnez-moi un score exact !`);
-  if(live.length>1) q.push(`C'est quoi votre match préféré ce soir parmi les ${live.length} en cours ?`);
-  q.push('Vous supportez quel club ? Dites-le dans le chat !','Vous êtes de quelle ville ? Je veux savoir d\'où vous regardez !','Votre joueur préféré du championnat en ce moment ?','Qui va être champion cette saison selon vous ?');
-  return q;
-}
-const SF_REM=['Demande de s\'abonner : « Abonnez-vous pour le multiplex de chaque week-end, ça m\'aide énormément ! »','Demande des likes : « Tapez l\'écran, on vise 1 000 likes avant la mi-temps ! »','Salue les nouveaux par leur pseudo : « Bienvenue à ceux qui arrivent ! »','Demande de partager le live : « Partagez le live à un pote qui supporte une de ces équipes ! »','Lance un vote « Prochain but ? » et tape les votes sur l\'écran Statify.'];
-
-const SF_DEB=['Qui est le meilleur joueur du championnat en ce moment selon vous ?','Le club qui va descendre cette saison, vous le voyez qui ?','La VAR : pour ou contre ? Dites-moi tout dans le chat !','Qui gagne la Ligue des champions cette saison ?','Votre plus beau souvenir de foot, c\'est quoi ?','Le meilleur entraîneur du championnat pour vous ?','Plutôt un 0-0 tactique ou un 4-3 de fou ? Écrivez 1 ou 2 !','Quel joueur vous rêveriez de voir dans votre club ?','Le plus beau stade de France, c\'est lequel ?','Le club le plus sous-coté du championnat ?','Le meilleur maillot de la saison ?','Vous jouez au foot ? À quel poste ?','Le meilleur jeune du championnat en ce moment ?','Qui sera meilleur buteur à la fin de la saison ?','Le match que vous attendez le plus cette saison ?'];
-function sfMinute(m){ const k=String(m.txt||'').match(/(\d+)/); return k?+k[1]:null; }
-function sfFlow(ms){
-  const out=[], live=ms.filter(m=>m.st==='in'&&!ttkHT(m)), pre=ms.filter(m=>m.st==='pre').sort((a,b)=>Date.parse(a.d)-Date.parse(b.d)), {T}=footIdx(), proj=ttkProj(ms), now=Date.now();
-  for(const m of live){ const k=sfMinute(m), d=Math.abs(m.hs-m.as), L=sfLead(m); let t;
-    if(k!=null&&k>=80&&d<=1) t=L?`Fin de match tendue entre ${m.hn} et ${m.an} : ${L[0]} tient ${Math.max(m.hs,m.as)}-${Math.min(m.hs,m.as)}, plus que quelques minutes. ${L[1]} peut-il encore revenir ?`:`Plus que quelques minutes entre ${m.hn} et ${m.an}, ${m.hs} partout : tout est encore possible !`;
-    else if(m.hs+m.as===0&&k!=null&&k>=55) t=`Toujours 0-0 entre ${m.hn} et ${m.an} à la ${k}e. Qui va débloquer la situation ?`;
-    else if(d>=3) t=`Festival de ${L[0]} : ${Math.max(m.hs,m.as)}-${Math.min(m.hs,m.as)} contre ${L[1]}${k?` à la ${k}e`:''}. Soirée compliquée pour ${L[1]} !`;
-    else { const t1=T[m.hid], t2=T[m.aid], f=sfForm(((souf.flow&&souf.flow.i)||0)%2===0?t1:t2); t=`À ${m.hn} – ${m.an}${k?` (${k}e)`:''}, ${sfScoreTxt(m)}.${f?' '+f+'.':''}`; }
-    const pr=proj.find(x=>x.r.id===m.hid||x.r.id===m.aid); if(pr) t+=` Si ça reste comme ça, ${pr.r.name} ${pr.mv>0?'monte':'descend'} à la ${sfOrd(pr.r.nr)} place.`;
-    out.push({k:'🎙️ Zoom sur un match',t}); }
-  for(const m of pre.filter(m=>Date.parse(m.d)-now<45*6e4).slice(0,2)){ const mn=Math.max(1,Math.round((Date.parse(m.d)-now)/6e4)); out.push({k:'⏰ Bientôt',t:`Dans ${mn} minute${mn>1?'s':''}, coup d'envoi de ${m.hn} – ${m.an}. Vos pronos dans le chat ! Score exact ?`}); }
-  const F=sfFacts(ms).filter(x=>!/^Pas encore/.test(x)); F.slice(0,6).forEach(t=>out.push({k:'💡 Anecdote',t}));
-  sfQuestions(ms).slice(0,3).forEach(t=>out.push({k:'💬 Question au chat',t}));
-  const di=Math.floor(now/6e5); for(let j=0;j<3;j++) out.push({k:'🗣️ Débat',t:SF_DEB[(di*3+j)%SF_DEB.length]});
-  out.push({k:'👋 Rappel',t:SF_REM[di%SF_REM.length]});
-  // on mélange les types pour que ça reste varié
-  const by={}; for(const x of out) (by[x.k] ||= []).push(x); const keys=Object.keys(by), mix=[]; let left=true;
-  for(let r=0;left;r++){ left=false; for(const kk of keys){ if(by[kk][r]){ mix.push(by[kk][r]); left=true; } } }
-  return mix;
-}
-
-/* ---- Live texte ESPN dans le souffleur (traduit en français, pour commenter avec tes mots) ---- */
-const SF_SHOT=[[/fails to capitalise on this great opportunity,?\s*/gi,''],[/with a right footed shot/gi,'d\'une frappe du pied droit'],[/with a left footed shot/gi,'d\'une frappe du pied gauche'],[/with a header/gi,'de la tête'],[/(?:is )?saved in the (bottom|top) (left|right) corner/gi,(_,a,b)=>'arrêtée '+(a==='bottom'?'en bas':'en haut')+(b==='left'?' à gauche':' à droite')],[/right footed shot/gi,'frappe du pied droit'],[/left footed shot/gi,'frappe du pied gauche'],[/header/gi,'tête'],[/from the centre of the box/gi,'depuis le centre de la surface'],[/from outside the box/gi,'de l\'extérieur de la surface'],[/from very close range/gi,'à bout portant'],[/from the right side of the box/gi,'depuis la droite de la surface'],[/from the left side of the box/gi,'depuis la gauche de la surface'],[/from a difficult angle on the (left|right)/gi,'dans un angle fermé'],[/from the right side of the six yard box/gi,'dans les 6 mètres, côté droit'],[/from the left side of the six yard box/gi,'dans les 6 mètres, côté gauche'],[/from the centre of the six yard box/gi,'dans les 6 mètres'],[/from more than \d+ yards/gi,'de très loin'],[/from long range on the (left|right)/gi,'de loin'],
-  [/is saved in the bottom left corner/gi,'arrêtée en bas à gauche'],[/is saved in the bottom right corner/gi,'arrêtée en bas à droite'],[/is saved in the top centre of the goal/gi,'arrêtée au centre, en haut'],[/is saved in the centre of the goal/gi,'arrêtée au centre'],[/is saved in the top left corner/gi,'arrêtée en haut à gauche'],[/is saved in the top right corner/gi,'arrêtée en haut à droite'],[/is saved/gi,'arrêtée'],
-  [/to the bottom left corner/gi,'en bas à gauche'],[/to the bottom right corner/gi,'en bas à droite'],[/to the top left corner/gi,'en lucarne à gauche'],[/to the top right corner/gi,'en lucarne à droite'],[/to the centre of the goal/gi,'au centre du but'],[/to the high centre of the goal/gi,'en haut, au centre'],
-  [/is close, but misses to the left/gi,'passe tout près, à gauche'],[/is close, but misses to the right/gi,'passe tout près, à droite'],[/is close, but misses the top left corner/gi,'frôle la lucarne gauche'],[/is close, but misses the top right corner/gi,'frôle la lucarne droite'],[/is just a bit too high/gi,'passe juste au-dessus'],[/is too high/gi,'passe au-dessus'],[/misses to the left/gi,'à côté, à gauche'],[/misses to the right/gi,'à côté, à droite'],[/is blocked/gi,'contrée'],
-  [/Assisted by ([^.]+?) with a cross/gi,'Centre de $1'],[/Assisted by ([^.]+?) with a headed pass/gi,'Remise de la tête de $1'],[/Assisted by ([^.]+?) with a through ball/gi,'Passe en profondeur de $1'],[/Assisted by ([^.]+?) following a corner/gi,'Sur corner de $1'],[/Assisted by ([^.]+?) following a fast break/gi,'En contre, servi par $1'],[/Assisted by ([^.]+?)\./gi,'Passe de $1.'],
-  [/following a corner/gi,'sur corner'],[/following a fast break/gi,'en contre-attaque'],[/following a set piece situation/gi,'sur coup de pied arrêté'],[/with a cross/gi,'sur un centre'],[/with a through ball/gi,'sur une passe en profondeur'],[/with a headed pass/gi,'sur une remise de la tête'],[/following a direct free kick/gi,'sur coup franc direct'],[/after a corner/gi,'après un corner']];
-function sfTrShot(x){ let t=' '+x; for(const [r,v] of SF_SHOT) t=t.replace(r,v); return t.trim().replace(/\) (frappe|tête)/g,'), $1').replace(/ (passe tout près|passe au-dessus|passe juste|à côté|arrêtée|contrée|en bas|en haut|en lucarne|au centre)/,', $1'); }
-function sfTr(raw){
-  const t=String(raw||'').trim(); let m;
-  if(m=t.match(/^Goal!\s*(.+?) (\d+), (.+?) (\d+)\.\s*(.*)$/i)) return {k:'goal',t:`⚽ BUT ! ${m[1]} ${m[2]}-${m[4]} ${m[3]}. ${sfTrShot(m[5])}`};
-  if(m=t.match(/^Own Goal by (.+?)\. (.+?) (\d+), (.+?) (\d+)\.?/i)) return {k:'goal',t:`⚽ But contre son camp de ${m[1]} ! ${m[2]} ${m[3]}-${m[5]} ${m[4]}.`};
-  if(m=t.match(/^Attempt saved\.\s*(.*)$/i)) return {k:'shot',t:`🧤 Tir arrêté : ${sfTrShot(m[1])}`};
-  if(m=t.match(/^Attempt missed\.\s*(.*)$/i)) return {k:'shot',t:`❌ Tir manqué : ${sfTrShot(m[1])}`};
-  if(m=t.match(/^Attempt blocked\.\s*(.*)$/i)) return {k:'shot',t:`🛡️ Tir contré : ${sfTrShot(m[1])}`};
-  if(m=t.match(/^(.+?) hits the (left|right) post (.*)$/i)) return {k:'shot',t:`🥅 POTEAU ! ${m[1]}, ${sfTrShot(m[3])}`};
-  if(m=t.match(/^(.+?) hits the bar (.*)$/i)) return {k:'shot',t:`🥅 LA BARRE ! ${m[1]}, ${sfTrShot(m[2])}`};
-  if(m=t.match(/^Corner,\s*(.+?)\.\s*Conceded by (.+?)\.?$/i)) return {k:'set',t:`🚩 Corner pour ${m[1]} (concédé par ${m[2]}).`};
-  if(m=t.match(/^Foul by (.+?)\.?$/i)) return {k:'foul',t:`Faute de ${m[1]}.`};
-  if(m=t.match(/^(.+?) wins a free kick (in the defensive half|in the attacking half|on the (left|right) wing)\.?$/i)) return {k:'foul',t:`Coup franc obtenu par ${m[1]} ${/attacking/.test(m[2])?'dans le camp adverse':/wing/.test(m[2])?'sur le côté':'dans son camp'}.`};
-  if(m=t.match(/^Offside,\s*(.+?)\.\s*(.*)$/i)){ const w=m[2].match(/but (.+?) is caught offside/i); return {k:'foul',t:`🚫 Hors-jeu de ${w?w[1]:m[1]} (${m[1]}).`}; }
-  if(m=t.match(/^Substitution,\s*(.+?)\.\s*(.+?) replaces (.+?)\.?(\s+because of an injury\.?)?$/i)) return {k:'sub',t:`🔁 Changement pour ${m[1]} : ${m[2]} remplace ${m[3]}${m[4]?' (blessure)':''}.`};
-  if(m=t.match(/^(.+?) is shown the yellow card(.*)$/i)) return {k:'yc',t:`🟨 Carton jaune pour ${m[1]}${/second yellow/i.test(m[2])?' (2e jaune !)':''}.`};
-  if(m=t.match(/^(.+?) is shown the red card(.*)$/i)) return {k:'rc',t:`🟥 CARTON ROUGE pour ${m[1]} !`};
-  if(m=t.match(/^Second yellow card to (.+?)\.?$/i)) return {k:'rc',t:`🟥 Deuxième jaune et rouge pour ${m[1]} !`};
-  if(m=t.match(/^Delay in match because of an injury (.+?)\.?$/i)) return {k:'info',t:`🩹 Arrêt de jeu : ${m[1]} est touché.`};
-  if(/^Delay over/i.test(t)) return {k:'info',t:'Reprise du jeu.'};
-  if(/^Delay in match/i.test(t)) return {k:'info',t:'Arrêt de jeu.'};
-  if(m=t.match(/^Hand ball by (.+?)\.?$/i)) return {k:'foul',t:`✋ Main de ${m[1]}.`};
-  if(m=t.match(/^Penalty conceded by (.+?) after a foul in the penalty area\.?$/i)) return {k:'pen',t:`⚠️ PENALTY concédé par ${m[1]} !`};
-  if(m=t.match(/^Penalty (.+?)\.\s*(.+?) draws a foul in the penalty area\.?$/i)) return {k:'pen',t:`⚠️ PENALTY pour ${m[1]} ! Faute sur ${m[2]}.`};
-  if(m=t.match(/^Penalty saved!\s*(.*)$/i)) return {k:'pen',t:`🧤 Penalty ARRÊTÉ ! ${sfTrShot(m[1])}`};
-  if(m=t.match(/^Penalty missed!\s*(.*)$/i)) return {k:'pen',t:`❌ Penalty RATÉ ! ${sfTrShot(m[1])}`};
-  if(m=t.match(/^VAR Decision:\s*(.*)$/i)) return {k:'var',t:`📺 Décision VAR : ${m[1].replace(/Goal/i,'but').replace(/No Goal/i,'pas de but').replace(/Penalty/i,'penalty').replace(/cancelled/i,'annulé').replace(/confirmed/i,'confirmé')}`};
-  if(m=t.match(/^First Half begins\.?/i)) return {k:'info',t:'▶️ Coup d\'envoi de la 1re période.'};
-  if(m=t.match(/^Second Half begins (.+?) (\d+), (.+?) (\d+)\.?$/i)) return {k:'info',t:`▶️ Reprise de la 2e période : ${m[1]} ${m[2]}-${m[4]} ${m[3]}.`};
-  if(m=t.match(/^First Half ends,?\s*(.+?) (\d+), (.+?) (\d+)\.?$/i)) return {k:'info',t:`⏸ Mi-temps : ${m[1]} ${m[2]}-${m[4]} ${m[3]}.`};
-  if(m=t.match(/^Second Half ends,?\s*(.+?) (\d+), (.+?) (\d+)\.?$/i)) return {k:'info',t:`⏹ Fin de la 2e période : ${m[1]} ${m[2]}-${m[4]} ${m[3]}.`};
-  if(m=t.match(/^Match ends,?\s*(.+?) (\d+), (.+?) (\d+)\.?$/i)) return {k:'info',t:`🏁 Fin du match : ${m[1]} ${m[2]}-${m[4]} ${m[3]}.`};
-  if(/^Lineups are announced/i.test(t)) return {k:'info',t:'📋 Les compositions sont annoncées, les joueurs s\'échauffent.'};
-  return {k:'en',t};
-}
-function sfLiveFetch(id){
-  const ms=ttkSet(), m=ms.find(x=>String(x.id)===String(id)); if(!m||souf.ltBusy) return;
-  souf.ltBusy=1;
-  footGet(`https://site.api.espn.com/apis/site/v2/sports/soccer/${m.lg}/summary?event=${m.id}`).then(d=>{
-    let c=((d&&d.commentary)||[]).map(x=>({q:+x.sequence||0,m:(x.time&&x.time.displayValue)||(x.clock&&x.clock.displayValue)||'',x:String(x.text||(x.play&&x.play.text)||'').trim()})).filter(x=>x.x);
-    if(!c.length) c=((d&&d.keyEvents)||[]).map((e,i)=>({q:i,m:(e.clock&&e.clock.displayValue)||'',x:String(e.text||'').trim()})).filter(x=>x.x);
-    c.sort((a,b)=>b.q-a.q);
-    souf.lt={id:String(id),at:Date.now(),lines:c.slice(0,40),err:c.length?'':'ESPN ne propose pas de live écrit pour ce match.'};
-  }).catch(e=>{ souf.lt={id:String(id),at:Date.now(),lines:(souf.lt&&souf.lt.id===String(id)?souf.lt.lines:[]),err:'Live écrit indisponible pour le moment ('+(e.message||e)+').'}; })
-  .finally(()=>{ souf.ltBusy=0; souf.cache.h=''; soufDraw(); });
-}
-function sfLiveHtml(ms){
-  const live=ms.filter(m=>m.st==='in'||m.st==='post'&&Date.now()-Date.parse(m.d)<3*36e5); if(!live.length) return '';
-  let sel=souf.sel&&live.find(m=>String(m.id)===String(souf.sel))?String(souf.sel):String((live.find(m=>m.st==='in')||live[0]).id);
-  const m=live.find(x=>String(x.id)===sel), now=Date.now();
-  if(m.st==='in'&&(!souf.lt||souf.lt.id!==sel||now-souf.lt.at>20000)) setTimeout(()=>sfLiveFetch(sel),0);
-  else if(!souf.lt||souf.lt.id!==sel) setTimeout(()=>sfLiveFetch(sel),0);
-  const lt=souf.lt&&souf.lt.id===sel?souf.lt:null;
-  const chips=live.slice(0,10).map(x=>`<button class="${String(x.id)===sel?'':'sec'}" data-act="sfsel" data-id="${esc(x.id)}">${esc(x.hn)} ${x.hs}-${x.as} ${esc(x.an)}</button>`).join('');
-  const lines=lt?lt.lines.slice(0,10).map(l=>{ const r=sfTr(l.x); return `<div class="sf-lt k-${r.k}"><b>${esc(l.m)}</b><span>${esc(r.t)}</span></div>`; }).join(''):'';
-  return `<section class="sf-c sf-live"><h3>🎧 Live texte ESPN<span class="sf-t">${souf.ttkFocus&&String(souf.ttkFocus)===sel?'match zoomé dans ton live · ':''}mis à jour toutes les 20 s</span></h3><div class="sf-chips">${chips}</div>${lines||`<div class="sf-calm">${lt&&lt.err?esc(lt.err):'Chargement du live écrit…'}</div>`}${lt&&lt.err&&lines?`<div class="sf-calm">${esc(lt.err)}</div>`:''}<div class="sf-calm" style="font-size:12px;margin-top:6px">Traduit automatiquement depuis l'anglais. Raconte-le avec tes mots, ne le lis pas mot pour mot.</div></section>`;
-}
-window.addEventListener('storage',e=>{ if(e.key==='suivi-ttk-focus'&&souf.on){ souf.ttkFocus=e.newValue||''; if(e.newValue) souf.sel=e.newValue; souf.cache.h=''; soufDraw(); } });
-
-/* ---- Voix du souffleur : lit les événements, les points multiplex, le fil continu et les grosses occasions ---- */
-const KEYVX='suivi-voix';
-const voix={on:false,name:'',rate:1,q:[],speaking:false,said:{},ltSeen:{},flowI:-1,lastPt:0,...loadJ(KEYVX,{}),opts:{ev:1,pt:1,flow:1,lt:1,...((loadJ(KEYVX,{})||{}).opts||{})}};
-voix.on=false; voix.q=[]; voix.speaking=false; voix.said={}; voix.ltSeen={}; voix.flowI=-1; voix.lastPt=0;
-const voixSave=()=>saveJ(KEYVX,{name:voix.name,rate:voix.rate,opts:voix.opts});
-function voixList(){ const all=(window.speechSynthesis&&speechSynthesis.getVoices())||[]; const fr=all.filter(v=>/^fr/i.test(v.lang));
-  const sc=v=>(/natural|neural|online/i.test(v.name)?0:/google/i.test(v.name)?1:/premium|enhanced|amélioré/i.test(v.name)?1:2)*10+(/henri|remy|thomas|paul|daniel|nicolas|jean|antoine|male/i.test(v.name)?0:1);
-  return fr.sort((a,b)=>sc(a)-sc(b)||a.name.localeCompare(b.name)); }
-function voixPick(){ const L=voixList(); return L.find(v=>v.name===voix.name)||L[0]||null; }
-function voixSay(text,prio){ if(!voix.on||!text) return; const parts=String(text).replace(/\s+/g,' ').split(/(?<=[.!?])\s+/).filter(Boolean);
-  if(prio){ voix.q=voix.q.filter(x=>x.p); voix.q.unshift(...parts.map(t=>({t,p:1}))); } else { if(voix.q.length>6) return; voix.q.push(...parts.map(t=>({t,p:0}))); }
-  voixNext(); }
-function voixNext(){ if(voix.speaking||!voix.q.length||!window.speechSynthesis) return; const it=voix.q.shift(), u=new SpeechSynthesisUtterance(it.t.replace(/(\d+)'/g,'$1e minute').replace(/(\d+)-(\d+)/g,'$1 à $2').replace(/[⚽🟥🟨🧤❌🛡️🥅🚩🚫🔁🩹✋⚠️📺▶️⏸⏹🏁📋]/gu,''));
-  const v=voixPick(); if(v){ u.voice=v; u.lang=v.lang; } else u.lang='fr-FR'; u.rate=voix.rate||1; u.pitch=1;
-  voix.speaking=true; u.onend=u.onerror=()=>{ voix.speaking=false; setTimeout(voixNext,250); }; speechSynthesis.speak(u); }
-function voixStop(){ voix.q=[]; voix.speaking=false; try{ speechSynthesis.cancel(); }catch(e){} }
-function sfVoiceLine(raw){ // phrase courte, à nous, pour les grosses occasions du live texte
-  const t=String(raw||''); const pm=t.match(/([A-ZÀ-ÿ][^().]*?) \(([^)]+)\)/), who=pm?pm[1].trim().split(/\s+/).pop():'', team=pm?pm[2]:'';
-  if(/^Attempt saved/i.test(t)) return who?`Occasion pour ${team} ! ${who} tente sa chance, le gardien s'interpose.`:'';
-  if(/^Attempt missed/i.test(t)&&/is close/i.test(t)) return who?`Tout près ! ${who} frôle le poteau pour ${team}.`:'';
-  if(/hits the (left |right )?(post|bar)/i.test(t)) return who?`${/hits the bar/i.test(t)?'Sur la barre':'Sur le poteau'} ! ${who} a failli marquer pour ${team} !`:'';
-  if(/^Penalty conceded by/i.test(t)) return `Penalty ! Faute de ${who||'un défenseur'} dans la surface !`;
-  if(/^Penalty .+ draws a foul/i.test(t)){ const m=t.match(/^Penalty (.+?)\./i); return `Penalty pour ${m?m[1]:'une équipe'} !`; }
-  if(/^Penalty saved/i.test(t)) return `Penalty arrêté ! Le gardien sort le tir de ${who||'l\'attaquant'} !`;
-  if(/^Penalty missed/i.test(t)) return `Penalty raté par ${who||'l\'attaquant'} !`;
-  if(/^VAR Decision/i.test(t)) return 'La VAR intervient, on attend la décision de l\'arbitre.';
-  return ''; }
-function voixTick(ctx){
-  if(!voix.on) return; const now=Date.now();
-  if(voix.opts.ev) for(const n of [...souf.news].reverse()) if(!voix.said[n.id]&&now-n.at<9e4){ voix.said[n.id]=1; voixSay(n.t+(n.x?' '+n.x.replace(/^Question au chat : /,'').replace(/^ Il/,' Il'):''),1); }
-  if(voix.opts.lt&&souf.lt){ const L=souf.lt.lines||[], key=souf.lt.id, seen=(voix.ltSeen[key] ||= {first:true,ids:{}});
-    for(const l of [...L].reverse()){ const id=l.q+'|'+l.m; if(seen.ids[id]) continue; seen.ids[id]=1; if(!seen.first){ const v=sfVoiceLine(l.x); if(v) voixSay(v,0); } }
-    seen.first=false; }
-  if(voix.opts.pt&&ctx.pt&&ctx.live&&now-souf.pointAt>=4*6e4&&!voix.q.length&&!voix.speaking){ souf.pointAt=now; voixSay(ctx.pt,0); }
-  if(voix.opts.flow&&ctx.cur&&voix.flowI!==ctx.i){ voix.flowI=ctx.i; voixSay(ctx.cur.t,0); }
-}
-function voixPanel(){
-  const L=voixList(), v=voixPick(), nat=L.some(x=>/natural|online/i.test(x.name));
-  const ck=(k,l)=>`<label><input type="checkbox" data-vo="${k}" ${voix.opts[k]?'checked':''}> ${l}</label>`;
-  return `<div class="sf-vh"><button data-act="vxon" class="${voix.on?'':'sec'}">${voix.on?'🔊 Voix activée':'🔇 Activer la voix'}</button><button class="sec" data-act="vxtest">▶ Tester</button><button class="sec" data-act="vxstop">⏹ Stop</button></div>
-  <div class="sf-vr"><select id="vxName">${L.map(x=>`<option value="${esc(x.name)}" ${v&&x.name===v.name?'selected':''}>${esc(x.name.replace(/Microsoft |Online |\(Natural\) - |French \((France|Canada|Belgium|Switzerland)\)/g,'').trim()||x.name)}${/natural|online/i.test(x.name)?' ⭐':''}</option>`).join('')||'<option>Aucune voix française trouvée</option>'}</select><label>Vitesse <input id="vxRate" type="range" min="0.85" max="1.25" step="0.05" value="${voix.rate||1}"></label></div>
-  <div class="sf-vo">${ck('ev','Buts, cartons, mi-temps')}${ck('lt','Grosses occasions')}${ck('pt','Point multiplex (4 min)')}${ck('flow','Fil continu')}</div>
-  ${nat?'':'<div class="sf-calm" style="font-size:12.5px">💡 Pour une voix bien plus naturelle, ouvre Statify dans <b>Microsoft Edge</b> : il a des voix ⭐ « Natural » (Henri, Denise, Vivienne…).</div>'}`;
-}
-function voixPanelDraw(){ const P=document.getElementById('sfv'); if(P) P.innerHTML=voixPanel(); }
-if(window.speechSynthesis) speechSynthesis.onvoiceschanged=()=>{ if(souf.on) voixPanelDraw(); };
-document.addEventListener('click',e=>{ const b=e.target.closest('#sfv [data-act]'); if(!b) return; e.stopPropagation(); const a=b.dataset.act;
-  if(a==='vxon'){ voix.on=!voix.on; if(!voix.on) voixStop(); else { voix.flowI=souf.flow?souf.flow.i:-1; for(const n of souf.news) voix.said[n.id]=1; voixSay('Voix activée. Bienvenue sur le multiplex !',1); } }
-  else if(a==='vxtest'){ const was=voix.on; voix.on=true; voixSay('BUUUT ! Lyon passe devant à la 81e minute ! Lyon 2-1 face au PSG. Qui avait vu venir ce but ?',1); voix.on=was||voix.on; if(!was) setTimeout(()=>{ if(!voix.q.length) voix.on=false; voixPanelDraw(); },100); }
-  else if(a==='vxstop') voixStop();
-  voixPanelDraw(); },true);
-document.addEventListener('change',e=>{ const t=e.target; if(!t) return;
-  if(t.id==='vxName'){ voix.name=t.value; voixSave(); } else if(t.id==='vxRate'){ voix.rate=+t.value; voixSave(); } else if(t.dataset&&t.dataset.vo){ voix.opts[t.dataset.vo]=t.checked?1:0; voixSave(); } });
-function soufDraw(){
-  const R=document.getElementById('sfb'); if(!R||!souf.on) return;
-  let ms=[]; try{ ms=ttkSet(); }catch(e){}
-  sfNews(ms);
-  const now=Date.now(), live=ms.filter(m=>m.st==='in'), ago=t=>{ const s=Math.round((now-t)/1000); return s<60?'à l\'instant':`il y a ${Math.floor(s/60)} min`; };
-  const fresh=souf.news.filter(n=>now-n.at<4*6e4&&!souf.dismiss[n.id]).slice(0,3);
-  const KI={goal:'⚽',rc:'🟥',var:'📺',ht:'⏸',ft:'🏁',ko:'▶️'};
-  const hot=fresh.length?fresh.map(n=>`<div class="sf-hot k-${n.k}"><div class="sf-hh"><span>${KI[n.k]||'•'} ${ago(n.at)}</span><button data-act="sfok" data-id="${esc(n.id)}">✓ Dit</button></div><div class="sf-say">${esc(n.t)}</div>${n.x?`<div class="sf-x">${esc(n.x)}</div>`:''}</div>`).join(''):'<div class="sf-calm">Rien de neuf à l\'instant. Fais un point multiplex ou pose une question au chat 👇</div>';
-  const pt=live.length?'Point multiplex ! '+live.slice(0,6).map(m=>{ const t=sfScoreTxt(m); return t.charAt(0).toUpperCase()+t.slice(1)+(m.txt?` (${m.txt})`:''); }).join('. ')+'.'+(live.length>6?` Et ${live.length-6} autre${live.length>7?'s':''} match${live.length>7?'s':''} en cours.`:''):ms.some(m=>m.st==='pre')?`Pas encore de match en cours. Prochain coup d'envoi à ${parisT(ms.filter(m=>m.st==='pre').sort((a,b)=>Date.parse(a.d)-Date.parse(b.d))[0].d)} : ${ms.filter(m=>m.st==='pre')[0].hn} – ${ms.filter(m=>m.st==='pre')[0].an}.`:'Tous les matchs sont terminés : fais le bilan de la soirée !';
-  const el=Math.floor((now-souf.pointAt)/1000), late=el>=240;
-  const FL=sfFlow(ms), SFD=45000; if(!souf.flow) souf.flow={i:0,at:now}; if(now-souf.flow.at>=SFD){ souf.flow.i++; souf.flow.at=now; }
-  const cur=FL.length?FL[souf.flow.i%FL.length]:null, nxt=FL.length>1?FL[(souf.flow.i+1)%FL.length]:null;
-  const flowHtml=cur?`<section class="sf-c sf-flow"><h3>${esc(cur.k)}<span class="sf-t">fil continu · change toutes les 45 s</span></h3><div class="sf-say">${esc(cur.t)}</div><div class="sf-bar"><i style="animation-duration:${SFD/1000}s" data-k="${souf.flow.at}"></i></div><div class="sf-nx"><button data-act="sfnext">▶ Suivante</button>${nxt?`<span>Ensuite : ${esc(nxt.k)}</span>`:''}</div></section>`:'';
-  const F=sfFacts(ms), Q=sfQuestions(ms), rem=SF_REM[Math.floor(now/(4*6e4))%SF_REM.length];
-  const f1x=F[souf.fi%F.length], f2x=F.length>1?F[(souf.fi+1)%F.length]:'';
-  const log=souf.news.slice(0,8).map(n=>`<div class="sf-log"><span>${KI[n.k]||'•'}</span><span>${esc(n.t)}</span><em>${ago(n.at)}</em></div>`).join('')||'<div class="sf-calm">Les buts, cartons rouges, mi-temps et fins de match s\'afficheront ici.</div>';
-  const H=`<div class="sf-top"><b>📝 Souffleur</b><span>invisible pour tes spectateurs · ${esc(new Date().toLocaleTimeString('fr-FR',{...PARIS,hour:'2-digit',minute:'2-digit'}))} · ${live.length} en cours</span></div>
-  <section class="sf-c sf-now"><h3>🔴 À dire maintenant</h3>${hot}</section>
-  ${sfLiveHtml(ms)}
-  ${flowHtml}
-  <section class="sf-c ${late?'late':''}"><h3>📣 Point multiplex <span class="sf-t">${late?'⏰ ':''}dernier point ${el<60?'à l\'instant':'il y a '+Math.floor(el/60)+' min'}</span></h3><div class="sf-say">${esc(pt)}</div><button data-act="sfpoint">✓ J'ai fait le point</button></section>
-  <section class="sf-c"><h3>💬 Question au chat</h3><div class="sf-say">${esc(Q[souf.qi%Q.length])}</div><button class="sec" data-act="sfq">↻ Autre question</button></section>
-  <section class="sf-c"><h3>💡 À placer</h3><div class="sf-say sm">${esc(f1x)}</div>${f2x?`<div class="sf-say sm">${esc(f2x)}</div>`:''}<button class="sec" data-act="sff">↻ Autres idées</button></section>
-  <section class="sf-c sf-rem"><h3>👋 Pense à…</h3><div class="sf-say sm">${esc(rem)}</div></section>
-  <section class="sf-c"><h3>🕒 Fil des événements</h3>${log}</section>`;
-  try{ voixTick({pt,live:live.length,cur,i:souf.flow.i}); }catch(e){}
-  if(souf.cache.h!==H){ souf.cache.h=H; R.innerHTML=H; const bi=R.querySelector('.sf-bar i'); if(bi&&souf.flow) bi.style.animationDelay=-(Math.min(45000,Date.now()-souf.flow.at)/1000)+'s'; }
-}
-function soufOpen(){
-  souf.on=true; window.__souf=1; document.body.classList.add('souf-on'); document.title='Souffleur · Statify';
-  const R=document.createElement('div'); R.id='souf'; R.innerHTML='<section class="sf-c sf-voice"><h3>🎙️ Voix automatique</h3><div id="sfv"></div></section><div id="sfb"></div>'; document.body.appendChild(R); voixPanelDraw();
-  soufDraw(); souf.timer=setInterval(soufDraw,1000);
-}
-document.addEventListener('click',e=>{ const b=e.target.closest('#sfb [data-act]'); if(!b) return; e.stopPropagation(); const a=b.dataset.act;
-  if(a==='sfok') souf.dismiss[b.dataset.id]=1; else if(a==='sfpoint') souf.pointAt=Date.now(); else if(a==='sfq') souf.qi++; else if(a==='sff') souf.fi+=2; else if(a==='sfsel'){ souf.sel=b.dataset.id; } else if(a==='sfnext'){ souf.flow.i++; souf.flow.at=Date.now(); }
-  souf.cache.h=''; soufDraw(); },true);
-function soufLaunch(){ const u=location.href.split('#')[0]+'#souffleur'; const w=window.open(u,'statify-souffleur','popup,width=460,height=900'); if(!w) location.href=u; }
-if(location.hash==='#souffleur') setTimeout(soufOpen,300);
-window.addEventListener('hashchange',()=>{ if(location.hash==='#souffleur'&&!souf.on) soufOpen(); });
 
 /* ================= STUDIO : images prêtes à poster (foot + NBA) ================= */
 function stuS(){ return window.__stu || (window.__stu={tplF:'recap',tplN:'nres',fmt:'pt',lg:'',conf:'E',pick:{},title:{},tok:0,img:{},noImg:false}); }

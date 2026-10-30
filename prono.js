@@ -1149,7 +1149,7 @@
           });
 
           saveState();
-          alert("✅ Importation réussie !");
+          alert(importedData && importedData.games ? "✅ Pronos importés ! Ce fichier contient aussi tes données Statify : pour les restaurer, ouvre Statify puis « Importer »." : "✅ Importation réussie !");
         } catch (err) {
           alert("❌ Erreur : " + err.message);
         } finally {
@@ -1160,8 +1160,16 @@
     }
 
     function exportJSON() {
-      const filename = `pronotracker_${new Date().toISOString().split('T')[0]}.json`;
-      const dataStr = JSON.stringify(state, null, 2);
+      // sauvegarde complète : Statify + PronoTracker dans un seul fichier (la copie de Statify est préparée à l'avance pour que le partage iPhone fonctionne)
+      const full = (window.StatifyBackup && StatifyBackup.buildSync(state)) || null;
+      if (!full && window.StatifyBackup) { StatifyBackup.build(state).then(exportJSONdata).catch(() => exportJSONdata(null)); return; }
+      exportJSONdata(full);
+    }
+
+    function exportJSONdata(full) {
+      const day = new Date().toISOString().split('T')[0];
+      const filename = full ? `statify-sauvegarde-${day}.json` : `pronotracker_${day}.json`;
+      const dataStr = JSON.stringify(full || state, null, full ? 0 : 2);
       const blob = new Blob([dataStr], { type: 'application/json' });
 
       // Sur iPhone/iPad, la méthode "lien de téléchargement" ne fonctionne pas de façon fiable.
@@ -1176,6 +1184,7 @@
           text: 'Export de mes pronostics'
         }).then(() => {
           localStorage.setItem('pronotracker_lastBackup', new Date().toISOString());
+          try { window.StatifyBackup && StatifyBackup.stamp(); } catch (e) {}
           updateBackupBanner();
         }).catch(err => {
           if (err && err.name !== 'AbortError') {
@@ -1197,6 +1206,7 @@
       downloadAnchor.remove();
       URL.revokeObjectURL(url);
       localStorage.setItem('pronotracker_lastBackup', new Date().toISOString());
+      try { window.StatifyBackup && StatifyBackup.stamp(); } catch (e) {}
       updateBackupBanner();
     }
 
@@ -5120,3 +5130,5 @@ service cloud.firestore {
   };
   recolor();
 })();
+
+try { setTimeout(() => { if (window.StatifyBackup) StatifyBackup.prepare(); }, 1200); } catch (e) {}
