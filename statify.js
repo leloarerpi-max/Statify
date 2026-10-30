@@ -1196,11 +1196,13 @@ function legendsHtml(kind,key,name){
 /* --- Ce soir --- */
 function tonightNba(S){
   if(!sched||!sched.length) return '';
-  const now=Date.now(), L=upcoming().filter(x=>Date.parse(x.t)>=now-3*36e5&&Date.parse(x.t)<=now+30*36e5);
+  const now=Date.now(); let L=upcoming().filter(x=>Date.parse(x.t)>=now-3*36e5&&Date.parse(x.t)<=now+30*36e5);
+  // une « nuit » NBA = tous les matchs du même jour américain (ex. 20h → 3h30 du matin, heure de Paris) : on n'affiche que la prochaine
+  { const nk=x=>parisDK(new Date(Date.parse(x.t)-12*36e5).toISOString()); if(L.length){ const k0=L.map(nk).sort()[0]; L=L.filter(x=>nk(x)===k0); } }
   let big=new Set(); try{ const b=bigMatches(S); if(b) b.items.forEach(i=>big.add(i.x.id)); }catch(e){}
   const mine=x=>fav.teams.includes(x.h)||fav.teams.includes(x.a);
   const rows=[...L].sort((a,b)=>mine(b)-mine(a)||Date.parse(a.t)-Date.parse(b.t)).map(x=>`<div class="liverow" style="grid-template-columns:auto 1fr auto"><div><b>${esc(parisT(x.t))}</b></div><div class="lt">${teamLogo(x.a,22)}<span class="nfull">${esc(tname(x.a))}</span><span class="ntri">${esc(x.a)}</span> <span class="mut">@</span> ${teamLogo(x.h,22)}<span class="nfull">${esc(tname(x.h))}</span><span class="ntri">${esc(x.h)}</span>${mine(x)?' ⭐':''}${big.has(x.id)?' 🔥':''}</div><div><span class="link" data-act="cmpgo" data-sp="nba" data-a="${esc(x.h)}" data-b="${esc(x.a)}" title="Comparer ces deux équipes">⚖️</span></div></div>`).join('');
-  return `<div class="card"><div class="row between"><h2 style="margin:0">🌙 Ce soir / cette nuit <span class="mut" style="font-weight:400;font-size:13px">(heure de Paris)</span></h2></div>${rows||'<p class="mut" style="margin:8px 0 0">Aucun match prévu dans les prochaines 30 heures (calendrier chargé jusqu\'au '+esc(parisD(sched[sched.length-1].t))+').</p>'}</div>`;
+  return `<div class="card"><div class="row between"><h2 style="margin:0">🌙 Ce soir / cette nuit <span class="mut" style="font-weight:400;font-size:13px">(heure de Paris)</span></h2></div>${rows||'<p class="mut" style="margin:8px 0 0">Aucun match prévu cette nuit (calendrier chargé jusqu\'au '+esc(parisD(sched[sched.length-1].t))+').</p>'}</div>`;
 }
 function tonightFoot(){
   const {mt}=footIdx(); if(!mt.length) return '';
@@ -1328,7 +1330,7 @@ const FLG=[['fra.1','Ligue 1'],['eng.1','Premier League'],['esp.1','Liga'],['ita
 const isEU=lg=>/^uefa\./.test(lg||'');
 const zoneFr=d=>{ const x=String(d||''); const t=[[/champions league.*(qualif|play)/i,'Qualif. Ligue des champions'],[/champions league/i,'Ligue des champions'],[/europa league.*(qualif|play)/i,'Qualif. Europa League'],[/europa league/i,'Europa League'],[/conference league.*(qualif|play)/i,'Qualif. Conférence League'],[/conference league/i,'Conférence League'],[/relegation.*(play|round)/i,'Barrage de relégation'],[/relegation/i,'Relégation'],[/promotion.*(play|round)/i,'Barrage de promotion'],[/promotion/i,'Promotion'],[/round of 16|8th/i,'Qualifié pour les 8es de finale'],[/knockout/i,'Phase à élimination directe'],[/play-?off/i,'Barrages'],[/eliminat/i,'Éliminé']]; for(const [r,f] of t) if(r.test(x)) return f; return x; };
 const inLg=(o,lg)=>!lg||lg==='mine'||o.lg===lg||!!(o.comps&&o.comps[lg]);
-const FTABS=[['home','Accueil'],['multi','🔥 Multiplex'],['matches','Matchs'],['table','Classement'],['teams','Équipes'],['players','Joueurs'],['records','Records'],['studio','Studio'],['compare','Comparer'],['cal','Calendrier']];
+const FTABS=[['home','Accueil'],['multi','🔥 Multiplex'],['matches','Matchs'],['table','Classement'],['teams','Équipes'],['players','Joueurs'],['records','Records'],['compare','Comparer'],['cal','Calendrier']];
 let foot=loadJ(KEYFO,{leagues:{}}), ffav=loadJ(KEYFF,[]), ffavP=loadJ(KEYFP,[]);
 // étoile DORÉE = notifications / multiplex ; étoile BLEUE = favoris (suivi, accueil, stats)
 const KEYNF='suivi-notif-fav'; let nfav=loadJ(KEYNF,null);
@@ -1629,7 +1631,6 @@ function footHome(){
   const sc=lg?pl.filter(p=>inLg(p,lg)):pl;
   FB.scorers=`<div class="card"><h2>Meilleurs buteurs ${lg?'— '+esc(footLgName(lg)):''}</h2>${sc.length?`<div class="grid2"><div><h3>Buts</h3>${footScorersTable(sc,'g','buts',6)}</div><div><h3>Passes décisives</h3>${footScorersTable(sc,'a','PD',6)}</div></div>`:(lg?footLeadersFallback(lg):'')||'<p class="mut">Les buteurs apparaissent après le chargement des détails des matchs (bouton Actualiser).</p>'}</div>`;
   h+=heroFoot(done);
-  try{ h+=stuReadyCard('foot'); }catch(e){}
   h+=ui.fHomeEdit?fhomeEditor(cfg):'';
   for(const id of cfg.order) if(!cfg.hidden.includes(id)&&FB[id]) h+=FB[id];
   return h;
@@ -2177,7 +2178,7 @@ function footMultiView(){
   const goals=ms.reduce((n,m)=>n+(m.st==='pre'?0:(+m.hs||0)+(+m.as||0)),0), dd=new Date(Date.parse(first?first.d:Date.now())).toLocaleDateString('fr-FR',{...PARIS,weekday:'long',day:'numeric',month:'long'});
   h+=`<div class="mxhero"><div class="row between" style="gap:10px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:0"><h2 style="margin:0">${live?'<span class="livedot"></span>':''}${title}</h2><div class="mut" style="font-size:12px;margin-top:2px;text-transform:capitalize">${esc(dd)} · heure de Paris</div></div><select id="fMulti" style="max-width:100%">${opts.map(([c,n])=>`<option value="${esc(c)}" ${c===lg?'selected':''}>${esc(n)}</option>`).join('')}</select></div>
   <div class="mxchips"><div><b>${ms.length}</b><span>Matchs</span></div><div><b class="${live?'err':''}">${live}</b><span>En cours</span></div><div><b>${goals}</b><span>Buts</span></div></div>
-  <div class="row" style="margin-top:12px;gap:8px"><button class="sec" data-act="sndtoggle">${sndPref()==='0'?'🔇 Son de but : coupé':'🔊 Son de but : activé'}</button><button class="sec" data-act="gbtest">▶ Tester le bandeau</button><button class="sec" data-act="ttkopen">📱 Live TikTok</button><button class="sec rb-btn" data-act="radio">${radio.on?'⏸ Couper RMC':'📻 Écouter RMC en direct'}</button></div>
+  <div class="row" style="margin-top:12px;gap:8px"><button class="sec" data-act="sndtoggle">${sndPref()==='0'?'🔇 Son de but : coupé':'🔊 Son de but : activé'}</button><button class="sec" data-act="gbtest">▶ Tester le bandeau</button><button class="sec rb-btn" data-act="radio">${radio.on?'⏸ Couper RMC':'📻 Écouter RMC en direct'}</button></div>
   ${ms.length?`<p class="mut" style="margin:10px 0 0;font-size:12px">${first?'Premier coup d\'envoi à '+esc(parisT(first.d))+' · ':''}touche ☆ pour ajouter un match à ta sélection</p>`:''}</div>${secHtml||`<div class="card">${empty}</div>`}`;
   // classement live : un championnat à la fois
   const tl=[...new Set(ms.map(m=>m.lg))].filter(l=>foot.leagues[l]&&foot.leagues[l].standings.length);
@@ -2400,7 +2401,7 @@ function footTiktokView(){
   <p class="mut" style="font-size:12.5px;margin:12px 0 0">L'écran reste allumé tant que le mode est ouvert. Échap : sortir du zoom, puis du mode. La radio RMC est coupée automatiquement en mode Live TikTok : la diffuser dans un live est interdit.</p></div>`;
 }
 function viewFoot(){
-  const v={home:footHome,multi:footMultiView,matches:footMatchesView,table:footTableView,teams:footTeamsView,players:footPlayersView,records:footRecordsView,compare:footCompareView,cal:footCalView,tiktok:footTiktokView,studio:()=>viewStudio('foot')}[ui.ftab]||footHome;
+  const v={home:footHome,multi:footMultiView,matches:footMatchesView,table:footTableView,teams:footTeamsView,players:footPlayersView,records:footRecordsView,compare:footCompareView,cal:footCalView}[ui.ftab]||footHome;
   return v();
 }
 function footModalHtml(){
@@ -3525,7 +3526,7 @@ function stuDeepLink(){
   try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
   closeModals();
   if(STU_NBA_T.includes(t)){ setSport('nba'); ui.tab='studio'; S.tplN=t; const N=stuNbaNight(); if(!N||Date.now()-Date.parse(N.gs[0].time)>30*36e5) setTimeout(()=>{ try{ nbaRefresh(); }catch(e){} },300); }
-  else { setSport('foot'); ui.ftab='studio'; S.tplF=t; if(lg) S.lg=lg; const L=lg&&foot.leagues[lg]; if(!L||Date.now()-(L.upd||0)>2*36e5) setTimeout(()=>{ try{ ui.fPer=0; footRefresh(); }catch(e){} },300); }
+  else { render(); return; }   // Studio Foot retiré
   render(); window.scrollTo(0,0); say('📸 Image prête : vérifie l\'aperçu, puis « ↗ Partager ».','ok');
 }
 window.addEventListener('hashchange',stuDeepLink); setTimeout(stuDeepLink,600);
