@@ -1,7 +1,7 @@
     // Couleurs des graphiques selon le thème clair/sombre (même réglage que Statify)
     const chartGrid = () => document.documentElement.dataset.theme === 'light' ? '#f1f5f9' : '#1b3a5c';
     const chartTick = () => document.documentElement.dataset.theme === 'light' ? '#64748b' : '#8eaac8';
-    try { if (window.Chart) Chart.defaults.color = chartTick(); } catch (e) {}
+    try { if (window.Chart) { Chart.defaults.color = chartTick(); Chart.defaults.borderColor = chartGrid(); } } catch (e) {}
     let currentSport = 'football';
     let state = JSON.parse(localStorage.getItem('prono_tracker_multisport_data')) || { football: [] };
     // Le tennis n'existe plus dans l'appli : on purge toute donnée tennis restante.
@@ -2858,6 +2858,170 @@
       return { paires, restes, refaisables };
     }
 
+    // ===================== DÉTAIL DES COMBINÉS PAR JOUR =====================
+    let dcPeriode = 'ALL', dcSansExclus = false, dcChart = null, dcChart2 = null;
+
+    function ouvrirDetailCombines() {
+      const d = document.getElementById('comboStatsDetails');
+      if (d) d.open = true;
+    }
+    function fermerDetailCombines() {
+      if (dcChart) { try { dcChart.destroy(); } catch (e) {} dcChart = null; }
+      if (dcChart2) { try { dcChart2.destroy(); } catch (e) {} dcChart2 = null; }
+    }
+    function dcReglage(p, s) {
+      if (p !== undefined) dcPeriode = p;
+      if (s !== undefined) dcSansExclus = s;
+      majDetailCombines();
+    }
+
+    function majDetailCombines() {
+      const m = document.getElementById('comboStatsInline');
+      if (!m) return;
+      const sport = currentSport;
+      const money = v => fmtMoney(v, true);
+      const f2 = n => (Number(n) || 0).toFixed(2).replace('.', ',');
+      const limite = dcPeriode === 'ALL' ? '' : (() => { const d = new Date(); d.setDate(d.getDate() - Number(dcPeriode)); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
+
+      let rows = (state.combos[sport] || []).map(c => {
+        const legs = comboLegs(sport, c);
+        return { c, legs, date: legs.reduce((mx, l) => (l.date && l.date > mx ? l.date : mx), ''), status: comboStatus(sport, c), odds: comboOdds(sport, c), profit: comboProfit(sport, c) };
+      }).filter(r => r.legs.length && r.date);
+      if (dcSansExclus) rows = rows.filter(r => !r.legs.some(l => genExclus.has((l.comp || '').trim())));
+      if (limite) rows = rows.filter(r => r.date >= limite);
+
+      const reg = rows.filter(r => r.status !== 'Pending').sort((a, b) => a.date.localeCompare(b.date) || Number(a.c.id) - Number(b.c.id));
+      const jours = {};
+      rows.forEach(r => {
+        const j = jours[r.date] = jours[r.date] || { date: r.date, n: 0, w: 0, l: 0, p: 0, mise: 0, profit: 0, cotes: [], items: [] };
+        j.n++; j.items.push(r);
+        if (r.status === 'Won') j.w++; else if (r.status === 'Lost') j.l++; else j.p++;
+        if (r.status !== 'Pending') { j.mise += r.c.stake || 0; j.profit += r.profit; j.cotes.push(r.odds); }
+      });
+      const liste = Object.values(jours).sort((a, b) => a.date.localeCompare(b.date));
+
+      // KPIs
+      const W = reg.filter(r => r.status === 'Won').length, N = reg.length;
+      const mise = reg.reduce((s, r) => s + (r.c.stake || 0), 0), prof = reg.reduce((s, r) => s + r.profit, 0);
+      const cotes = reg.map(r => r.odds);
+      const coteMoy = cotes.length ? cotes.reduce((a, b) => a + b, 0) / cotes.length : 0;
+      const jReg = liste.filter(j => j.w + j.l > 0);
+      const meilleur = jReg.slice().sort((a, b) => b.profit - a.profit)[0];
+      const pire = jReg.slice().sort((a, b) => a.profit - b.profit)[0];
+      const jPos = jReg.filter(j => j.profit > 0).length;
+      let serie = 0, maxPerd = 0, maxGagn = 0, sg = 0;
+      reg.forEach(r => { if (r.status === 'Lost') { serie++; sg = 0; maxPerd = Math.max(maxPerd, serie); } else { sg++; serie = 0; maxGagn = Math.max(maxGagn, sg); } });
+      // Par nombre de sélections
+      const parNb = {};
+      reg.forEach(r => { const k = r.legs.length; const o = parNb[k] = parNb[k] || { n: 0, w: 0, mise: 0, profit: 0 }; o.n++; if (r.status === 'Won') o.w++; o.mise += r.c.stake || 0; o.profit += r.profit; });
+      const cls = v => v > 0 ? 'text-emerald-600' : v < 0 ? 'text-rose-600' : 'text-slate-500';
+      const tranches = [['Moins de 2,50', 0, 2.5], ['2,50 – 3,49', 2.5, 3.5], ['3,50 – 4,99', 3.5, 5], ['5,00 et +', 5, 1e9]];
+      const lignesCote = tranches.map(([nom, lo, hi]) => {
+        const rs = reg.filter(r => r.odds >= lo && r.odds < hi);
+        if (!rs.length) return '';
+        const w = rs.filter(r => r.status === 'Won').length, ms = rs.reduce((a, r) => a + (r.c.stake || 0), 0), pf = rs.reduce((a, r) => a + r.profit, 0);
+        return `<div class="grid grid-cols-5 text-[11px] py-1 border-b border-slate-100"><b>${nom}</b><span class="text-center">${rs.length}</span><span class="text-center">${Math.round(w / rs.length * 100)} %</span><span class="text-center font-bold ${cls(pf)}">${ms ? (pf / ms * 100).toFixed(1).replace('.', ',') + ' %' : '–'}</span><span class="text-right font-bold ${cls(pf)}">${money(pf)}</span></div>`;
+      }).join('');
+      const fd = d => { const [y, mo, da] = d.split('-'); return `${da}/${mo}`; };
+      const kpi = (t, v, c) => `<div class="bg-slate-50 rounded-xl p-2 text-center"><div class="text-[9px] uppercase font-bold text-slate-400">${t}</div><div class="text-sm font-extrabold ${c || 'text-slate-800'}">${v}</div></div>`;
+      const btn = (act, label, on) => `<button onclick="${act}" class="px-2.5 py-1 rounded-lg text-[11px] font-bold ${on ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600'}">${label}</button>`;
+
+      const lignesJours = liste.slice().reverse().map(j => {
+        const reglesJ = j.w + j.l;
+        const taux = reglesJ ? Math.round(j.w / reglesJ * 100) + ' %' : '–';
+        const cm = j.cotes.length ? f2(j.cotes.reduce((a, b) => a + b, 0) / j.cotes.length) : '–';
+        const detail = j.items.map(r => `<div class="text-[11px] py-1 border-t border-slate-100">
+            <span class="font-bold ${r.status === 'Won' ? 'text-emerald-600' : r.status === 'Lost' ? 'text-rose-600' : 'text-amber-600'}">${r.status === 'Won' ? 'Gagné' : r.status === 'Lost' ? 'Perdu' : 'En cours'}</span>
+            · cote ${f2(r.odds)} · mise ${f2(r.c.stake)} € · <span class="font-bold ${cls(r.profit)}">${money(r.profit)}</span>
+            ${r.legs.map(l => `<div class="text-slate-600 truncate pl-2">${l.status === 'Won' ? '✅' : l.status === 'Lost' ? '❌' : '⏳'} ${escAttr(l.match || '')} — ${escAttr(l.prono || '')} <span class="text-blue-600 font-bold">${f2(l.odds)}</span></div>`).join('')}
+          </div>`).join('');
+        return `<details class="border-b border-slate-100">
+          <summary class="grid grid-cols-6 gap-1 items-center text-[11px] py-2 cursor-pointer">
+            <span class="font-bold text-slate-700">${fd(j.date)}</span>
+            <span class="text-center">${j.n}</span>
+            <span class="text-center"><b class="text-emerald-600">${j.w}</b>/<b class="text-rose-600">${j.l}</b>${j.p ? '/<b class="text-amber-600">' + j.p + '</b>' : ''}</span>
+            <span class="text-center">${taux}</span>
+            <span class="text-center text-slate-500">${cm}</span>
+            <span class="text-right font-extrabold ${cls(j.profit)}">${reglesJ ? money(j.profit) : '–'}</span>
+          </summary>${detail}</details>`;
+      }).join('');
+
+      const lignesNb = Object.keys(parNb).sort((a, b) => a - b).map(k => { const o = parNb[k]; return `<div class="grid grid-cols-5 text-[11px] py-1 border-b border-slate-100"><b>${k} matchs</b><span class="text-center">${o.n}</span><span class="text-center">${Math.round(o.w / o.n * 100)} %</span><span class="text-center">${o.mise ? Math.round(o.profit / o.mise * 100) + ' %' : '–'}</span><span class="text-right font-bold ${cls(o.profit)}">${money(o.profit)}</span></div>`; }).join('');
+
+      m.innerHTML = `<div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-extrabold uppercase tracking-wide text-slate-800"><i class="fa-solid fa-chart-column text-violet-600"></i> Stats des combinés</h3>
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+          ${btn("dcReglage('ALL')", 'Tout', dcPeriode === 'ALL')}${btn("dcReglage('7')", '7 jours', dcPeriode === '7')}${btn("dcReglage('30')", '30 jours', dcPeriode === '30')}
+          <span class="w-2"></span>${btn('dcReglage(undefined, ' + !dcSansExclus + ')', dcSansExclus ? '✓ Sans championnats exclus' : 'Sans championnats exclus', dcSansExclus)}
+        </div>
+        ${N === 0 ? '<p class="text-xs text-slate-400 italic">Aucun combiné réglé sur cette période.</p>' : `
+        <div class="grid grid-cols-3 sm:grid-cols-6 gap-2">
+          ${kpi('Réglés', N)}${kpi('Gagnés', W + ' (' + Math.round(W / N * 100) + ' %)')}${kpi('Profit', money(prof), cls(prof))}
+          ${kpi('ROI', mise ? (prof / mise * 100).toFixed(1).replace('.', ',') + ' %' : '–', cls(prof))}${kpi('Cote moy.', f2(coteMoy))}${kpi('Jours +', jPos + '/' + jReg.length)}
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div>
+          <div class="text-[10px] uppercase font-bold text-slate-500 mb-1">Évolution du bankroll (combiné après combiné)</div>
+          <div style="height:200px"><canvas id="dcCanvasBk"></canvas></div>
+        </div>
+        <div>
+          <div class="text-[10px] uppercase font-bold text-slate-500 mb-1">Bilan par jour</div>
+          <div style="height:200px"><canvas id="dcCanvas"></canvas></div>
+        </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-[11px]">
+          <div class="bg-emerald-50 rounded-xl p-2">Meilleur jour<br><b class="text-emerald-700">${meilleur ? fd(meilleur.date) + ' · ' + money(meilleur.profit) : '–'}</b></div>
+          <div class="bg-rose-50 rounded-xl p-2">Pire jour<br><b class="text-rose-700">${pire ? fd(pire.date) + ' · ' + money(pire.profit) : '–'}</b></div>
+          <div class="bg-slate-50 rounded-xl p-2">Plus longue série gagnante<br><b>${maxGagn} combiné(s)</b></div>
+          <div class="bg-slate-50 rounded-xl p-2">Plus longue série perdante<br><b>${maxPerd} combiné(s)</b></div>
+        </div>
+        <div>
+          <div class="grid grid-cols-5 text-[9px] uppercase font-bold text-slate-400 pb-1 border-b"><span>Taille</span><span class="text-center">Nb</span><span class="text-center">Réussite</span><span class="text-center">ROI</span><span class="text-right">Profit</span></div>
+          ${lignesNb}
+        </div>
+        <div>
+          <div class="grid grid-cols-5 text-[9px] uppercase font-bold text-slate-400 pb-1 border-b"><span>Tranche de cote</span><span class="text-center">Joués</span><span class="text-center">Réussite</span><span class="text-center">ROI</span><span class="text-right">Profit</span></div>
+          ${lignesCote}
+        </div>`}
+        <div>
+          <div class="grid grid-cols-6 gap-1 text-[9px] uppercase font-bold text-slate-400 pb-1 border-b"><span>Jour</span><span class="text-center">Combinés</span><span class="text-center">G/P</span><span class="text-center">Réussite</span><span class="text-center">Cote moy.</span><span class="text-right">Profit</span></div>
+          ${lignesJours || '<p class="text-xs text-slate-400 italic py-2">Rien à afficher.</p>'}
+          <p class="text-[10px] text-slate-400 pt-1">Touche un jour pour voir ses combinés.</p>
+        </div>
+      </div>`;
+
+      if (dcChart) { try { dcChart.destroy(); } catch (e) {} dcChart = null; }
+      if (dcChart2) { try { dcChart2.destroy(); } catch (e) {} dcChart2 = null; }
+      const cvb = document.getElementById('dcCanvasBk');
+      if (cvb && reg.length) {
+        let cb = 0;
+        const serieBk = [0].concat(reg.map(r => +(cb += r.profit).toFixed(2)));
+        const coul = cb >= 0 ? '#059669' : '#e11d48';
+        dcChart2 = new Chart(cvb.getContext('2d'), {
+          type: 'line',
+          data: { labels: ['Départ'].concat(reg.map((r, i) => '#' + (i + 1) + ' · ' + fd(r.date))), datasets: [{ data: serieBk, borderColor: coul, backgroundColor: coul + '22', fill: true, tension: 0.25, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5 }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `Bilan cumulé : ${c.parsed.y >= 0 ? '+' : ''}${c.parsed.y.toFixed(2)} €` } } }, scales: { y: { ticks: { callback: v => v + ' €', font: { size: 10 } } }, x: { ticks: { display: false } } } }
+        });
+      }
+      const cv = document.getElementById('dcCanvas');
+      if (cv && jReg.length) {
+        let cum = 0;
+        const cumul = jReg.map(j => { cum += j.profit; return +cum.toFixed(2); });
+        dcChart = new Chart(cv.getContext('2d'), {
+          data: {
+            labels: jReg.map(j => fd(j.date)),
+            datasets: [
+              { type: 'bar', label: 'Profit du jour', data: jReg.map(j => +j.profit.toFixed(2)), backgroundColor: jReg.map(j => j.profit >= 0 ? '#10b981' : '#f43f5e'), borderRadius: 4, order: 2 },
+              { type: 'line', label: 'Cumulé', data: cumul, borderColor: '#7c3aed', backgroundColor: '#7c3aed', tension: 0.25, borderWidth: 2.5, pointRadius: 2, order: 1 }
+            ]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } }, tooltip: { callbacks: { label: c => `${c.dataset.label} : ${c.parsed.y >= 0 ? '+' : ''}${c.parsed.y.toFixed(2)} €` } } }, scales: { y: { ticks: { callback: v => v + ' €', font: { size: 10 } } }, x: { ticks: { font: { size: 10 } } } } }
+        });
+      }
+    }
+
     function ouvrirGenerateurCombines() {
       let m = document.getElementById('genComboModal');
       if (!m) {
@@ -3031,6 +3195,7 @@
     function renderCombos() {
       const container = document.getElementById('combosListContainer');
       if (!container) return;
+      try { majDetailCombines(); } catch (e) { console.error(e); }
       const combos = state.combos[currentSport] || [];
 
       if (combos.length === 0) {
@@ -5113,7 +5278,7 @@ service cloud.firestore {
 (function () {
   function recolor() {
     try {
-      if (window.Chart) Chart.defaults.color = chartTick();
+      if (window.Chart) { Chart.defaults.color = chartTick(); Chart.defaults.borderColor = chartGrid(); }
       [...Object.values(categoryChartInstances || {}), globalBankrollChartInstance].filter(Boolean).forEach(c => {
         const s = c.options && c.options.scales;
         if (s) ['x', 'y'].forEach(k => { if (s[k]) { s[k].grid = s[k].grid || {}; s[k].ticks = s[k].ticks || {}; s[k].grid.color = chartGrid(); s[k].ticks.color = chartTick(); } });
