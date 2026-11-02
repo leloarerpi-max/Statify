@@ -134,7 +134,7 @@
     </div>
 
     <!-- STATS COMBINÉS (toujours visibles) -->
-    <details id="comboStatsDetails" open class="card overflow-hidden border-l-4 border-l-violet-500" ontoggle="if(this.open){try{majDetailCombines()}catch(e){}}">
+    <details id="comboStatsDetails" open class="card overflow-hidden border-l-4 border-l-violet-500" ontoggle="if(this.open){try{majDetailCombinesSafe()}catch(e){}}">
       <summary class="cursor-pointer px-5 py-3 text-xs font-extrabold uppercase tracking-wide text-slate-800 flex items-center gap-2 select-none"><i class="fa-solid fa-layer-group text-violet-600"></i> Stats combinés <span class="ml-auto text-[10px] font-medium normal-case text-slate-400">Touche pour déplier</span></summary>
       <div id="comboStatsInline" class="p-4 space-y-3"></div>
     </details>

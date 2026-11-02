@@ -3195,7 +3195,7 @@
     function renderCombos() {
       const container = document.getElementById('combosListContainer');
       if (!container) return;
-      try { majDetailCombines(); } catch (e) { console.error(e); }
+      majDetailCombinesSafe();
       const combos = state.combos[currentSport] || [];
 
       if (combos.length === 0) {
@@ -5297,3 +5297,17 @@ service cloud.firestore {
 })();
 
 try { setTimeout(() => { if (window.StatifyBackup) StatifyBackup.prepare(); }, 1200); } catch (e) {}
+
+/* ===== Stats combinés : jamais de bloc vide silencieux (affiche l'erreur s'il y en a une) + remplissage une fois la page chargée ===== */
+function majDetailCombinesSafe() {
+  const el = document.getElementById('comboStatsInline');
+  try {
+    if (el) el.className = 'p-4 space-y-3';
+    majDetailCombines();
+    if (el && !el.innerHTML.trim()) { el.className = 'p-4 text-xs text-slate-500'; el.textContent = 'Rien à afficher pour le moment (aucun combiné réglé).'; }
+  } catch (e) {
+    console.error(e);
+    if (el) { el.className = 'p-4 text-xs text-rose-600'; el.textContent = "⚠️ Les stats combinés n'ont pas pu s'afficher : " + (e && e.message ? e.message : e); }
+  }
+}
+window.addEventListener('load', () => setTimeout(majDetailCombinesSafe, 400));
