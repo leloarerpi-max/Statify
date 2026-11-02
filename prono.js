@@ -5478,3 +5478,291 @@ function ouvrirExportHistorique() {
   ehDessiner();
 }
 function fermerExportHistorique() { const m = document.getElementById('exportHistoModal'); if (m) m.classList.add('hidden'); }
+
+/* ===================== VÉRIFIER MES RÉSULTATS =====================
+   1) contrôle de cohérence (sans internet) ; 2) comparaison avec les scores finaux ESPN pour les paris déjà réglés.
+   Rien n'est modifié sans ton accord : chaque doute a un bouton « Corriger » et un bouton « Ignorer ». */
+const VR_SC = 'pronotracker_verif_scores', VR_IGN = 'pronotracker_verif_ignores';
+let vrCache = scLire(VR_SC, {}), vrIgn = scLire(VR_IGN, {});
+let vrPeriode = 'tout', vrPhase = 'accueil', vrMsg = '', vrRes = null, vrOuvert = {};
+const VR_DEF = { ko: true, inc: true, inf: false, nv: false };
+const vrIgnore = x => !!(vrIgn[x.id] && vrIgn[x.id] === (x.sig || 'x'));
+
+const vrN = s => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const vrEsc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const vrEquipes = m => { const p = String(m || '').split(/\s+(?:vs\.?|contre|-|–)\s+/i); return p.length >= 2 ? [p[0].trim(), p[1].trim()] : null; };
+const vrLib = s => (s === 'Won' ? 'Gagné' : s === 'Lost' ? 'Perdu' : s === 'Pending' ? 'En cours' : 'Annulé');
+const vrFr = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : (iso || '?'); };
+const vrIso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const vrId = b => String(b.id);
+
+function vrBornes() {
+  const now = new Date(), t = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (vrPeriode === '7' || vrPeriode === '30') { const d = new Date(t); d.setDate(d.getDate() - Number(vrPeriode) + 1); return [vrIso(d), '']; }
+  if (vrPeriode === 'mois') return [vrIso(new Date(t.getFullYear(), t.getMonth(), 1)), vrIso(new Date(t.getFullYear(), t.getMonth() + 1, 0))];
+  if (vrPeriode === 'mois-1') return [vrIso(new Date(t.getFullYear(), t.getMonth() - 1, 1)), vrIso(new Date(t.getFullYear(), t.getMonth(), 0))];
+  return ['', ''];
+}
+
+/* ---------- lecture d'un pari : que parie-t-on exactement ? ---------- */
+// renvoie { kind:'1n2'|'dc'|'ou'|'btts'|'x', ... } ; 'x' = pari qu'on ne sait pas vérifier (why = raison)
+function vrParsePari(b) {
+  const eq = vrEquipes(b.match);
+  if (!eq) return { kind: 'x', why: 'nom du match illisible (« Équipe A - Équipe B » attendu)' };
+  const [home, away] = eq, marche = vrN(b.market), prono = vrN(b.prono), txt = marche + ' | ' + prono;
+  const mt = /\bmt\b|mi.?temps|1ere mi|1re mi|premiere mi/.test(txt);
+  if (/buteur|scorer|premier but|joueur/.test(marche)) return { kind: 'x', why: 'marché « Buteur » (les buteurs ne sont pas disponibles)' };
+  if (/corner|carton|jaune|rouge|tirs?\b|faute|passe|possession|hors.?jeu|penalt/.test(txt)) return { kind: 'x', why: 'marché non lié au score (corners, cartons, tirs…)' };
+  const team = x => { const s = vrTeamPick(x, home, away); return s; };
+  // total de buts (plus / moins de X buts)
+  let m = /(plus d[e']\s*|over\s*)(\d+(?:[.,]\d+)?)/.exec(prono) || /(\+)\s*(\d+(?:[.,]\d+)?)\s*buts?/.exec(prono), dir = m ? 'plus' : null;
+  if (!m) { m = /(moins d[e']\s*|under\s*)(\d+(?:[.,]\d+)?)/.exec(prono) || /(-)\s*(\d+(?:[.,]\d+)?)\s*buts?/.exec(prono); dir = m ? 'moins' : null; }
+  if (m) {
+    if (team(prono.slice(0, m.index).replace(/\(.*?\)/g, ''))) return { kind: 'x', why: 'total de buts d\'une seule équipe' };
+    const line = parseFloat(m[2].replace(',', '.'));
+    if (!Number.isFinite(line) || Math.round(line * 2) !== line * 2) return { kind: 'x', why: 'ligne en quart de but (non gérée)' };
+    return { kind: 'ou', dir, line, mt };
+  }
+  // les deux équipes marquent
+  if (/btts|deux equipes|both teams/.test(txt)) {
+    const non = /ne marque pas|ne marquent pas|\bnon\b|\bno\b|pas de but/.test(prono);
+    return { kind: 'btts', yes: !non, mt };
+  }
+  // double chance
+  const dcMarche = /double chance/.test(marche);
+  let set = null;
+  if (/(^|[^a-z0-9])(1x|x1|1n|n1)([^a-z0-9]|$)/.test(prono)) set = ['H', 'D'];
+  else if (/(^|[^a-z0-9])(x2|2x|n2|2n)([^a-z0-9]|$)/.test(prono)) set = ['D', 'A'];
+  else if (/(^|[^a-z0-9])(12|1-2)([^a-z0-9]|$)/.test(prono) && dcMarche) set = ['H', 'A'];
+  else if (/\sou\s/.test(prono)) {
+    const parts = prono.replace(/\(.*?\)/g, '').split(/\s+ou\s+/).map(p => p.replace(/\b(victoire|gagne|double chance)\b/g, '').trim());
+    const pk = parts.map(p => (/^(match )?nul$|^draw$|^x$/.test(p) ? 'D' : team(p))).filter(Boolean);
+    if (pk.length === 2 && pk[0] !== pk[1]) set = pk;
+  }
+  if (set) return { kind: 'dc', set, mt };
+  if (dcMarche) return { kind: 'x', why: 'double chance non reconnue' };
+  // résultat du match (1N2)
+  const clean = prono.replace(/\(.*?\)/g, '').replace(/\b(victoire|gagne|gagnant|vainqueur|win|de|du|des|la|le)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  const est1n2 = /1n2|resultat|vainqueur|1x2|mi.?temps/.test(marche) || /^(match )?nul$/.test(clean) || mt;
+  if (/^(match )?nul$|^draw$|^x$/.test(clean)) return { kind: '1n2', pick: 'D', mt };
+  const pk = team(clean);
+  if (pk && (est1n2 || /victoire|gagne|vainqueur/.test(prono))) return { kind: '1n2', pick: pk, mt };
+  if (est1n2) return { kind: 'x', why: 'équipe du pronostic non reconnue' };
+  return { kind: 'x', why: 'marché non géré (« ' + (b.market || 'Autre') + ' »)' };
+}
+function vrTeamPick(txt, home, away) {
+  const t = String(txt || '').trim(); if (!t) return null;
+  const sh = scMemeEquipe(t, home), sa = scMemeEquipe(t, away);
+  return sh > sa ? 'H' : sa > sh ? 'A' : null;
+}
+
+/* ---------- verdict d'après le score ---------- */
+function vrVerdict(sel, sc) {
+  if (sel.mt && !sc.mt) return { res: null, why: 'score à la mi-temps indisponible' };
+  if (!sel.mt && sc.extra) return { res: null, why: 'prolongations / tirs au but : le résultat à 90 minutes n\'est pas disponible' };
+  const hh = sel.mt ? sc.mt.h : sc.h, aa = sel.mt ? sc.mt.a : sc.a, T = hh + aa, where = sel.mt ? 'à la mi-temps' : 'final';
+  const sco = `Score ${where} ${hh}-${aa}`, out = hh > aa ? 'H' : hh < aa ? 'A' : 'D';
+  if (sel.kind === '1n2') return { res: out === sel.pick ? 'Won' : 'Lost', why: sco + (out === 'D' ? ' (nul)' : out === 'H' ? ' (victoire de l\'équipe à domicile)' : ' (victoire de l\'équipe à l\'extérieur)') };
+  if (sel.kind === 'dc') return { res: sel.set.includes(out) ? 'Won' : 'Lost', why: sco + (out === 'D' ? ' (nul)' : out === 'H' ? ' (domicile gagne)' : ' (extérieur gagne)') };
+  if (sel.kind === 'btts') { const both = hh > 0 && aa > 0; return { res: both === sel.yes ? 'Won' : 'Lost', why: sco + (both ? ' (les deux équipes ont marqué)' : ' (une équipe n\'a pas marqué)') }; }
+  if (sel.kind === 'ou') {
+    if (T === sel.line) return { res: null, why: sco + ' : ' + T + ' buts, la ligne est atteinte pile (pari remboursé)' };
+    const plus = T > sel.line;
+    return { res: (sel.dir === 'plus') === plus ? 'Won' : 'Lost', why: sco + ' : ' + T + ' but(s), ' + (plus ? 'plus' : 'moins') + ' de ' + String(sel.line).replace('.', ',') };
+  }
+  return { res: null, why: 'pari non vérifiable' };
+}
+
+/* ---------- scores ESPN (avec le score à la mi-temps quand il est fourni) ---------- */
+function vrParseEvt(e) {
+  const m = scEspnVersMatch(e); if (!m) return null;
+  const c = e.competitions[0], h = c.competitors.find(x => x.homeAway === 'home'), a = c.competitors.find(x => x.homeAway === 'away');
+  const ls = x => (x.linescores || []).map(l => Number(l.value)).filter(Number.isFinite);
+  const lh = ls(h), la = ls(a), sum = arr => arr.reduce((s, v) => s + v, 0);
+  const nom = String((e.status && e.status.type && e.status.type.name) || '');
+  const extra = /AET|PEN|EXTRA|SHOOT/i.test(nom) || lh.length > 2 || la.length > 2;
+  const mt = (lh.length >= 2 && la.length >= 2 && sum(lh.slice(0, 2)) === m.esp.h && sum(la.slice(0, 2)) === m.esp.a && !extra) ? { h: lh[0], a: la[0] } : null;
+  m.vr = { h: m.esp.h, a: m.esp.a, st: m.esp.st, mt, extra };
+  return m;
+}
+async function vrRecupererScores(bets, progress) {
+  const sig = b => (b.match || '') + '|' + (b.date || '');
+  const need = bets.filter(b => !(vrCache[vrId(b)] && vrCache[vrId(b)].sig === sig(b) && vrCache[vrId(b)].st === 'FINISHED'));
+  const uniq = [...new Set(need.map(b => { const s = scSlugEspn(b.comp); return s ? s + '|' + String(b.date).slice(0, 10) : null; }).filter(Boolean))];
+  const parSlug = {}; let ok = 0, fait = 0;
+  for (let i = 0; i < uniq.length; i += 6) {
+    await Promise.all(uniq.slice(i, i + 6).map(async k => {
+      const [slug, jour] = k.split('|');
+      try {
+        const r = await fetch(SC_ESPN + slug + '/scoreboard?dates=' + jour.replace(/-/g, ''), { cache: 'no-store' });
+        if (r.ok) { const d = await r.json(); ok++; (d.events || []).forEach(e => { const m = vrParseEvt(e); if (m) (parSlug[slug + '|' + jour] = parSlug[slug + '|' + jour] || []).push(m); }); }
+      } catch (e) {}
+      fait++; if (progress) progress(fait, uniq.length);
+    }));
+  }
+  need.forEach(b => {
+    const s = scSlugEspn(b.comp); if (!s) return;
+    const jour = String(b.date).slice(0, 10), liste = [];
+    [jour, scAjouterJours(jour, -1), scAjouterJours(jour, 1)].forEach(j => (parSlug[s + '|' + j] || []).forEach(m => liste.push(m)));
+    const m = scTrouverMatch({ match: b.match, date: jour }, liste);
+    if (m) vrCache[vrId(b)] = Object.assign({ sig: sig(b), ko: m.utcDate, t: Date.now() }, m.vr);
+  });
+  scEcrire(VR_SC, vrCache);
+  return { ok, essais: uniq.length };
+}
+
+/* ---------- 1) contrôle de cohérence (sans internet) ---------- */
+function vrCoherence(bets, combos) {
+  const out = [], today = vrIso(new Date()), limit = new Date(); limit.setDate(limit.getDate() - 3); const vieux = vrIso(limit);
+  const add = (niveau, b, titre, detail) => out.push({ niveau, id: b ? vrId(b) : null, bet: b || null, titre, detail: detail || '' });
+  const seen = {};
+  bets.forEach(b => {
+    const d = String(b.date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || isNaN(new Date(d + 'T12:00:00'))) add('erreur', b, 'Date manquante ou invalide');
+    if (!(Number(b.stake) > 0)) add('erreur', b, 'Mise manquante ou à 0');
+    if (!(Number(b.odds) >= 1.01)) add('erreur', b, 'Cote invalide', 'Cote : ' + (b.odds == null || b.odds === '' ? 'vide' : b.odds));
+    else if (Number(b.odds) > 50) add('doute', b, 'Cote très élevée', 'Cote : ' + b.odds + ' (faute de frappe possible ?)');
+    if (!['Won', 'Lost', 'Pending', 'ABORTED'].includes(b.status)) add('erreur', b, 'Statut inconnu', 'Statut : ' + b.status);
+    if ((b.status === 'Won' || b.status === 'Lost') && /^\d{4}-\d{2}-\d{2}$/.test(d) && d > today) add('erreur', b, 'Marqué ' + vrLib(b.status) + ' alors que le match n\'a pas encore eu lieu', 'Date du match : ' + vrFr(d));
+    if (b.status === 'Pending' && /^\d{4}-\d{2}-\d{2}$/.test(d) && d < vieux) add('info', b, 'Toujours « En cours » plus de 3 jours après le match', 'À régler : ' + vrFr(d));
+    if (!vrEquipes(b.match)) add('doute', b, 'Nom du match sans « Équipe A - Équipe B »', 'Impossible de comparer au score : ' + (b.match || 'vide'));
+    if (!(b.comp || '').trim()) add('doute', b, 'Championnat vide');
+    const key = [d, vrN(b.match), vrN(b.market), vrN(b.prono)].join('|');
+    (seen[key] = seen[key] || []).push(b);
+  });
+  Object.values(seen).filter(l => l.length > 1).forEach(l => l.slice(1).forEach(b => add('doute', b, 'Doublon possible', 'Même match, même pronostic que le pari n°' + l[0].id)));
+  // pronostics contradictoires tous les deux « Gagné » sur le même match
+  const parMatch = {};
+  bets.filter(b => b.status === 'Won').forEach(b => { const k = String(b.date).slice(0, 10) + '|' + vrN(b.match); (parMatch[k] = parMatch[k] || []).push(b); });
+  Object.values(parMatch).forEach(l => {
+    if (l.length < 2) return;
+    const sels = l.map(b => ({ b, s: vrParsePari(b) }));
+    for (let i = 0; i < sels.length; i++) for (let j = i + 1; j < sels.length; j++) {
+      const x = sels[i].s, y = sels[j].s; let bad = false;
+      if (x.kind === y.kind && !x.mt === !y.mt) {
+        if (x.kind === '1n2' && x.pick !== y.pick) bad = true;
+        if (x.kind === 'btts' && x.yes !== y.yes) bad = true;
+        if (x.kind === 'ou' && x.dir !== y.dir) { const p = x.dir === 'plus' ? x : y, m = x.dir === 'plus' ? y : x; if (m.line <= p.line) bad = true; }
+        if (x.kind === 'dc' && !x.set.some(v => y.set.includes(v))) bad = true;
+      }
+      if (bad) add('erreur', sels[j].b, 'Deux pronostics contradictoires marqués « Gagné » sur le même match', 'Avec le pari n°' + sels[i].b.id + ' : ' + (sels[i].b.prono || '?') + ' / ' + (sels[j].b.prono || '?'));
+    }
+  });
+  // combinés
+  const dansCombo = {};
+  (combos || []).forEach(c => {
+    const legs = comboLegs('football', c), ids = c.legIds || [];
+    if (legs.length < ids.length) out.push({ niveau: 'erreur', id: null, combo: c, titre: 'Combiné n°' + c.id + ' : sélection introuvable', detail: (ids.length - legs.length) + ' sélection(s) ne correspondent plus à un pari existant' });
+    if (legs.length < 2) out.push({ niveau: 'doute', id: null, combo: c, titre: 'Combiné n°' + c.id + ' avec moins de 2 sélections' });
+    if (!(Number(c.stake) > 0)) out.push({ niveau: 'erreur', id: null, combo: c, titre: 'Combiné n°' + c.id + ' : mise manquante ou à 0' });
+    const matchs = legs.map(l => String(l.date).slice(0, 10) + '|' + vrN(l.match));
+    if (new Set(matchs).size < matchs.length) out.push({ niveau: 'doute', id: null, combo: c, titre: 'Combiné n°' + c.id + ' : deux sélections sur le même match' });
+    ids.forEach(id => { (dansCombo[String(id)] = dansCombo[String(id)] || []).push(c.id); });
+  });
+  Object.keys(dansCombo).filter(k => dansCombo[k].length > 1).forEach(k => {
+    const b = bets.find(x => String(x.id) === k); if (b) add('doute', b, 'Sélection utilisée dans plusieurs combinés', 'Combinés n°' + dansCombo[k].join(', n°'));
+  });
+  bets.filter(b => b.comboId && !(combos || []).some(c => String(c.id) === String(b.comboId))).forEach(b => add('erreur', b, 'Rattaché à un combiné qui n\'existe plus', 'Combiné n°' + b.comboId));
+  return out;
+}
+
+/* ---------- 2) comparaison avec les scores ---------- */
+async function vrLancer() {
+  if (vrPhase === 'calcul') return;
+  vrPhase = 'calcul'; vrMsg = 'Contrôle de cohérence…'; vrDessiner();
+  const [mn, mx] = vrBornes();
+  const dansPeriode = b => { const d = String(b.date || '').slice(0, 10); return !!d && (!mn || d >= mn) && (!mx || d <= mx); };
+  const tous = (state.football || []).filter(dansPeriode);
+  const combos = (state.combos.football || []).filter(c => { const legs = comboLegs('football', c); return !legs.length || legs.some(dansPeriode); });
+  const coherence = vrCoherence(tous, combos);
+  const regles = tous.filter(b => b.status === 'Won' || b.status === 'Lost');
+  const res = { total: tous.length, regles: regles.length, coherence, ok: [], ko: [], nv: [], periode: vrPeriode, ok2: 0, essais: 0 };
+  const parses = regles.map(b => ({ b, sel: vrParsePari(b), slug: scSlugEspn(b.comp) }));
+  const aVerif = parses.filter(p => p.sel.kind !== 'x' && p.slug).map(p => p.b);
+  vrMsg = aVerif.length ? 'Récupération des scores (0/…)' : 'Aucun pari à comparer aux scores.'; vrDessiner();
+  if (aVerif.length) {
+    const r = await vrRecupererScores(aVerif, (f, t) => { vrMsg = 'Récupération des scores : ' + f + '/' + t + ' journées de championnat'; vrDessiner(); });
+    res.ok2 = r.ok; res.essais = r.essais;
+  }
+  parses.forEach(({ b, sel, slug }) => {
+    const base = { bet: b, id: vrId(b) };
+    if (sel.kind === 'x') return res.nv.push(Object.assign(base, { raison: sel.why }));
+    if (!slug) return res.nv.push(Object.assign(base, { raison: 'championnat non couvert par ESPN (« ' + (b.comp || 'vide') + ' »)' }));
+    const sc = vrCache[vrId(b)];
+    if (!sc) return res.nv.push(Object.assign(base, { raison: res.essais && !res.ok2 ? 'ESPN n\'a pas répondu (réessaie plus tard)' : 'match introuvable chez ESPN (noms d\'équipes ou date ?)' }));
+    if (sc.st === 'POSTPONED' || sc.st === 'CANCELLED' || sc.st === 'SUSPENDED') return res.ko.push(Object.assign(base, { sc, attendu: null, raison: 'match ' + (sc.st === 'POSTPONED' ? 'reporté' : sc.st === 'CANCELLED' ? 'annulé' : 'suspendu') + ' selon ESPN : vérifie le remboursement', doute: true }));
+    if (sc.st !== 'FINISHED') return res.nv.push(Object.assign(base, { raison: 'match pas encore terminé selon ESPN' }));
+    const v = vrVerdict(sel, sc);
+    if (v.res == null) return res.nv.push(Object.assign(base, { sc, raison: v.why }));
+    if (v.res === b.status) return res.ok.push(Object.assign(base, { sc, attendu: v.res, raison: v.why }));
+    res.ko.push(Object.assign(base, { sc, attendu: v.res, raison: v.why, sig: b.status + '|' + sc.h + '-' + sc.a }));
+  });
+  vrRes = res; vrPhase = 'resultats'; vrMsg = ''; vrDessiner();
+}
+
+/* ---------- actions ---------- */
+function vrCorriger(id) {
+  const r = (vrRes && vrRes.ko || []).find(x => x.id === id && x.attendu); if (!r) return;
+  const b = (state.football || []).find(x => vrId(x) === id); if (!b) return;
+  b.status = r.attendu;
+  vrRes.ko = vrRes.ko.filter(x => x !== r); vrRes.ok.push(Object.assign(r, { bet: b }));
+  saveState(); vrDessiner();
+}
+function vrToutCorriger() {
+  const liste = (vrRes && vrRes.ko || []).filter(x => x.attendu && !vrIgnore(x));
+  if (!liste.length) return;
+  if (!confirm('Corriger ' + liste.length + ' pari(s) d\'après les scores ? Tu pourras toujours les modifier ensuite.')) return;
+  liste.forEach(r => { const b = (state.football || []).find(x => vrId(x) === r.id); if (b) { b.status = r.attendu; vrRes.ko = vrRes.ko.filter(x => x !== r); vrRes.ok.push(Object.assign(r, { bet: b })); } });
+  saveState(); vrDessiner();
+}
+function vrIgnorer(id) {
+  const r = (vrRes && vrRes.ko || []).find(x => x.id === id); if (!r) return;
+  vrIgn[id] = r.sig || 'x'; scEcrire(VR_IGN, vrIgn); vrDessiner();
+}
+function vrReglage(k, v) { if (k === 'periode') { vrPeriode = v; vrPhase = 'accueil'; vrRes = null; } else if (k === 'ouvrir') vrOuvert[v] = !(vrOuvert[v] != null ? vrOuvert[v] : VR_DEF[v]); vrDessiner(); }
+
+/* ---------- affichage ---------- */
+function vrLigne(b) {
+  return `${vrEsc(b.match || '?')} · ${vrEsc(b.market || '')}${b.prono ? ' : ' + vrEsc(b.prono) : ''} · cote ${Number(b.odds) || '?'} · mise ${Number(b.stake) || 0} €`;
+}
+function vrDessiner() {
+  const m = document.getElementById('verifModal'); if (!m || m.classList.contains('hidden')) return;
+  const chip = (on, label, js) => `<button type="button" onclick="${js}" class="px-3 py-1.5 rounded-lg text-[11px] font-bold ${on ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600'}">${label}</button>`;
+  const per = [['tout', 'Tout'], ['30', '30 jours'], ['7', '7 jours'], ['mois', 'Ce mois-ci'], ['mois-1', 'Mois dernier']].map(([k, l]) => chip(vrPeriode === k, l, `vrReglage('periode','${k}')`)).join('');
+  let corps = '';
+  if (vrPhase === 'accueil') {
+    corps = `<p class="text-xs text-slate-600">Cette vérification contrôle d'abord la <b>cohérence</b> de tes paris (mises, cotes, dates, doublons, combinés…), puis compare tes paris <b>déjà réglés</b> (Gagné / Perdu) aux <b>scores finaux</b> (ESPN).</p>
+      <p class="text-xs text-slate-600"><b>Rien n'est modifié sans ton accord</b> : chaque doute a un bouton « Corriger » et un bouton « Ignorer ».</p>
+      <div><div class="text-[10px] uppercase font-bold text-slate-500 mb-1">Période (date du match)</div><div class="flex flex-wrap gap-1.5">${per}</div></div>
+      <button type="button" onclick="vrLancer()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs transition flex items-center justify-center gap-2"><i class="fa-solid fa-magnifying-glass-chart"></i> Lancer la vérification</button>`;
+  } else if (vrPhase === 'calcul') {
+    corps = `<div class="bg-slate-50 rounded-xl p-4 text-xs text-slate-600 text-center">⏳ ${vrEsc(vrMsg)}</div>`;
+  } else if (vrRes) {
+    const r = vrRes, ko = r.ko.filter(x => !vrIgnore(x)), ign = r.ko.length - ko.length;
+    const incoh = r.coherence.filter(x => x.niveau !== 'info'), infos = r.coherence.filter(x => x.niveau === 'info');
+    const nbCorr = ko.filter(x => x.attendu).length;
+    const kpi = (n, l, c) => `<div class="bg-slate-50 rounded-xl p-2 text-center"><div class="text-lg font-extrabold ${c}">${n}</div><div class="text-[9px] uppercase font-bold text-slate-400">${l}</div></div>`;
+    const ligne = (x, boutons) => `<div class="rounded-xl border border-slate-200 p-2.5 text-xs space-y-1">${x}${boutons || ''}</div>`;
+    const bloc = (cle, titre, n, contenu, ouvertParDefaut) => `<div class="space-y-2"><button type="button" onclick="vrReglage('ouvrir','${cle}')" class="w-full flex items-center justify-between text-[11px] font-extrabold uppercase tracking-wide text-slate-700"><span>${titre} (${n})</span><span>${(vrOuvert[cle] != null ? vrOuvert[cle] : ouvertParDefaut) ? '▾' : '▸'}</span></button>${(vrOuvert[cle] != null ? vrOuvert[cle] : ouvertParDefaut) ? contenu : ''}</div>`;
+    const lKo = ko.map(x => ligne(`<div class="flex items-start justify-between gap-2"><b>n°${vrEsc(x.id)} · ${vrFr(x.bet.date)}</b>${x.attendu ? `<span>${vrLib(x.bet.status)} → <b class="${x.attendu === 'Won' ? 'text-emerald-600' : 'text-rose-600'}">${vrLib(x.attendu)}</b></span>` : '<span class="text-amber-600 font-bold">À vérifier</span>'}</div><div class="text-slate-700">${vrLigne(x.bet)}</div><div class="text-slate-500">${vrEsc(x.raison)}${x.bet.comboId ? ' · sélection du combiné n°' + vrEsc(x.bet.comboId) : ''}</div>`,
+      `<div class="flex gap-2 pt-1">${x.attendu ? `<button type="button" onclick="vrCorriger('${vrEsc(x.id)}')" class="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-blue-600 text-white">Corriger en ${vrLib(x.attendu)}</button>` : ''}<button type="button" onclick="vrIgnorer('${vrEsc(x.id)}')" class="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-600">Ignorer</button></div>`)).join('');
+    const lIn = incoh.map(x => ligne(`<div class="flex items-start justify-between gap-2"><b class="${x.niveau === 'erreur' ? 'text-rose-600' : 'text-amber-600'}">${vrEsc(x.titre)}</b>${x.bet ? '<span class="text-slate-400">n°' + vrEsc(x.id) + '</span>' : ''}</div>${x.bet ? `<div class="text-slate-700">${vrFr(x.bet.date)} · ${vrLigne(x.bet)} · ${vrLib(x.bet.status)}</div>` : ''}${x.detail ? `<div class="text-slate-500">${vrEsc(x.detail)}</div>` : ''}`)).join('');
+    const lInfo = infos.slice(0, 60).map(x => ligne(`<b>n°${vrEsc(x.id)} · ${vrFr(x.bet.date)}</b> <span class="text-slate-700">${vrLigne(x.bet)}</span>`)).join('') + (infos.length > 60 ? `<div class="text-[10px] text-slate-400">… et ${infos.length - 60} autre(s)</div>` : '');
+    const raisons = {}; r.nv.forEach(x => { const k = x.raison.replace(/« .* »/, '«…»'); (raisons[k] = raisons[k] || []).push(x); });
+    const lNv = Object.keys(raisons).sort((a, b) => raisons[b].length - raisons[a].length).map(k => `<div class="text-xs text-slate-600"><b class="text-slate-800">${raisons[k].length}</b> · ${vrEsc(k)}</div>`).join('');
+    corps = `<div class="grid grid-cols-4 gap-2">${kpi(r.ok.length, 'Conformes', 'text-emerald-600')}${kpi(ko.length, 'À corriger', ko.length ? 'text-rose-600' : 'text-slate-500')}${kpi(r.nv.length, 'Non vérifiables', 'text-slate-500')}${kpi(incoh.length, 'Incohérences', incoh.length ? 'text-amber-600' : 'text-slate-500')}</div>
+      <div class="text-[11px] text-slate-500">${r.total} pari(s) examiné(s), dont ${r.regles} déjà réglé(s)${ign ? ' · ' + ign + ' doute(s) ignoré(s)' : ''}.</div>
+      ${ko.length ? bloc('ko', 'Résultat différent du score', ko.length, (nbCorr > 1 ? `<button type="button" onclick="vrToutCorriger()" class="w-full px-3 py-2 rounded-lg text-[11px] font-bold bg-blue-600 text-white">Tout corriger (${nbCorr})</button>` : '') + lKo, true) : '<div class="bg-slate-50 rounded-xl p-3 text-xs text-emerald-600 font-bold text-center">✅ Aucun résultat en désaccord avec les scores</div>'}
+      ${incoh.length ? bloc('inc', 'Incohérences', incoh.length, lIn, true) : ''}
+      ${infos.length ? bloc('inf', 'À régler : « En cours » depuis plus de 3 jours', infos.length, lInfo, false) : ''}
+      ${r.nv.length ? bloc('nv', 'Non vérifiables', r.nv.length, lNv, false) : ''}
+      <div class="flex gap-2"><button type="button" onclick="vrLancer()" class="flex-1 px-3 py-2 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-600">🔄 Relancer</button><button type="button" onclick="vrReglage('periode','${vrPeriode}')" class="flex-1 px-3 py-2 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-600">Changer la période</button></div>`;
+  }
+  m.innerHTML = `<div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-4 space-y-3 my-4"><div class="flex items-center justify-between"><h3 class="text-sm font-extrabold text-slate-800"><i class="fa-solid fa-magnifying-glass-chart text-blue-600"></i> Vérifier mes résultats</h3><button type="button" onclick="fermerVerif()" class="text-slate-400 text-lg px-2">✕</button></div>${corps}</div>`;
+}
+function ouvrirVerif() {
+  let m = document.getElementById('verifModal');
+  if (!m) { m = document.createElement('div'); m.id = 'verifModal'; m.className = 'fixed inset-0 z-[60] flex items-start justify-center p-3 bg-black/50 overflow-y-auto'; m.addEventListener('click', e => { if (e.target === m) fermerVerif(); }); document.body.appendChild(m); }
+  m.classList.remove('hidden'); if (vrPhase === 'calcul') { /* déjà en cours */ } else if (!vrRes) vrPhase = 'accueil'; vrDessiner();
+}
+function fermerVerif() { const m = document.getElementById('verifModal'); if (m) m.classList.add('hidden'); }
