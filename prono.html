@@ -40,8 +40,8 @@
         <button id="syncBtn" onclick="openSyncModal()" title="Synchronisation entre appareils" class="flex-1 md:flex-none justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 sm:px-3.5 py-2.5 rounded-xl border border-slate-200 flex items-center gap-1.5 transition shadow-sm"><i id="syncIcon" class="fa-solid fa-cloud text-slate-400"></i><span id="syncLabel">Sync</span><span id="syncDot" class="w-2 h-2 rounded-full bg-slate-300"></span></button>
         <button id="btnTheme" type="button" title="Thème clair / sombre" aria-label="Thème clair / sombre" class="flex-1 md:flex-none justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 sm:px-3.5 py-2.5 rounded-xl border border-slate-200 flex items-center gap-1.5 transition">🌓</button>
         <select id="ambianceSelect" onchange="changerAmbiance(this.value)" title="Ambiance du fond" class="flex-1 md:flex-none"></select>
-        <button onclick="exportCSV()" class="flex-1 md:flex-none justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 sm:px-3.5 py-2.5 rounded-xl border border-slate-200 flex items-center gap-1.5 transition shadow-sm">
-          <i class="fa-solid fa-file-excel text-emerald-600"></i> <span class="hidden sm:inline">Export</span>CSV
+        <button onclick="ouvrirExportHistorique()" title="Exporter l'historique des paris (Excel / CSV)" class="flex-1 md:flex-none justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 sm:px-3.5 py-2.5 rounded-xl border border-slate-200 flex items-center gap-1.5 transition shadow-sm">
+          <i class="fa-solid fa-file-excel text-emerald-600"></i> Exporter
         </button>
         <button onclick="exportJSON()" title="Sauvegarde complète : Statify + PronoTracker" class="flex-1 md:flex-none justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 sm:px-3.5 py-2.5 rounded-xl border border-slate-200 flex items-center gap-1.5 transition shadow-sm">
           <i class="fa-solid fa-download text-blue-600"></i> <span class="hidden sm:inline">Sauvegarder</span><span class="sm:hidden">Save</span>
@@ -691,6 +691,7 @@
   </div>
 
   <script src="backup.js"></script>
+<script src="xlsx.js"></script>
 <script src="prono.js"></script>
 </body>
 </html>

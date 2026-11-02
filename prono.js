@@ -5311,3 +5311,170 @@ function majDetailCombinesSafe() {
   }
 }
 window.addEventListener('load', () => setTimeout(majDetailCombinesSafe, 400));
+
+/* ===================== EXPORT DE L'HISTORIQUE DES PARIS (Excel / CSV) ===================== */
+let ehPeriode = 'tout', ehDu = '', ehAu = '', ehFormat = 'xlsx', ehCombines = true;
+let ehStatuts = { Won: true, Lost: true, Pending: true, Autre: true };
+
+const ehLib = s => (s === 'Won' ? 'Gagné' : s === 'Lost' ? 'Perdu' : s === 'Pending' ? 'En cours' : 'Annulé');
+const ehIso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const ehFr = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : (iso || ''); };
+const ehMoney = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(2).replace('.', ',') + ' €';
+const ehR = (v, n = 2) => (v === '' || v == null || !Number.isFinite(v)) ? v : Math.round(v * Math.pow(10, n)) / Math.pow(10, n);
+const ehNum = v => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+// bornes de la période : [début, fin] au format AAAA-MM-JJ ('' = pas de limite)
+function ehBornes() {
+  const now = new Date(), t = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (ehPeriode === '7' || ehPeriode === '30') { const d = new Date(t); d.setDate(d.getDate() - Number(ehPeriode) + 1); return [ehIso(d), '']; }
+  if (ehPeriode === 'mois') return [ehIso(new Date(t.getFullYear(), t.getMonth(), 1)), ehIso(new Date(t.getFullYear(), t.getMonth() + 1, 0))];
+  if (ehPeriode === 'mois-1') return [ehIso(new Date(t.getFullYear(), t.getMonth() - 1, 1)), ehIso(new Date(t.getFullYear(), t.getMonth(), 0))];
+  if (ehPeriode === 'perso') return [ehDu || '', ehAu || ''];
+  return ['', ''];
+}
+function ehPeriodeLibelle() {
+  const [a, b] = ehBornes();
+  if (ehPeriode === 'tout') return 'Toute la période';
+  if (ehPeriode === '7') return '7 derniers jours (depuis le ' + ehFr(a) + ')';
+  if (ehPeriode === '30') return '30 derniers jours (depuis le ' + ehFr(a) + ')';
+  return (a ? 'du ' + ehFr(a) : 'depuis le début') + (b ? ' au ' + ehFr(b) : ' à aujourd\'hui');
+}
+function ehPeriodeFichier() {
+  const [a, b] = ehBornes();
+  if (ehPeriode === 'tout') return 'tout';
+  if (ehPeriode === '7' || ehPeriode === '30') return ehPeriode + 'j';
+  if (ehPeriode === 'mois' || ehPeriode === 'mois-1') return a.slice(0, 7);
+  return (a || 'debut') + '_' + (b || 'aujourdhui');
+}
+function ehStatutOk(s) { return !!ehStatuts[(s === 'Won' || s === 'Lost' || s === 'Pending') ? s : 'Autre']; }
+const ehProfitSimple = b => (b.status === 'Won' ? (ehNum(b.odds) - 1) * ehNum(b.stake) : b.status === 'Lost' ? -ehNum(b.stake) : 0);
+
+function ehStats(items) {
+  const reg = items.filter(i => i.status === 'Won' || i.status === 'Lost');
+  const w = reg.filter(i => i.status === 'Won').length;
+  const mise = reg.reduce((s, i) => s + i.stake, 0), profit = reg.reduce((s, i) => s + i.profit, 0);
+  return { n: items.length, w, l: reg.length - w, p: items.filter(i => i.status === 'Pending').length,
+    taux: reg.length ? ehR(w / reg.length, 4) : null, mise: ehR(mise), profit: ehR(profit), roi: mise ? ehR(profit / mise, 4) : null,
+    cote: items.length ? ehR(items.reduce((s, i) => s + i.odds, 0) / items.length) : null };
+}
+
+// construit les données de l'export d'après les choix en cours
+function ehConstruire() {
+  const sport = 'football', [mn, mx] = ehBornes();
+  const dansPeriode = d => !!d && (!mn || d >= mn) && (!mx || d <= mx);
+  const bets = (state[sport] || []).filter(b => dansPeriode(String(b.date || '').slice(0, 10)) && ehStatutOk(b.status))
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)) || ehNum(a.id) - ehNum(b.id));
+  const combos = ehCombines ? (state.combos[sport] || []).map(c => {
+    const legs = comboLegs(sport, c);
+    return { c, legs, date: legs.reduce((m, l) => (l.date && l.date > m ? String(l.date).slice(0, 10) : m), ''), status: comboStatus(sport, c), odds: comboOdds(sport, c), stake: ehNum(c.stake), profit: comboProfit(sport, c) };
+  }).filter(r => r.legs.length && dansPeriode(r.date) && ehStatutOk(r.status)).sort((a, b) => a.date.localeCompare(b.date) || ehNum(a.c.id) - ehNum(b.c.id)) : [];
+  const simples = bets.map(b => ({ status: b.status, odds: ehNum(b.odds), stake: ehNum(b.stake), profit: ehProfitSimple(b), comp: (b.comp || '').trim() || 'Sans championnat' }));
+  const sS = ehStats(simples), sC = ehStats(combos);
+  const parComp = {};
+  simples.forEach(s => (parComp[s.comp] = parComp[s.comp] || []).push(s));
+  return { bets, combos, simples, sS, sC, parComp };
+}
+
+function ehLignesParis(d) {
+  return d.bets.map(b => [String(b.date || '').slice(0, 10), b.match || '', b.comp || '', b.market || '', b.prono || '', ehNum(b.odds), ehNum(b.stake), ehLib(b.status),
+    (b.status === 'Won' || b.status === 'Lost') ? ehR(ehProfitSimple(b)) : '', b.comboId ? 'Combiné #' + b.comboId : 'Simple', b.id]);
+}
+function ehLignesCombines(d) {
+  return d.combos.map(r => [r.date, r.legs.length, r.legs.map(l => (l.match || '?') + ' — ' + (l.prono || '?') + ' @' + ehNum(l.odds).toFixed(2)).join(' | '), ehR(r.odds), r.stake, ehLib(r.status), (r.status === 'Won' || r.status === 'Lost') ? ehR(r.profit) : '', r.c.id]);
+}
+function ehClasseurXlsx(d) {
+  const kv = (label, a, b, f) => [{ v: label, b: true }, { v: a, f }, { v: b, f }];
+  const resume = [
+    kv('Nombre de paris', d.sS.n, d.sC.n, 'int'), kv('Gagnés', d.sS.w, d.sC.w, 'int'), kv('Perdus', d.sS.l, d.sC.l, 'int'), kv('En cours', d.sS.p, d.sC.p, 'int'),
+    kv('Taux de réussite', d.sS.taux, d.sC.taux, 'pct'), kv('Mise (paris réglés)', d.sS.mise, d.sC.mise, 'money'), kv('Profit', d.sS.profit, d.sC.profit, 'money'),
+    kv('ROI', d.sS.roi, d.sC.roi, 'pct'), kv('Cote moyenne', d.sS.cote, d.sC.cote, 'num'),
+    ['', '', ''],
+    [{ v: 'Période', b: true }, ehPeriodeLibelle(), ''],
+    [{ v: 'Statuts inclus', b: true }, ['Won', 'Lost', 'Pending', 'Autre'].filter(k => ehStatuts[k]).map(k => ehLib(k === 'Autre' ? 'x' : k)).join(', '), ''],
+    [{ v: 'Exporté le', b: true }, new Date().toLocaleString('fr-FR'), ''],
+    [{ v: 'Remarque', b: true }, 'Comme dans PronoTracker : le Bilan Solo compte TOUS les paris (y compris ceux joués dans un combiné, chacun avec sa mise et sa cote) et les combinés sont comptés à part. Les deux bilans ne s\'additionnent pas.', '']
+  ];
+  const champ = Object.keys(d.parComp).map(k => ({ k, s: ehStats(d.parComp[k]) })).sort((a, b) => b.s.n - a.s.n || b.s.profit - a.s.profit)
+    .map(({ k, s }) => [k, s.n, s.w, s.l, s.p, s.taux, s.mise, s.profit, s.roi]);
+  const sheets = [
+    { name: 'Paris', header: ['Date', 'Match', 'Compétition', 'Marché', 'Pronostic', 'Cote', 'Mise (€)', 'Statut', 'Profit (€)', 'Compte dans', 'ID'], widths: [12, 34, 22, 18, 26, 8, 10, 11, 11, 16, 15],
+      fmts: ['date', 'text', 'text', 'text', 'text', 'num', 'money', 'text', 'money', 'text', 'int'], rows: ehLignesParis(d) }
+  ];
+  if (ehCombines) sheets.push({ name: 'Combinés', header: ['Date', 'Nb sélections', 'Sélections', 'Cote totale', 'Mise (€)', 'Statut', 'Profit (€)', 'ID'], widths: [12, 14, 70, 12, 10, 11, 11, 15],
+    fmts: ['date', 'int', 'text', 'num', 'money', 'text', 'money', 'int'], rows: ehLignesCombines(d) });
+  sheets.push({ name: 'Résumé', header: ['', 'Paris (Bilan Solo)', 'Combinés (Bilan Combiné)'], widths: [26, 22, 26], plain: true, rows: resume });
+  sheets.push({ name: 'Par championnat', header: ['Championnat', 'Paris', 'Gagnés', 'Perdus', 'En cours', 'Réussite', 'Mise (€)', 'Profit (€)', 'ROI'], widths: [28, 8, 9, 9, 10, 10, 11, 11, 9],
+    fmts: ['text', 'int', 'int', 'int', 'int', 'pct', 'money', 'money', 'pct'], rows: champ });
+  return XlsxLite.build(sheets);
+}
+function ehCsv(d) {
+  const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const n = v => (v === '' || v == null ? '' : String(Math.round(Number(v) * 100) / 100).replace('.', ','));
+  let out = ['Date', 'Match', 'Compétition', 'Marché', 'Pronostic', 'Cote', 'Mise (€)', 'Statut', 'Profit (€)', 'Compte dans', 'ID'].map(q).join(';') + '\n';
+  ehLignesParis(d).forEach(r => { out += [ehFr(r[0]), r[1], r[2], r[3], r[4]].map(q).join(';') + ';' + [n(r[5]), n(r[6])].join(';') + ';' + [r[7]].map(q).join(';') + ';' + n(r[8]) + ';' + [r[9], r[10]].map(q).join(';') + '\n'; });
+  if (ehCombines && d.combos.length) {
+    out += '\n' + ['Date', 'Nb sélections', 'Sélections', 'Cote totale', 'Mise (€)', 'Statut', 'Profit (€)', 'ID'].map(q).join(';') + '\n';
+    ehLignesCombines(d).forEach(r => { out += [q(ehFr(r[0])), r[1], q(r[2]), n(r[3]), n(r[4]), q(r[5]), n(r[6]), q(r[7])].join(';') + '\n'; });
+  }
+  return '﻿' + out;
+}
+
+function ehAncre(blob, filename) {
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+function ehTelecharger() {
+  const d = ehConstruire();
+  if (!d.bets.length && !d.combos.length) return;
+  const day = ehIso(new Date()), xl = ehFormat === 'xlsx';
+  const filename = `pronos-historique_${ehPeriodeFichier()}_${day}.${xl ? 'xlsx' : 'csv'}`;
+  const blob = xl ? new Blob([ehClasseurXlsx(d)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }) : new Blob([ehCsv(d)], { type: 'text/csv;charset=utf-8' });
+  // sur iPhone / iPad : menu de partage (Enregistrer dans Fichiers…) ; ailleurs : téléchargement direct. Ne touche pas au rappel de sauvegarde.
+  let file = null; try { file = new File([blob], filename, { type: blob.type }); } catch (e) {}
+  if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+    navigator.share({ files: [file], title: 'Historique des paris' }).catch(err => { if (err && err.name !== 'AbortError') ehAncre(blob, filename); });
+  } else ehAncre(blob, filename);
+}
+
+function ehReglage(k, v) {
+  if (k === 'periode') ehPeriode = v;
+  else if (k === 'du') ehDu = v;
+  else if (k === 'au') ehAu = v;
+  else if (k === 'format') ehFormat = v;
+  else if (k === 'combines') ehCombines = !ehCombines;
+  else if (k === 'statut') ehStatuts[v] = !ehStatuts[v];
+  ehDessiner();
+}
+function ehDessiner() {
+  const m = document.getElementById('exportHistoModal'); if (!m) return;
+  const d = ehConstruire(), vide = !d.bets.length && !d.combos.length;
+  const chip = (on, label, js) => `<button type="button" onclick="${js}" class="px-3 py-1.5 rounded-lg text-[11px] font-bold ${on ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600'}">${label}</button>`;
+  const per = [['tout', 'Tout'], ['7', '7 jours'], ['30', '30 jours'], ['mois', 'Ce mois-ci'], ['mois-1', 'Mois dernier'], ['perso', 'Dates…']]
+    .map(([k, l]) => chip(ehPeriode === k, l, `ehReglage('periode','${k}')`)).join('');
+  const sta = [['Won', 'Gagnés'], ['Lost', 'Perdus'], ['Pending', 'En cours'], ['Autre', 'Annulés']].map(([k, l]) => chip(ehStatuts[k], l, `ehReglage('statut','${k}')`)).join('');
+  const perso = ehPeriode === 'perso' ? `<div class="flex items-center gap-2 text-xs"><span class="text-slate-500">Du</span><input type="date" value="${ehDu}" onchange="ehReglage('du',this.value)" class="input-field text-xs"><span class="text-slate-500">au</span><input type="date" value="${ehAu}" onchange="ehReglage('au',this.value)" class="input-field text-xs"></div>` : '';
+  m.innerHTML = `<div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-4 space-y-3 my-4">
+    <div class="flex items-center justify-between"><h3 class="text-sm font-extrabold text-slate-800"><i class="fa-solid fa-file-excel text-emerald-600"></i> Exporter l'historique</h3><button type="button" onclick="fermerExportHistorique()" class="text-slate-400 text-lg px-2">✕</button></div>
+    <div><div class="text-[10px] uppercase font-bold text-slate-500 mb-1">Période</div><div class="flex flex-wrap gap-1.5">${per}</div>${perso ? '<div class="mt-2">' + perso + '</div>' : ''}</div>
+    <div><div class="text-[10px] uppercase font-bold text-slate-500 mb-1">Statuts</div><div class="flex flex-wrap gap-1.5">${sta}</div></div>
+    <div><div class="text-[10px] uppercase font-bold text-slate-500 mb-1">Contenu</div><div class="flex flex-wrap gap-1.5">${chip(ehCombines, 'Inclure la feuille Combinés', "ehReglage('combines')")}</div></div>
+    <div><div class="text-[10px] uppercase font-bold text-slate-500 mb-1">Format</div><div class="flex flex-wrap gap-1.5">${chip(ehFormat === 'xlsx', 'Excel / Google Sheets (.xlsx)', "ehReglage('format','xlsx')")}${chip(ehFormat === 'csv', 'CSV', "ehReglage('format','csv')")}</div></div>
+    <div class="bg-slate-50 rounded-xl p-3 text-xs text-slate-600 space-y-1">${vide ? '<b class="text-slate-800">Aucun pari ne correspond à ces choix.</b>' :
+      `<div><b class="text-slate-800">${d.bets.length}</b> pari(s) · <b class="text-slate-800">${d.combos.length}</b> combiné(s)</div><div>Paris : ${d.sS.w} gagné(s), ${d.sS.l} perdu(s), ${d.sS.p} en cours · <b class="${d.sS.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}">${ehMoney(d.sS.profit)}</b></div>${ehCombines ? `<div>Combinés : ${d.sC.w} gagné(s), ${d.sC.l} perdu(s), ${d.sC.p} en cours · <b class="${d.sC.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}">${ehMoney(d.sC.profit)}</b></div>` : ''}`}
+      <div class="text-[10px] text-slate-400">${ehPeriodeLibelle()}</div></div>
+    <button type="button" onclick="ehTelecharger()" ${vide ? 'disabled' : ''} class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs transition flex items-center justify-center gap-2 ${vide ? 'opacity-50' : ''}"><i class="fa-solid fa-download"></i> Télécharger</button>
+  </div>`;
+}
+function ouvrirExportHistorique() {
+  let m = document.getElementById('exportHistoModal');
+  if (!m) {
+    m = document.createElement('div'); m.id = 'exportHistoModal';
+    m.className = 'fixed inset-0 z-[60] flex items-start justify-center p-3 bg-black/50 overflow-y-auto';
+    m.addEventListener('click', e => { if (e.target === m) fermerExportHistorique(); });
+    document.body.appendChild(m);
+  }
+  m.classList.remove('hidden');
+  ehDessiner();
+}
+function fermerExportHistorique() { const m = document.getElementById('exportHistoModal'); if (m) m.classList.add('hidden'); }

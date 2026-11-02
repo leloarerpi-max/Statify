@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <script>try{var t=localStorage.getItem('suivi-nba-theme');if(!t)t=(window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark';document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme='dark'}</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>PronoTracker Pro - Suivi & Performance</title>
+
+  <!-- PWA : icône + nom sur écran d'accueil (aucun impact sur le fonctionnement de l'appli) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0a192c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Statify">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="icon" href="icon-192.png" type="image/png">
+    <script src="chart.umd.min.js"></script>
+  <link rel="stylesheet" href="fa.css">
+  <link rel="stylesheet" href="prono.css">
+</head>
+<body class="p-4 md:p-8 min-h-screen">
+<nav id="gnav" aria-label="Navigation"><a href="./"><i>🏠</i><span>Accueil</span></a><a href="prono.html" aria-current="page"><i>🎯</i><span>Pronos</span></a></nav>
+
+
+  <div id="appRoot" class="max-w-7xl mx-auto space-y-8">
+    
+    <!-- EN-TÊTE ET ACTIONS -->
+    <div class="surface flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
+          <i class="fa-solid fa-chart-line text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">PronoTracker Pro</h1>
+          <p id="headerSubtitle" class="text-xs text-slate-500 font-medium">Suivi de performance</p>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-2 w-full md:w-auto">
+        <button id="syncBtn" onclick="openSyncModal()" title="Synchronisation entre appareils" class="flex-1 md:flex-none justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 sm:px-3.5 py-2.5 rounded-xl border border-slate-200 flex items-center gap-1.5 transition shadow-sm"><i id="syncIcon" class="fa-solid fa-cloud text-slate-400"></i><span id="syncLabel">Sync</span><span id="syncDot" class="w-2 h-2 rounded-full bg-slate-300"></span></button>
+        <button id="btnTheme" type="button" title="Thème clair / sombre" aria-label="Thème clair / sombre" class="flex-1 md:flex-none justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 sm:px-3.5 py-2.5 rounded-xl border border-slate-200 flex items-center gap-1.5 transition">🌓</button>
+        <select id="ambianceSelect" onchange="changerAmbiance(this.value)" title="Ambiance du fond" class="flex-1 md:flex-none"></select>
+        <button onclick="ouvrirExportHistorique()" title="Exporter l'historique des paris (Excel / CSV)" class="flex-1 md:flex-none justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 sm:px-3.5 py-2.5 rounded-xl border border-slate-200 flex items-center gap-1.5 transition shadow-sm">
+          <i class="fa-solid fa-file-excel text-emerald-600"></i> Exporter
+        </button>
+        <button onclick="exportJSON()" title="Sauvegarde complète : Statify + PronoTracker" class="flex-1 md:flex-none justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 sm:px-3.5 py-2.5 rounded-xl border border-slate-200 flex items-center gap-1.5 transition shadow-sm">
+          <i class="fa-solid fa-download text-blue-600"></i> <span class="hidden sm:inline">Sauvegarder</span><span class="sm:hidden">Save</span>
+        </button>
+        <label class="flex-1 md:flex-none justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 sm:px-3.5 py-2.5 rounded-xl border border-slate-200 cursor-pointer flex items-center gap-1.5 transition shadow-sm">
+          <i class="fa-solid fa-upload text-amber-600"></i> Importer
+          <input type="file" id="importFile" accept=".json,application/json,text/plain,text/json,application/octet-stream" onchange="importJSON(event)" class="hidden">
+        </label>
+      </div>
+    </div>
+
+    <!-- ONGLETS PRINCIPAUX -->
+    <div class="surface bg-white border border-slate-200 rounded-2xl p-1.5 flex items-center gap-1.5 shadow-sm w-full sm:w-auto sm:inline-flex">
+      <button onclick="switchView('tracker')" id="btnViewTracker" class="px-4 py-2 rounded-xl transition bg-blue-600 text-white shadow-sm font-bold text-sm flex items-center gap-2">
+        <i class="fa-solid fa-chart-line"></i> Mes Paris
+      </button>
+      <button onclick="switchView('analyzer')" id="btnViewAnalyzer" class="px-4 py-2 rounded-xl transition text-slate-600 hover:text-slate-900 font-bold text-sm flex items-center gap-2">
+        <i class="fa-solid fa-magnifying-glass-chart"></i> 🔍 Analyseur
+      </button>
+    </div>
+
+    <div id="trackerViewContent" class="space-y-8">
+
+    <!-- ALERTE DE SAUVEGARDE -->
+    <div id="backupBanner" class="hidden items-center justify-between gap-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold px-4 py-3 rounded-xl">
+      <span id="backupBannerText" class="flex items-center gap-2"><i class="fa-solid fa-triangle-exclamation"></i></span>
+      <div class="flex items-center gap-2 shrink-0">
+        <button onclick="exportJSON()" title="Sauvegarde complète : Statify + PronoTracker" class="bg-amber-600 hover:bg-amber-700 text-white font-bold px-3 py-1.5 rounded-lg transition">Sauvegarder maintenant</button>
+        <button onclick="snoozeBackupBanner()" class="text-amber-700 hover:text-amber-900 px-2 py-1.5 font-medium">Plus tard</button>
+      </div>
+    </div>
+
+    <!-- BANNIÈRE : LE BILAN EST CALCULÉ SUR LA SÉLECTION FILTRÉE -->
+    <div id="statsFilterBanner" class="hidden items-center justify-between gap-3 bg-blue-50 border border-blue-200 text-blue-800 text-xs font-semibold px-4 py-3 rounded-xl">
+      <span id="statsFilterBannerText" class="flex items-center gap-2"><i class="fa-solid fa-filter"></i></span>
+      <button onclick="resetAllStatsFilters()" class="text-blue-700 hover:text-blue-900 px-2 py-1 font-bold underline whitespace-nowrap shrink-0">Réinitialiser les filtres</button>
+    </div>
+
+    <!-- CARTES KPI GLOBALES -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div class="card p-5 flex items-center gap-4 border-l-4 border-l-slate-400">
+        <div class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600">
+          <i class="fa-solid fa-scale-balanced text-lg"></i>
+        </div>
+        <div>
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Cote / Mise Moy.</span>
+          <p id="statRisk" class="text-lg font-bold text-slate-800 mt-0.5">1.00 @ 0€</p>
+        </div>
+      </div>
+
+      <div class="card p-5 flex items-center gap-4 border-l-4 border-l-emerald-500">
+        <div class="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+          <i class="fa-solid fa-wallet text-lg"></i>
+        </div>
+        <div>
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Bilan Net Solo</span>
+          <p id="statProfit" class="text-xl font-black text-slate-900 mt-0.5">0.00 €</p>
+        </div>
+      </div>
+
+      <div class="card p-5 flex items-center gap-4 border-l-4 border-l-blue-500">
+        <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+          <i class="fa-solid fa-percent text-lg"></i>
+        </div>
+        <div>
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">ROI Solo</span>
+          <p id="statROI" class="text-xl font-black text-slate-900 mt-0.5">0.0 %</p>
+        </div>
+      </div>
+
+      <div class="card p-5 flex items-center gap-4 border-l-4 border-l-violet-500">
+        <div class="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center text-violet-600">
+          <i class="fa-solid fa-layer-group text-lg"></i>
+        </div>
+        <div>
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Bilan Net Combiné</span>
+          <p id="statProfitCombo" class="text-xl font-black text-slate-900 mt-0.5">0.00 €</p>
+        </div>
+      </div>
+
+      <div class="card p-5 flex items-center gap-4 border-l-4 border-l-fuchsia-500">
+        <div class="w-10 h-10 rounded-xl bg-fuchsia-50 flex items-center justify-center text-fuchsia-600">
+          <i class="fa-solid fa-percent text-lg"></i>
+        </div>
+        <div>
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">ROI Combiné</span>
+          <p id="statROICombo" class="text-xl font-black text-slate-900 mt-0.5">0.0 %</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATS COMBINÉS (toujours visibles) -->
+    <details id="comboStatsDetails" open class="card overflow-hidden border-l-4 border-l-violet-500" ontoggle="if(this.open){try{majDetailCombinesSafe()}catch(e){}}">
+      <summary class="cursor-pointer px-5 py-3 text-xs font-extrabold uppercase tracking-wide text-slate-800 flex items-center gap-2 select-none"><i class="fa-solid fa-layer-group text-violet-600"></i> Stats combinés <span class="ml-auto text-[10px] font-medium normal-case text-slate-400">Touche pour déplier</span></summary>
+      <div id="comboStatsInline" class="p-4 space-y-3"></div>
+    </details>
+
+    <!-- STATS SOLO (repliées par défaut) -->
+    <details id="soloStatsDetails" class="card overflow-hidden">
+      <summary class="cursor-pointer px-5 py-3 text-xs font-extrabold uppercase tracking-wide text-slate-800 flex items-center gap-2 select-none"><i class="fa-solid fa-chart-line text-blue-600"></i> Stats solo <span class="ml-auto text-[10px] font-medium normal-case text-slate-400">Touche pour déplier</span></summary>
+      <div class="p-4 space-y-8">
+
+    <!-- GRAPHIQUE GLOBAL D'ÉVOLUTION DU BANKROLL -->
+    <div class="card p-5 space-y-3">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+        <h3 class="text-xs font-extrabold uppercase tracking-wide text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-chart-area text-blue-600"></i> Évolution du Bankroll
+        </h3>
+        <span class="text-[10px] text-slate-400 font-medium">Profit cumulé sur la sélection filtrée</span>
+      </div>
+      <div class="h-56 w-full">
+        <canvas id="globalBankrollChart"></canvas>
+      </div>
+    </div>
+
+    <div id="footballCategoryCard" class="hidden space-y-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <h3 class="text-xs font-bold flex items-center gap-2 text-slate-700 uppercase tracking-wide">
+          <i class="fa-solid fa-layer-group text-blue-600"></i> Stats par Catégorie de Championnat
+        </h3>
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] text-slate-400 font-medium hidden sm:inline">Mode des cases à cocher :</span>
+          <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
+            <button onclick="setCompFilterMode('include')" id="btnCompModeInclude" class="px-3 py-1 rounded-lg transition text-[11px] font-bold whitespace-nowrap" title="Cocher un championnat = ne garder que celui-ci dans le Bilan">
+              ✅ Inclure
+            </button>
+            <button onclick="setCompFilterMode('exclude')" id="btnCompModeExclude" class="px-3 py-1 rounded-lg transition text-[11px] font-bold whitespace-nowrap" title="Cocher un championnat = le retirer du Bilan (les autres restent inclus)">
+              🚫 Exclure
+            </button>
+          </div>
+        </div>
+      </div>
+      <div id="footballCategoryAccordion" class="space-y-3"></div>
+    </div>
+
+    <!-- BILAN QUOTIDIEN -->
+    <div id="dailySection" class="card p-5 space-y-3">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+        <h3 id="dailySectionTitle" class="text-xs font-extrabold uppercase tracking-wide text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-calendar-day text-emerald-600"></i> Bilan Quotidien Jour par Jour
+        </h3>
+        <span class="text-[10px] text-slate-400 font-medium">Récapitulatif compact des résultats journaliers</span>
+      </div>
+      <div class="overflow-x-auto max-h-60 overflow-y-auto">
+        <table class="w-full text-center text-xs">
+          <thead class="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 sticky top-0 bg-slate-50 z-10">
+            <tr class="text-[10px] text-slate-500 border-b border-slate-200">
+              <th class="p-1.5 text-left">JJ/MM/AAAA</th>
+              <th class="p-1.5 border-l border-slate-200">Joués (G/P)</th>
+              <th class="p-1.5">Gain Net</th>
+              <th class="p-1.5">ROI</th>
+            </tr>
+          </thead>
+          <tbody id="dailyStatsTbody" class="divide-y divide-slate-100 font-medium"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- STATISTIQUES DÉTAILLÉES -->
+    <div class="space-y-3">
+      <h2 id="detailedStatsTitle" class="text-xs font-extrabold uppercase tracking-wider flex items-center gap-2">
+        <i class="fa-solid fa-chart-pie"></i> Statistiques Détaillées
+      </h2>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="card p-5 space-y-3">
+          <h3 class="text-xs font-bold flex items-center gap-2 text-slate-700 uppercase tracking-wide">
+            <i class="fa-solid fa-bullseye text-blue-600"></i> Stats par Type de Prono (Marché)
+          </h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-center text-xs">
+              <thead>
+                <tr class="bg-slate-50 text-slate-500 font-bold border-b border-slate-100">
+                  <th class="p-2.5 text-left">Type de Pari</th>
+                  <th class="p-2.5">Joués</th>
+                  <th class="p-2.5">Réussite</th>
+                  <th class="p-2.5">Profit Net</th>
+                  <th class="p-2.5">ROI</th>
+                </tr>
+              </thead>
+              <tbody id="marketStatsTbody" class="divide-y divide-slate-100 font-medium"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card p-5 space-y-3">
+          <h3 class="text-xs font-bold flex items-center gap-2 text-slate-700 uppercase tracking-wide">
+            <i class="fa-solid fa-percent text-amber-500"></i> Stats par Tranche de Cote
+          </h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-center text-xs">
+              <thead>
+                <tr class="bg-slate-50 text-slate-500 font-bold border-b border-slate-100">
+                  <th class="p-2.5 text-left">Tranche</th>
+                  <th class="p-2.5">Joués</th>
+                  <th class="p-2.5">Réussite</th>
+                  <th class="p-2.5">Profit Net</th>
+                  <th class="p-2.5">ROI</th>
+                </tr>
+              </thead>
+              <tbody id="oddsStatsTbody" class="divide-y divide-slate-100 font-medium"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card p-5 space-y-3 lg:col-span-2">
+          <h3 class="text-xs font-bold flex items-center gap-2 text-slate-700 uppercase tracking-wide">
+            <i class="fa-solid fa-shield-halved text-rose-500"></i> Stats par équipe : où tu gagnes, où tu perds
+          </h3>
+          <p class="text-[11px] text-slate-500">Compte tous tes paris terminés sur les matchs de l'équipe, quel que soit le marché. Seules les équipes avec au moins 3 paris sont listées.</p>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+              <div class="text-[11px] font-extrabold text-emerald-700 mb-1">✅ Les plus rentables</div>
+              <table class="w-full text-center text-xs"><thead><tr class="bg-slate-50 text-slate-500 font-bold border-b border-slate-100">
+                <th class="p-2 text-left">Équipe</th><th class="p-2">Paris</th><th class="p-2">Réussite</th><th class="p-2">Profit</th></tr></thead>
+                <tbody id="teamBestTbody" class="divide-y divide-slate-100 font-medium"></tbody></table>
+            </div>
+            <div>
+              <div class="text-[11px] font-extrabold text-rose-700 mb-1">⚠️ Les pièges (les plus coûteuses)</div>
+              <table class="w-full text-center text-xs"><thead><tr class="bg-slate-50 text-slate-500 font-bold border-b border-slate-100">
+                <th class="p-2 text-left">Équipe</th><th class="p-2">Paris</th><th class="p-2">Réussite</th><th class="p-2">Profit</th></tr></thead>
+                <tbody id="teamWorstTbody" class="divide-y divide-slate-100 font-medium"></tbody></table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+      </div>
+    </details>
+
+    <!-- MES COMBINÉS -->
+    <div class="card p-5 space-y-3">
+      <h3 class="text-xs font-extrabold uppercase tracking-wide text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
+        <i class="fa-solid fa-layer-group text-violet-600"></i> Mes Combinés
+      </h3>
+      <input type="search" id="comboSearchInput" oninput="setComboSearch(this.value)" placeholder="Rechercher un match, une équipe ou un pronostic…" class="input-field w-full text-xs">
+      <div id="combosListContainer" class="space-y-3"></div>
+    </div>
+
+    <!-- FORMULAIRE ET HISTORIQUE -->
+    <div id="mainGrid" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      
+      <!-- FORMULAIRE DE SAISIE -->
+      <div id="formCard" class="card p-5 space-y-4 lg:col-span-1 h-fit">
+        <button id="formStrip" type="button" onclick="basculerFormulaire(false)" title="Déplier « Ajouter un Pari »" class="w-full items-center justify-center gap-2 text-xs font-extrabold text-blue-600">
+          <i class="fa-solid fa-plus-circle"></i><span class="strip-txt">Ajouter un Pari</span><i class="fa-solid fa-chevron-right lg:mt-1"></i>
+        </button>
+        <div class="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
+        <h2 id="formTitle" class="text-sm font-extrabold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-plus-circle text-blue-600"></i> Ajouter un Pari
+        </h2>
+        <button type="button" onclick="basculerFormulaire(true)" title="Replier sur le côté" class="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-slate-800 text-xs"><i class="fa-solid fa-chevron-left"></i></button>
+        </div>
+        
+        <!-- IMPORT UNIVERSEL -->
+        <div id="quickAddBox" class="p-3.5 border rounded-xl space-y-2">
+          <label id="quickAddLabel" class="block text-xs font-bold">
+            <span>⚡ Multi-Import Texte</span>
+          </label>
+          <textarea id="rawText" rows="3" class="input-field w-full text-xs" placeholder="Ex: 06/08/2026 | Équipe A - Équipe B | Compétition | Marché | Pronostic | 1.67"></textarea>
+          <p id="quickAddHint" class="text-[10px] leading-snug">Format : Date | Match | Compétition | Marché | Pronostic | [Mise optionnelle] | Cote</p>
+          <button id="quickAddBtn" type="button" onclick="parseAndAddMultipleBets()" class="w-full text-white font-bold py-2 px-3 rounded-lg text-xs transition shadow-md flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-bolt"></i> Analyser & Ajouter
+          </button>
+        </div>
+
+        <hr class="border-slate-100">
+
+        <!-- SAISIE MANUELLE -->
+        <form id="addBetForm" onsubmit="addBet(event)" class="space-y-3 text-xs">
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block font-semibold text-slate-600 mb-1">Date</label>
+              <input type="date" id="dateInput" required class="input-field w-full">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-600 mb-1">Type</label>
+              <select id="typeInput" required class="input-field w-full font-bold">
+                <option value="Single">📌 Simple</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label id="labelMatch" class="block font-semibold text-slate-600">Match / Affiche</label>
+              <button type="button" onclick="startNewMatch()" class="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1" title="Vider le match et le pronostic pour saisir une nouvelle affiche">
+                <i class="fa-solid fa-rotate"></i> Nouveau match
+              </button>
+            </div>
+            <input type="text" id="matchInput" placeholder="Ex: PSG vs OM" required class="input-field w-full" oninput="updatePronoSuggestions()">
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label id="labelComp" class="block font-semibold text-slate-600 mb-1">Tournoi / Circuit</label>
+              <input type="text" id="compInput" list="compDatalist" placeholder="Ex: Ligue 1" required class="input-field w-full">
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label id="labelMarket" class="block font-semibold text-slate-600">Marché (Type)</label>
+                <button type="button" onclick="openMarketManager()" class="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1" title="Ajouter ou supprimer des types de marché">
+                  <i class="fa-solid fa-gear"></i> Gérer
+                </button>
+              </div>
+              <select id="marketInput" required class="input-field w-full font-medium" onchange="updatePronoSuggestions()"></select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Pronostic</label>
+            <input type="text" id="pronoInput" placeholder="Ex: Victoire Baez" required class="input-field w-full">
+            <div id="pronoSuggestions" class="hidden flex-wrap gap-1.5 pt-1.5"></div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block font-semibold text-slate-600 mb-1">Cote</label>
+              <input type="number" step="0.01" min="1.01" id="oddsInput" placeholder="1.85" required class="input-field w-full font-black text-blue-600">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-600 mb-1">Mise (€)</label>
+              <input type="number" step="0.01" min="0.01" id="stakeInput" value="1" required class="input-field w-full font-black">
+            </div>
+          </div>
+
+          <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl text-xs transition shadow-lg shadow-slate-900/10 mt-2 flex items-center justify-center gap-2">
+            <i class="fa-solid fa-floppy-disk"></i> Enregistrer le Pari
+          </button>
+        </form>
+
+        <!-- Suggestions de championnats déjà utilisés, pour éviter les doublons dus à des fautes de frappe -->
+        <datalist id="compDatalist"></datalist>
+      </div>
+
+      <!-- HISTORIQUE ET FILTRES -->
+      <div class="card p-5 lg:col-span-2 space-y-4">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-3">
+          <h2 class="text-sm font-extrabold flex items-center gap-2 text-slate-800">
+            <i class="fa-solid fa-clock-rotate-left text-blue-600"></i> Historique des Paris
+          </h2>
+          <button onclick="ouvrirScores()" class="text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg shadow-sm sm:ml-auto"><i class="fa-solid fa-futbol mr-1"></i>Scores</button>
+          <button onclick="ouvrirGenerateurCombines()" class="text-[11px] font-bold bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded-lg shadow-sm"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Générer les combinés</button>
+          <button onclick="ouvrirVerifComp()" class="text-[11px] font-bold bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg shadow-sm"><i class="fa-solid fa-list-check mr-1"></i>Vérifier les championnats</button>
+          <button onclick="ouvrirVerif()" class="text-[11px] font-bold bg-sky-600 hover:bg-sky-700 text-white px-3 py-1.5 rounded-lg shadow-sm"><i class="fa-solid fa-clipboard-check mr-1"></i>Vérifier mes résultats</button>
+          <button onclick="clearAll()" class="text-xs text-rose-600 hover:text-rose-700 font-semibold transition flex items-center gap-1">
+            <i class="fa-solid fa-trash-can"></i> Tout effacer
+          </button>
+        </div>
+
+        <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-2 text-xs overflow-x-auto">
+            <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200 shrink-0">
+              <button onclick="setQuickFilter('ALL')" id="btnFilterAll" class="px-3 py-1 rounded-lg transition bg-white text-slate-800 shadow-sm font-bold whitespace-nowrap">
+                Tous (<span id="countAll">0</span>)
+              </button>
+              <button onclick="setQuickFilter('Pending')" id="btnFilterPending" class="px-3 py-1 rounded-lg transition text-slate-600 hover:text-slate-900 font-medium whitespace-nowrap">
+                ⏳ En cours (<span id="countPending">0</span>)
+              </button>
+              <button onclick="setQuickFilter('Settled')" id="btnFilterSettled" class="px-3 py-1 rounded-lg transition text-slate-600 hover:text-slate-900 font-medium whitespace-nowrap">
+                ✅ Terminés (<span id="countSettled">0</span>)
+              </button>
+              <button onclick="setQuickFilter('Won')" id="btnFilterWon" class="px-3 py-1 rounded-lg transition text-slate-600 hover:text-slate-900 font-medium whitespace-nowrap">
+                🟢 Gagnés (<span id="countWon">0</span>)
+              </button>
+              <button onclick="setQuickFilter('Lost')" id="btnFilterLost" class="px-3 py-1 rounded-lg transition text-slate-600 hover:text-slate-900 font-medium whitespace-nowrap">
+                🔴 Perdus (<span id="countLost">0</span>)
+              </button>
+            </div>
+
+            <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200 shrink-0">
+              <button onclick="setTypeFilter('ALL')" id="btnFilterTypeAll" class="px-3 py-1 rounded-lg transition bg-white text-slate-800 shadow-sm font-bold whitespace-nowrap">
+                Tous types (<span id="countTypeAll">0</span>)
+              </button>
+              <button onclick="setTypeFilter('SOLO')" id="btnFilterTypeSolo" class="px-3 py-1 rounded-lg transition text-slate-600 hover:text-slate-900 font-medium whitespace-nowrap">
+                📌 Solo (<span id="countTypeSolo">0</span>)
+              </button>
+              <button onclick="setTypeFilter('COMBO')" id="btnFilterTypeCombo" class="px-3 py-1 rounded-lg transition text-slate-600 hover:text-slate-900 font-medium whitespace-nowrap">
+                🔀 Combinés (<span id="countTypeCombo">0</span>)
+              </button>
+            </div>
+          </div>
+
+          <div id="activeFiltersBanner" class="hidden flex-wrap items-center gap-2 w-full sm:w-auto"></div>
+          <div class="flex items-center gap-2 w-full sm:w-auto">
+            <div class="relative flex-1">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+              <input type="text" id="searchInput" oninput="renderAfterFilterChange()" placeholder="Rechercher... (ou #12)" class="input-field text-xs pl-8 py-1.5 w-full">
+            </div>
+            
+            <select id="filterComp" onchange="renderAfterFilterChange()" class="input-field text-xs py-1.5 shrink-0 max-w-[180px]">
+              <option value="ALL">Tous les championnats</option>
+            </select>
+
+            <select id="filterPeriod" onchange="onFilterPeriodChange()" class="input-field text-xs py-1.5 shrink-0">
+              <option value="ALL">Toutes les dates</option>
+              <option value="TODAY">Aujourd'hui</option>
+              <option value="TOMORROW">Demain</option>
+              <option value="THIS_WEEK">Cette semaine</option>
+              <option value="THIS_MONTH">Ce mois-ci</option>
+              <option value="CUSTOM">Plage personnalisée...</option>
+            </select>
+          </div>
+
+          <div id="customDateRange" class="hidden flex items-center gap-2 w-full sm:w-auto">
+            <input type="date" id="filterDateFrom" onchange="renderAfterFilterChange()" class="input-field text-xs py-1.5">
+            <span class="text-xs text-slate-400 font-medium">→</span>
+            <input type="date" id="filterDateTo" onchange="renderAfterFilterChange()" class="input-field text-xs py-1.5">
+          </div>
+        </div>
+
+        <!-- BARRE DE SÉLECTION POUR CRÉER UN COMBINÉ -->
+        <div id="comboSelectionBar" class="hidden items-center justify-between gap-3 bg-violet-50 border border-violet-200 text-violet-800 text-xs font-semibold px-4 py-3 rounded-xl">
+          <span id="comboSelectionText" class="flex items-center gap-2"><i class="fa-solid fa-layer-group"></i></span>
+          <div class="flex items-center gap-2 shrink-0">
+            <button onclick="openComboModal()" class="bg-violet-600 hover:bg-violet-700 text-white font-bold px-3 py-1.5 rounded-lg transition">🔀 Combiner la sélection</button>
+            <button onclick="clearBetSelection()" class="text-violet-700 hover:text-violet-900 px-2 py-1.5 font-medium">Annuler</button>
+          </div>
+        </div>
+
+        <!-- VUE TABLEAU (écrans moyens et larges) -->
+        <div class="hidden md:block overflow-x-auto border border-slate-200 rounded-xl">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 text-slate-500 uppercase border-b border-slate-200 font-bold tracking-wider">
+              <tr>
+                <th class="p-3 text-center whitespace-nowrap w-8"><i class="fa-solid fa-check-double text-slate-300" title="Sélection pour combiner"></i></th>
+                <th onclick="toggleSort('betNum')" class="p-3 text-center sortable whitespace-nowrap">N° <span id="sort-betNum"></span></th>
+                <th onclick="toggleSort('date')" class="p-3 sortable whitespace-nowrap">Date <span id="sort-date">▼</span></th>
+                <th onclick="toggleSort('match')" title="Trier par compétition" class="p-3 sortable">Match <span class="normal-case font-semibold text-[9px] text-slate-400">(par compét.)</span> <span id="sort-match"></span></th>
+                <th onclick="toggleSort('prono')" title="Trier par marché" class="p-3 sortable">Pronostic <span class="normal-case font-semibold text-[9px] text-slate-400">(par marché)</span> <span id="sort-prono"></span></th>
+                <th onclick="toggleSort('odds')" class="p-3 text-center sortable whitespace-nowrap">Cote <span id="sort-odds"></span></th>
+                <th onclick="toggleSort('stake')" class="p-3 text-center sortable whitespace-nowrap">Mise <span id="sort-stake"></span></th>
+                <th onclick="toggleSort('status')" class="p-3 text-center sortable whitespace-nowrap">Statut <span id="sort-status"></span></th>
+                <th class="p-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="betsTbody" class="divide-y divide-slate-100 font-medium"></tbody>
+          </table>
+        </div>
+
+        <!-- VUE CARTES (mobile) -->
+        <div id="betsCardsMobile" class="md:hidden space-y-2.5"></div>
+      </div>
+
+    </div>
+
+    </div>
+    <!-- FIN trackerViewContent -->
+
+    <!-- VUE ANALYSEUR -->
+    <div id="analyzerViewContent" class="hidden">
+      <div class="analyzer-panel">
+        <h1>Analyseur de Paris Sportifs Pro</h1>
+        <p class="sous-titre">Reconnaît les textes en français ET en anglais. Extrait les cotes et statistiques, et calcule 3 paris par un moteur de règles (pas d'IA)</p>
+
+        <div class="panel">
+          <label for="rawInput"><strong>Colle ton texte brut (français ou anglais, idéalement avec cotes et % par équipe) :</strong></label>
+          <textarea id="rawInput" placeholder="Colle ton texte d'analyse complet ici, en français ou en anglais..."></textarea>
+          <div class="boutons">
+            <button onclick="analyserEtGenerer()">Analyser et calculer les paris</button>
+            <button class="secondaire" onclick="exporterTxt()">Exporter en .txt</button>
+          </div>
+        </div>
+
+        <div class="panel" id="outputPanel" style="display: none;">
+          <h2 style="margin-top: 0;">Rapport d'Analyse</h2>
+          <div id="resultContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MODAL COMBINER -->
+  <div id="comboModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h3 class="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+          <i class="fa-solid fa-layer-group text-violet-600"></i> Créer un combiné
+        </h3>
+        <button onclick="closeComboModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div id="comboModalLegsList" class="space-y-1.5 text-xs max-h-60 overflow-y-auto"></div>
+
+      <div class="flex items-center justify-between bg-violet-50 border border-violet-200 rounded-xl px-3 py-2.5">
+        <span class="text-xs font-bold text-violet-800">Cote totale du combiné</span>
+        <span id="comboModalTotalOdds" class="text-lg font-black text-violet-700">1.00</span>
+      </div>
+
+      <div>
+        <label class="block font-semibold text-slate-600 mb-1 text-xs">Mise du combiné (€)</label>
+        <input type="number" step="0.01" min="0.01" id="comboStakeInput" class="input-field w-full text-xs font-black">
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button onclick="closeComboModal()" class="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition">Annuler</button>
+        <button onclick="confirmCreateCombo()" class="px-4 py-2 rounded-lg bg-violet-600 text-white font-bold text-xs hover:bg-violet-700 transition">Créer le combiné</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL EDIT -->
+  <div id="editModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h3 class="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+          <i class="fa-solid fa-pen-to-square text-blue-600"></i> Modifier le pari
+        </h3>
+        <button onclick="closeEditModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <form id="editForm" onsubmit="saveEdit(event)" class="space-y-3 text-xs">
+        <input type="hidden" id="editBetId">
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Date</label>
+            <input type="date" id="editDate" required class="input-field w-full">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Match</label>
+            <input type="text" id="editMatch" required class="input-field w-full">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Tournoi / Compétition</label>
+            <input type="text" id="editComp" list="compDatalist" required class="input-field w-full">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Marché (Type)</label>
+            <select id="editMarket" required class="input-field w-full"></select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-600 mb-1">Pronostic</label>
+          <input type="text" id="editProno" required class="input-field w-full">
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Cote</label>
+            <input type="number" step="0.01" min="1.01" id="editOdds" required class="input-field w-full font-black text-blue-600">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Mise (€)</label>
+            <input type="number" step="0.01" min="0.01" id="editStake" required class="input-field w-full font-black">
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="closeEditModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition">Annuler</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition shadow-md shadow-blue-600/20">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL PREVIEW IMPORT -->
+  <div id="importPreviewModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col p-6 space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <div>
+          <h3 class="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+            <i class="fa-solid fa-list-check text-blue-600"></i> Aperçu avant import
+          </h3>
+          <p id="importPreviewCount" class="text-[10px] text-slate-400 font-medium mt-0.5"></p>
+        </div>
+        <button onclick="closeImportPreview()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <p id="importSkippedInfo" class="text-[10px] text-slate-500"></p>
+
+      <div class="overflow-auto flex-1 border border-slate-200 rounded-xl">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 sticky top-0">
+            <tr>
+              <th class="p-2 w-8"></th>
+              <th class="p-2">Date</th>
+              <th class="p-2">Match</th>
+              <th class="p-2">Compétition</th>
+              <th class="p-2">Marché</th>
+              <th class="p-2">Pronostic</th>
+              <th class="p-2">Cote</th>
+            </tr>
+          </thead>
+          <tbody id="importPreviewTbody" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+
+      <p class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">
+        <i class="fa-solid fa-triangle-exclamation"></i> Lignes en orange : marché non reconnu automatiquement — vérifie-les avant de valider.
+      </p>
+
+      <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+        <button type="button" onclick="closeImportPreview()" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition">Annuler</button>
+        <button type="button" onclick="confirmImportPreview()" class="px-5 py-2 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition shadow-md shadow-blue-600/20">
+          <i class="fa-solid fa-check mr-1"></i> Valider et ajouter (<span id="importConfirmCount">0</span>)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL GESTION DES TYPES DE MARCHÉ -->
+  <div id="marketManagerModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h3 class="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+          <i class="fa-solid fa-gear text-blue-600"></i> Types de marché
+        </h3>
+        <button onclick="closeMarketManager()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <p class="text-[10px] text-slate-500">Ajoute ou supprime les types de marché disponibles dans les listes déroulantes. Les changements sont conservés définitivement sur cet appareil.</p>
+
+      <div class="flex items-center gap-2">
+        <input type="text" id="newMarketNameInput" placeholder="Ex: Double Chance" class="input-field w-full text-xs" onkeydown="if(event.key==='Enter'){event.preventDefault(); addMarketType();}">
+        <button type="button" onclick="addMarketType()" class="shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-2 rounded-lg text-xs transition flex items-center gap-1.5">
+          <i class="fa-solid fa-plus"></i> Ajouter
+        </button>
+      </div>
+
+      <div id="marketManagerList" class="space-y-1.5 max-h-64 overflow-y-auto"></div>
+
+      <p class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">
+        <i class="fa-solid fa-triangle-exclamation"></i> Supprimer un type ne modifie pas les paris déjà enregistrés avec ce marché — il ne sera juste plus proposé pour les prochains.
+      </p>
+
+      <div class="flex justify-end pt-2 border-t border-slate-100">
+        <button type="button" onclick="closeMarketManager()" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition text-xs">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST UNDO -->
+  <div id="toastUndo" class="fixed bottom-6 right-6 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-4 text-xs z-50 hidden transition-all">
+    <div class="flex items-center gap-2">
+      <i class="fa-solid fa-trash-can text-rose-400"></i>
+      <span>Pari supprimé.</span>
+    </div>
+    <button onclick="undoDelete()" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg font-bold transition">
+      <i class="fa-solid fa-rotate-left mr-1"></i> Annuler
+    </button>
+  </div>
+
+  <script src="backup.js"></script>
+<script src="xlsx.js"></script>
+<script src="prono.js"></script>
+</body>
+</html>
