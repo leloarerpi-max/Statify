@@ -212,8 +212,8 @@ function vMine(){ const t=myTour(), ids=Object.keys(S.fav), all=allMatches(t), n
 /* ---------- 11. Diagnostic ESPN ---------- */
 function diagHtml(){ const d=S.diag||{}, t=myTour();
   return `<div class="card tndiag"><div class="row between"><h2 style="margin:0">🔧 Diagnostic ESPN</h2><button class="sec" data-tn="diagx">Fermer</button></div>
-  <p class="mut" style="margin:8px 0">Pour vérifier ce qu'ESPN renvoie. « Copier un extrait » met quelques matchs dans le presse-papiers (à me coller pour ajuster la lecture). Tu peux aussi coller un JSON ci-dessous pour voir l'écran avec ces données.</p>
-  <div class="row" style="gap:6px;flex-wrap:wrap"><button class="sec" data-tn="diagrun">Tester ${t.toUpperCase()}</button><button class="sec" data-tn="diagcopy" data-v="sboard">Copier un extrait du scoreboard</button><button class="sec" data-tn="diagcopy" data-v="srank">Copier un extrait du classement</button><button class="sec" data-tn="diagcopy" data-v="board" title="Réponse complète (~200 Ko)">Brut complet</button></div>
+  <p class="mut" style="margin:8px 0">Pour vérifier ce qu'ESPN renvoie. « Télécharger un extrait » crée un petit fichier (quelques matchs) que tu peux joindre à ta réponse pour que j'ajuste la lecture. Tu peux aussi coller un JSON ci-dessous pour voir l'écran avec ces données.</p>
+  <div class="row" style="gap:6px;flex-wrap:wrap"><button class="sec" data-tn="diagrun">Tester ${t.toUpperCase()}</button><button class="sec" data-tn="diagcopy" data-v="dboard">⬇ Télécharger un extrait du scoreboard</button><button class="sec" data-tn="diagcopy" data-v="drank">⬇ Télécharger un extrait du classement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px"><button class="sec" data-tn="diagcopy" data-v="sboard">Copier l'extrait du scoreboard</button><button class="sec" data-tn="diagcopy" data-v="srank">Copier l'extrait du classement</button></div>
   ${d.log?`<pre class="tnlog">${esc(d.log)}</pre>`:''}
   <textarea id="tnPaste" rows="4" placeholder="Colle ici un JSON ESPN (scoreboard ou classement)…" style="width:100%;margin-top:10px">${esc(d.paste||'')}</textarea>
   <div class="row" style="gap:6px;margin-top:6px"><button class="sec" data-tn="pasteboard">Lire comme scoreboard</button><button class="sec" data-tn="pasterank">Lire comme classement</button></div></div>`; }
@@ -229,9 +229,14 @@ function sample(js,kind){ try{ if(kind==='rank') return trimJs(js);
     const c=JSON.parse(JSON.stringify(js)); c.events=(c.events||[]).slice(0,2);
     for(const ev of c.events){ for(const g of (ev.groupings||[])){ const L=g.competitions||[], pick=[]; for(const st of ['in','pre','post']){ const m=L.find(x=>x.status&&x.status.type&&x.status.type.state===st&&!pick.includes(x)); if(m) pick.push(m); } for(const m of L) if(pick.length<3&&!pick.includes(m)) pick.push(m); g.competitions=pick; } if(ev.competitions) ev.competitions=ev.competitions.slice(0,3); }
     return trimJs(c); }catch(e){ return js; } }
-async function diagCopy(kind){ const t=myTour(), small=kind==='sboard'||kind==='srank', base=(kind==='board'||kind==='sboard')?'board':'rank', u=base==='board'?SRC.board(t,''):SRC.rank(t)[0]; let txt=''; try{ const raw=await (await fetch(u,{cache:'no-store'})).text(); txt=small?JSON.stringify(sample(JSON.parse(raw),base),null,1):raw; }catch(e){ txt='ERREUR '+(e.message||e); }
+async function diagCopy(kind){   // kind : sboard / srank (copier l'extrait) · dboard / drank (télécharger l'extrait en fichier)
+  const t=myTour(), dl=kind[0]==='d', base=/board/.test(kind)?'board':'rank', u=base==='board'?SRC.board(t,''):SRC.rank(t)[0]; let txt='', err='';
+  try{ const raw=await (await fetch(u,{cache:'no-store'})).text(); txt=JSON.stringify(sample(JSON.parse(raw),base),null,1); }catch(e){ err=e.message||String(e); }
+  S.diag=S.diag||{};
+  if(err){ S.diag.log='⚠️ Impossible de lire ESPN : '+err+'\n'+u; return redraw(); }
+  if(dl){ download(`espn-tennis-${base==='board'?'scoreboard':'classement'}-${t}.json`,txt,'application/json'); S.diag.log=`✅ Fichier téléchargé (${txt.length} caractères). Joins-le simplement à ta réponse dans la conversation.\n`+u; return redraw(); }
   let ok=false; try{ await navigator.clipboard.writeText(txt); ok=true; }catch(e){ const a=document.createElement('textarea'); a.value=txt; document.body.appendChild(a); a.select(); try{ ok=document.execCommand('copy'); }catch(x){} a.remove(); }
-  S.diag=S.diag||{}; S.diag.log=(ok?`✅ Copié (${txt.length} caractères). Colle-le dans la conversation.`:'⚠️ Copie impossible : ouvre l\'adresse dans un onglet et copie le texte à la main.')+'\n'+u; redraw(); }
+  S.diag.log=(ok?`✅ Extrait copié (${txt.length} caractères). Va tout de suite dans la conversation et fais Ctrl+V (ne sélectionne pas ce message : ça remplacerait le contenu copié).`:'⚠️ Copie impossible : utilise plutôt « Télécharger ».')+'\n'+u; redraw(); }
 function diagPaste(kind){ const el=document.getElementById('tnPaste'), txt=el?el.value:''; S.diag=S.diag||{}; S.diag.paste=txt; let js=null; try{ js=JSON.parse(txt); }catch(e){ S.diag.log='⚠️ Ce texte n\'est pas du JSON valide : '+e.message; return redraw(); }
   const t=myTour();
   if(kind==='board'){ const ev=parseBoard(js), n=ev.reduce((a,e)=>a+e.ms.length,0); S.diag.log=`Lu : ${ev.length} tournoi(s), ${n} match(s) de simple.`+(n?' Affichés ci-dessous (données collées, valables 10 min).':' Rien d\'exploitable : colle-moi ce JSON pour que j\'ajuste la lecture.'); if(n){ S.cache.board[bKey(t,0)]={t:Date.now(),ev}; S.pasteT=Date.now(); S.day=0; saveCache(); } }
