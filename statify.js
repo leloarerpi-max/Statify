@@ -2153,13 +2153,14 @@ const FCMP_P=[['Buts',p=>p.g,v=>v],['Passes D.',p=>p.a,v=>v],['Buts / match',p=>
 
 /* ================= Multiplex foot ================= */
 function multiAll(){
-  const {mt}=footIdx(), M={};
-  for(const m of mt) M[m.id]={id:m.id,lg:m.lg,d:m.d,hn:m.hn,an:m.an,hid:m.hid,aid:m.aid,hl:m.hl,al:m.al,hc:m.hc||'',ac:m.ac||'',st:m.done?'post':(m.st||'pre'),hs:m.hs||0,as:m.as||0,txt:'',
+  const {mt}=footIdx(), M={}, col={};   // col : dernière couleur connue de chaque club (un match à venir n'a pas toujours la sienne)
+  for(const m of mt){ if(m.hc) col[m.hid]=m.hc; if(m.ac) col[m.aid]=m.ac; }
+  for(const m of mt) M[m.id]={id:m.id,lg:m.lg,d:m.d,hn:m.hn,an:m.an,hid:m.hid,aid:m.aid,hl:m.hl,al:m.al,hc:m.hc||col[m.hid]||'',ac:m.ac||col[m.aid]||'',st:m.done?'post':(m.st||'pre'),hs:m.hs||0,as:m.as||0,txt:'',
     ev:((m.x&&m.x.ev)||[]).filter(e=>e.t==='g'||e.t==='pg'||e.t==='og'||e.t==='rc').map(e=>({t:e.t,min:e.m,ms:e.ms,p:e.p,s:e.s}))};
   for(const it of (liveData.items||[])){ if(it.k!=='f') continue;
-    const o=M[it.id]||(M[it.id]={id:it.id,lg:it.lg,d:it.d,hn:it.h.n,an:it.a.n,hid:it.h.id,aid:it.a.id,hl:it.h.l,al:it.a.l,hc:it.h.c||'',ac:it.a.c||'',ev:[]});
-    if(!o.hc&&it.h.c) o.hc=it.h.c; if(!o.ac&&it.a.c) o.ac=it.a.c;
-    o.st=it.done?'post':it.st; o.hs=it.h.s; o.as=it.a.s; o.txt=it.st==='in'?liveText(it):'';
+    const o=M[it.id]||(M[it.id]={id:it.id,lg:it.lg,d:it.d,hn:it.h.n,an:it.a.n,hid:it.h.id,aid:it.a.id,hl:it.h.l,al:it.a.l,hc:it.h.c||col[it.h.id]||'',ac:it.a.c||col[it.a.id]||'',ev:[]});
+    if(!o.hc) o.hc=it.h.c||col[it.h.id]||''; if(!o.ac) o.ac=it.a.c||col[it.a.id]||'';
+    o.st=it.done?'post':it.st; o.hs=it.h.s; o.as=it.a.s; o.pen=it.pen||null; o.txt=it.st==='in'?liveText(it):'';
     if(it.ev&&it.ev.length) o.ev=it.ev.filter(e=>e.g||e.rc).map(e=>({t:e.rc?'rc':e.og?'og':e.pg?'pg':'g',min:parseInt(e.m)||0,ms:e.m,p:e.p,s:e.s})); }
   return M;
 }
@@ -2263,7 +2264,7 @@ function footMultiView(){
     const evl3=(sd)=>m.ev.filter(e=>e.s===sd).sort((x,y)=>x.min-y.min).map(e=>`<div${e===nw?' class="mxnw"':''}>${e.t==='rc'?'🟥':'⚽'} ${esc(e.p||'?')} <span>${esc(e.ms||e.min+"'")}${e.t==='og'?' (csc)':e.t==='pg'?' (pen.)':''}</span>${e===nw?'<b class="lm-new">Nouveau</b>':''}</div>`).join('');
     const pill=m.st==='pre'?`<span class="mxp pre">${esc(parisT(m.d))}</span>`:m.st==='post'?'<span class="mxp fin">TERMINÉ</span>':`<span class="mxp live"><i></i>${esc(m.txt||'En cours')}</span>`;
     const pr=lv?prog(m):0, sc=m.st==='pre'?'<span class="mut">–</span>':`<span class="${fx('h',m.hs,0)}">${m.hs}</span><small>:</small><span class="${fx('a',m.as,1)}">${m.as}</span>`;
-    const bg=stuFootBig(m); return `<div class="mxc${fv?' fv':''}${recent?' gl':''}${bg?' big':''}" style="${tcStyle(m.hc)}" data-act="fmatch" data-id="${esc(m.id)}">${bg?`<div class="bigtag">🔥 ${esc(bg)}</div>`:''}${recent?`<div class="mxg${c.vd?' v':''}">${c.vd?'❌ BUT ANNULÉ':'⚽ BUT !'} · il y a ${Math.max(1,Math.round((now-c.chg)/1000))} s</div>`:''}<div class="mxh"><span class="mut">${mixed?esc(footLgName(m.lg)):''}</span>${pill}<span class="mxs">${mpickStar(m)}</span></div><div class="mxr"><div class="mxt">${footLogo(m.hl,28)}<b>${esc(m.hn)}</b></div><div class="mxsc">${sc}</div><div class="mxt r"><b>${esc(m.an)}</b>${footLogo(m.al,28)}</div></div>${pr?`<div class="mxb"><div style="width:${pr}%"></div></div>`:''}${vNew?`<div class="mxv">❌ <b>But annulé</b> <span>· score ${esc(c.old)} → ${m.hs}-${m.as}</span></div>`:''}${m.ev.length?`<div class="mxe"><div>${evl3('h')}</div><div style="text-align:right">${evl3('a')}</div></div>`:''}</div>`; };
+    const bg=stuFootBig(m); return `<div class="mxc${fv?' fv':''}${recent?' gl':''}${bg?' big':''}" style="${tcStyle(m.hc)}" data-act="fmatch" data-id="${esc(m.id)}">${bg?`<div class="bigtag">🔥 ${esc(bg)}</div>`:''}${recent?`<div class="mxg${c.vd?' v':''}">${c.vd?'❌ BUT ANNULÉ':'⚽ BUT !'} · il y a ${Math.max(1,Math.round((now-c.chg)/1000))} s</div>`:''}<div class="mxh"><span class="mut">${mixed?esc(footLgName(m.lg)):''}</span>${pill}<span class="mxs">${mpickStar(m)}</span></div><div class="mxr"><div class="mxt">${footLogo(m.hl,28)}<b>${esc(m.hn)}</b></div><div class="mxsc">${sc}${m.pen?`<div class="mxpen">TAB ${m.pen.h} – ${m.pen.a}</div>`:''}</div><div class="mxt r"><b>${esc(m.an)}</b>${footLogo(m.al,28)}</div></div>${pr?`<div class="mxb"><div style="width:${pr}%"></div></div>`:''}${(m.pen&&m.pen.k.length)?(()=>{ const kd=sd=>m.pen.k.filter(z=>z.s===sd).map(z=>`<i class="pk ${z.ok?'ok':'no'}" title="${z.ok?'Réussi':'Manqué'}"></i>`).join(''); return `<div class="mxso"><div>${kd('h')}</div><div style="text-align:right">${kd('a')}</div></div>`; })():''}${vNew?`<div class="mxv">❌ <b>But annulé</b> <span>· score ${esc(c.old)} → ${m.hs}-${m.as}</span></div>`:''}${m.ev.length?`<div class="mxe"><div>${evl3('h')}</div><div style="text-align:right">${evl3('a')}</div></div>`:''}</div>`; };
   const cardPre=m=>{ const fv=nfav.foot.includes(m.hid)||nfav.foot.includes(m.aid), bg=stuFootBig(m);
     const lo=(u,n)=>`<span class="mx-lg">${footLogo(u,32)||esc(String(n||'?').slice(0,2).toUpperCase())}</span>`;
     return `<div class="mxc mxp2${fv?' fv':''}${bg?' big':''}" style="${tcStyle(m.hc)}" data-act="fmatch" data-id="${esc(m.id)}">${bg?`<div class="bigtag">🔥 ${esc(bg)}</div>`:''}<div class="mxa"><div class="mxt">${lo(m.hl,m.hn)}<b>${esc(m.hn)}</b></div><div class="mxvs">VS${mixed?`<small>${esc(footLgName(m.lg))}</small>`:''}</div><div class="mxt r"><b>${esc(m.an)}</b>${lo(m.al,m.an)}</div><span class="mxs">${mpickStar(m)}</span></div></div>`; };
@@ -2849,6 +2850,12 @@ function liveItem(kind,lg,e){
   if(kind==='f'){ it.ev=(c.details||[]).filter(x=>(x.scoringPlay||x.redCard)&&!x.shootout).map(x=>{ const ai=(x.athletesInvolved||[])[0]||{}, tid=String((x.team||{}).id||'');
       return {g:!!x.scoringPlay,rc:!!x.redCard&&!x.scoringPlay,og:!!x.ownGoal,pg:!!x.penaltyKick,m:(x.clock&&x.clock.displayValue)||'',p:ai.shortName||ai.displayName||'',s:tid===it.h.id?'h':tid===it.a.id?'a':''}; }); }
   else { const tp=x=>{ const l=(x.leaders||[]).find(y=>y.name==='points'), t=l&&l.leaders&&l.leaders[0]; return t&&t.athlete?(t.athlete.shortName||t.athlete.displayName)+' '+(t.displayValue||'')+' pts':''; }; it.h.top=tp(h); it.a.top=tp(a); }
+  if(kind==='f'){   // tirs au but : score de la séance (shootoutScore) et chaque tir (reussi / manqué) ; affichés seulement s'il y en a
+    const k=(c.details||[]).filter(x=>x.shootout).map(x=>{ const tid=String((x.team||{}).id||''); return {s:tid===it.h.id?'h':tid===it.a.id?'a':'',ok:!!x.scoringPlay}; }).filter(z=>z.s);
+    const sp=t=>(t&&t.shootoutScore!=null&&t.shootoutScore!=='')?+t.shootoutScore:null; let ph=sp(h), pa=sp(a);
+    if(ph==null&&pa==null&&k.length){ ph=k.filter(z=>z.s==='h'&&z.ok).length; pa=k.filter(z=>z.s==='a'&&z.ok).length; }
+    if((ph!=null||pa!=null)&&((ph||0)+(pa||0)>0||k.length||/SHOOTOUT|FINAL_PEN|PENALT/.test(sn))) it.pen={h:ph||0,a:pa||0,k};
+  }
   if(kind==='f'){ const m=/(\d+)'?(?:\s*\+\s*(\d+))?/.exec(clk); it.run=/FIRST_HALF|SECOND_HALF|EXTRA/.test(sn)&&!!m; if(m){ it.m=+m[1]; it.p=m[2]!=null?+m[2]:null; } }
   return it;
 }
@@ -2895,6 +2902,9 @@ function liveFootRow(x,mine,rk,go,fl,barHtml,lg){
     const isNew=last.rc?(now-rt<10000):(!!mem.sd&&!mem.vd&&age<10000);
     lastHtml=`<div class="lm-last${last.rc?' rc':''}${isNew?(last.rc?' newr':' new'):''}"><span>${last.rc?'🟥':'⚽'} <b>${esc(last.m||'')}</b> ${esc(last.p||'?')}${tag} <span class="mut">· ${esc(tm)}</span>${isNew?' <span class="lm-new">Nouveau</span>':''}</span>${when?`<span class="mut">${when}</span>`:''}</div>`;
   }
+  // séance de tirs au but : remplace la ligne du dernier événement
+  if(x.pen&&x.pen.k.length){ const kd=sd=>x.pen.k.filter(z=>z.s===sd).map(z=>`<i class="pk ${z.ok?'ok':'no'}" title="${z.ok?'Réussi':'Manqué'}"></i>`).join('');
+    lastHtml=`<div class="lm-last pen"><span><b>${esc(x.h.n)}</b> <span class="pks">${kd('h')}</span></span><span><span class="pks">${kd('a')}</span> <b>${esc(x.a.n)}</b></span></div>`; }
   // classement provisoire : pour mes clubs ; sinon pour le club dont la place change le plus
   let rkHtml='';
   if(rk){
@@ -2908,7 +2918,7 @@ function liveFootRow(x,mine,rk,go,fl,barHtml,lg){
   }
   return `<div class="liverow lmatch${fl}${mine?' mine':''}" style="${tcStyle(x.h.c)}"${go}>
     <div class="lm-top"><span class="mut">${mine?'⭐ ':''}${esc(lg)}</span><span class="lm-min${pause?' pause':''}">${run?'<i class="lm-dot"></i>':''}${esc(liveText(x))}</span></div>
-    <div class="lm-row"><div class="lm-t">${lo(x.h)}<b>${esc(x.h.n)}</b></div><div class="lm-s"><span class="${fx('h',x.h.s,0)}">${x.h.s}</span><small>–</small><span class="${fx('a',x.a.s,1)}">${x.a.s}</span></div><div class="lm-t">${lo(x.a)}<b>${esc(x.a.n)}</b></div></div>
+    <div class="lm-row"><div class="lm-t">${lo(x.h)}<b>${esc(x.h.n)}</b></div><div class="lm-mid"><div class="lm-s"><span class="${fx('h',x.h.s,0)}">${x.h.s}</span><small>–</small><span class="${fx('a',x.a.s,1)}">${x.a.s}</span></div>${x.pen?`<div class="lm-pen">TAB ${x.pen.h} – ${x.pen.a}</div>`:''}</div><div class="lm-t">${lo(x.a)}<b>${esc(x.a.n)}</b></div></div>
     ${barHtml}${lastHtml}${rkHtml?`<div class="lm-rks">${rkHtml}</div>`:''}</div>`;
 }
 function liveRender(){
