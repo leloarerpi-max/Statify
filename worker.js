@@ -10,7 +10,14 @@ const SETTINGS = {
   everySeconds: 20,                                   // délai entre deux vérifications pendant un match (min. 10)
   multiplex: true,                                    // alertes « Multiplex » (3 matchs ou plus qui démarrent ensemble)
   multiplexLeagues: ['fra.1', 'uefa.champions'],      // championnats concernés
-  alerts: { kickoff: true, score: true, final: true } // types d'alertes
+  alerts: {                                           // types d'alertes (true = activée, false = coupée)
+    kickoff: true,                                    //   coup d'envoi (≈ 20 min avant)
+    score: true,                                      //   buts, buts annulés (VAR), score actuel si le robot arrive en cours de match
+    final: true,                                      //   score final
+    redCard: true,                                    //   cartons rouges (foot)
+    halfTime: true,                                   //   mi-temps (foot)
+    extraTime: true                                   //   prolongations et tirs au but (foot)
+  }
 };
 // Secrets à créer dans Cloudflare : NTFY_TOPIC (nom secret ntfy), SYNC_KEY (mot de passe partagé avec Statify) et NTFY_TOKEN (jeton de ton compte ntfy).
 // Espace de stockage (KV) à lier sous le nom : STATE.
@@ -157,6 +164,27 @@ async function run(env) {
     }
   }
 
+  // --- événements du match (buteur, minute, penalty, csc, cartons) : ESPN les range dans competitions[0].details ---
+  const frDe = n => /^Le /.test(n) ? 'du ' + n.slice(3) : /^Les /.test(n) ? 'des ' + n.slice(4) : /^[AEIOUÉÈÂÎHaeiouéèh]/.test(n) ? "d'" + n : 'de ' + n;
+  const tname = t => t.team.shortDisplayName || t.team.displayName;
+  const detailsOf = e => e.competitions?.[0]?.details || [];
+  const who = x => { const ai = (x.athletesInvolved || [])[0] || {}; return ai.shortName || ai.displayName || ''; };
+  const tag = x => x.ownGoal ? ' (csc)' : x.penaltyKick ? ' (pen.)' : '';
+  // dernier but d'une équipe, uniquement si le nombre de buts listés colle avec le score (sinon on ne devine pas le buteur)
+  function lastGoal(e, team, n) {
+    const gl = detailsOf(e).filter(x => x.scoringPlay && !x.shootout && String(x.team?.id) === String(team.team.id));
+    return gl.length && gl.length === n ? gl[gl.length - 1] : null;
+  }
+  const goalLine = g => g ? `⚽ ${who(g)} ${g.clock?.displayValue || ''}${tag(g)}`.replace(/\s+/g, ' ').trim() : '';
+  // compare l'ancien et le nouveau score : [{ type: 'void' }] si un score a baissé (but annulé), puis un { type: 'goal', t, g } par équipe qui a marqué
+  function scoreChanges(e, h, a, old, cur) {
+    const out = [];
+    if (cur[0] < old[0] || cur[1] < old[1]) out.push({ type: 'void' });
+    [[h, old[0], cur[0]], [a, old[1], cur[1]]].forEach(([t, o, n]) => { if (n > o) out.push({ type: 'goal', t, g: lastGoal(e, t, n) }); });
+    return out;
+  }
+  const parseSc = v => { const m = /^(\d+)-(\d+)$/.exec(v || ''); return m ? [+m[1], +m[2]] : null; };
+
   // --- alertes d'un match de mes équipes ---
   function handle(e, kind, label) {
     const lgName = kind === 'nba' ? 'NBA' : (LGN[label] || label), ico = kind === 'nba' ? '🏀' : '⚽';
@@ -166,15 +194,43 @@ async function run(env) {
     const state = e.status?.type?.state, start = Date.parse(e.date);
     const score = `${name(h)} ${h.score ?? 0} - ${a.score ?? 0} ${name(a)}`;
     const s = (st[e.id] ||= {});
+    const clk = e.status?.displayClock ? ` (${e.status.displayClock})` : '', sn = e.status?.type?.name || '';
+    if (kind === 'foot' && state === 'pre') { s.sc ??= '0-0'; s.rc ??= 0; }     // match pas commencé : on part de 0-0 et 0 carton rouge
     if (alerts.kickoff && state === 'pre' && !s.k && start - now <= 20 * 60e3 && start - now > -5 * 60e3) {
       s.k = 1; push(`⏰ Coup d'envoi à ${hm(e.date)} · ${lgName}`, `${ico} ${name(h)} - ${name(a)}`, () => { delete s.k; });
     }
     // le multiplex ne couvre que les matchs de son groupe : les autres matchs de mes clubs gardent leur alerte « BUT ! »
     const inMx = mx.enabled && mx.leagues.includes(label) && Object.keys(st).some(k => k.startsWith(`mx:${label}:`) && (st[k].ids || []).includes(String(e.id)) && now - Number(k.split(':')[2]) < 3.5 * 3600e3 && now >= Number(k.split(':')[2]) - 5 * 60e3);
     if (alerts.score && kind === 'foot' && state === 'in' && !inMx) {
-      const sc = `${h.score}-${a.score}`, old = s.sc;
-      if (old !== undefined && old !== sc) push(`⚽ BUT ! · ${lgName}`, `${score}${e.status?.displayClock ? ` (${e.status.displayClock})` : ''}`, () => { s.sc = old; });
+      const sc = `${h.score ?? 0}-${a.score ?? 0}`, old = s.sc, o = parseSc(old), cur = parseSc(sc);
+      if (old === undefined) {
+        // le robot découvre un match déjà commencé (réveil tardif, mémoire vidée) : il donne le score au lieu de le taire
+        if (cur && cur[0] + cur[1] > 0) push(`📊 Score actuel · ${lgName}`, `${score}${clk}`, () => { delete s.sc; });
+      } else if (o && cur && old !== sc) {
+        for (const c of scoreChanges(e, h, a, o, cur)) {
+          if (c.type === 'void') push(`❌ But annulé · ${lgName}`, `${score}${clk}`, () => { s.sc = old; });
+          else push(`⚽ But ${frDe(name(c.t))} · ${lgName}`, `${score}${c.g ? '\n' + goalLine(c.g) : clk}`, () => { s.sc = old; });
+        }
+      }
       s.sc = sc;
+    }
+    if (kind === 'foot' && state === 'in') {
+      // cartons rouges : un message par nouveau carton (3 au plus d'un coup)
+      if (alerts.redCard) {
+        const reds = detailsOf(e).filter(x => x.redCard && !x.scoringPlay && !x.shootout);
+        if (s.rc === undefined) s.rc = reds.length;                       // première vue en cours de match : on ne rejoue pas l'historique
+        else if (reds.length > s.rc) {
+          const before = s.rc; s.rc = reds.length;
+          reds.slice(before, before + 3).forEach(x => {
+            const tm = [h, a].find(t => String(t.team.id) === String(x.team?.id));
+            push(`🟥 Carton rouge · ${lgName}`, `${score}\n🟥 ${who(x) || 'Joueur'}${tm ? ` (${name(tm)})` : ''} ${x.clock?.displayValue || ''}`.trim(), () => { s.rc = before; });
+          });
+        }
+      }
+      // noms de statut ESPN : le nom exact des prolongations / tirs au but est à confirmer sur un vrai match
+      if (alerts.halfTime && /HALFTIME/.test(sn) && !s.ht) { s.ht = 1; push(`⏸ Mi-temps · ${lgName}`, score, () => { delete s.ht; }); }
+      if (alerts.extraTime && /EXTRA/.test(sn) && !s.et) { s.et = 1; push(`⏱ Prolongations · ${lgName}`, score, () => { delete s.et; }); }
+      if (alerts.extraTime && /SHOOTOUT/.test(sn) && !s.so) { s.so = 1; push(`🥅 Tirs au but · ${lgName}`, score, () => { delete s.so; }); }
     }
     if (alerts.final && state === 'post' && !s.f && now - start < 8 * 3600e3) {
       s.f = 1; push(`🏁 Terminé · ${lgName}`, `${ico} ${score}`, () => { delete s.f; });
@@ -221,12 +277,17 @@ async function run(env) {
           if (p && (p[0] !== cur[0] || p[1] !== cur[1])) changes.push({ e, h, a, p, cur }); }
         let base = null; if (changes.length) base = await standings(lg);
         for (const ch of changes) {
-          const { e, h, a, p, cur } = ch, scorer = cur[0] > p[0] ? h : a, nm = t => t.team.shortDisplayName || t.team.displayName;
-          let rk = '';
-          if (base && base.length) { const before = project(base, [e], { [e.id]: p }), after = project(base, [e]), id = String(scorer.team.id);
-            const o = n => n === 1 ? '1er' : n + 'e';
-            if (before[id] && after[id]) rk = before[id].nr !== after[id].nr ? ` · ${nm(scorer)} ${after[id].nr < before[id].nr ? 'passe' : 'tombe'} ${o(before[id].nr)} → ${o(after[id].nr)}` : ` · ${nm(scorer)} ${o(after[id].nr)}`; }
-          push(`🚨 But à ${nm(scorer)} (${label})`, `${nm(h)} ${cur[0]} - ${cur[1]} ${nm(a)}${e.status?.displayClock ? ` (${e.status.displayClock})` : ''}${rk}`, () => { prev[e.id] = p; });
+          const { e, h, a, p, cur } = ch, nm = tname, sc = `${nm(h)} ${cur[0]} - ${cur[1]} ${nm(a)}`, clk = e.status?.displayClock ? ` (${e.status.displayClock})` : '';
+          for (const c of scoreChanges(e, h, a, p, cur)) {
+            // score qui baisse = but annulé (avant, il était annoncé comme un but de l'équipe adverse)
+            if (c.type === 'void') { push(`❌ But annulé (${label})`, `${sc}${clk}`, () => { prev[e.id] = p; }); continue; }
+            const scorer = c.t;
+            let rk = '';
+            if (base && base.length) { const before = project(base, [e], { [e.id]: p }), after = project(base, [e]), id = String(scorer.team.id);
+              const o = n => n === 1 ? '1er' : n + 'e';
+              if (before[id] && after[id]) rk = before[id].nr !== after[id].nr ? ` · ${nm(scorer)} ${after[id].nr < before[id].nr ? 'passe' : 'tombe'} ${o(before[id].nr)} → ${o(after[id].nr)}` : ` · ${nm(scorer)} ${o(after[id].nr)}`; }
+            push(`🚨 But à ${nm(scorer)} (${label})`, `${sc}${c.g ? '\n' + goalLine(c.g) : clk}${rk}`, () => { prev[e.id] = p; });
+          }
         }
         for (const e of live) { const [h, a] = sides(e) || []; if (h && a) prev[e.id] = [+h.score || 0, +a.score || 0]; }
       }

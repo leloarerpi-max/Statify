@@ -2,7 +2,10 @@
 
 Un petit « robot » gratuit tourne chez Cloudflare. Il connaît tes équipes à étoile dorée (Statify les lui envoie tout seul) et t'envoie une notification pour :
 - ⏰ le coup d'envoi (≈ 20 min avant)
-- ⚽🏀 chaque but / changement de score
+- ⚽🏀 chaque but / changement de score (foot : avec le buteur, la minute, « pen. » ou « csc »)
+- ❌ un but annulé par la VAR (foot)
+- 🟥 un carton rouge, ⏸ la mi-temps, ⏱ les prolongations, 🥅 les tirs au but (foot)
+- 📊 le score actuel, si le robot découvre un match déjà commencé
 - 🏁 le score final
 - 🔥 le multiplex (3 matchs ou plus d'un même championnat qui démarrent ensemble) : chaque but de tous les matchs, avec l'évolution au classement
 
@@ -21,6 +24,7 @@ Pendant un match, il vérifie les scores toutes les ~20 secondes. Le reste du te
 **4. Les deux secrets** : Worker → **Settings** → **Variables and Secrets** → **Add** (type *Secret*) :
 - `NTFY_TOPIC` = ton nom secret ntfy de l'étape 1
 - `SYNC_KEY` = un mot de passe de ton choix (long), que tu colleras aussi dans Statify
+- `NTFY_TOKEN` (conseillé) = le jeton de ton compte ntfy ; sans lui, ntfy peut refuser les envois venant de Cloudflare (erreur 429)
 
 **5. Le réveil chaque minute** : Worker → **Settings** → **Triggers** → **Add Cron Trigger** → `* * * * *`.
 
