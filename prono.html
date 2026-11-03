@@ -36,7 +36,7 @@
         </div>
       </div>
       
-      <div class="flex items-center gap-2 w-full md:w-auto">
+      <div id="hdrActions" class="flex items-center gap-2 w-full md:w-auto">
         <button id="syncBtn" onclick="openSyncModal()" title="Synchronisation entre appareils" class="flex-1 md:flex-none justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 sm:px-3.5 py-2.5 rounded-xl border border-slate-200 flex items-center gap-1.5 transition shadow-sm"><i id="syncIcon" class="fa-solid fa-cloud text-slate-400"></i><span id="syncLabel">Sync</span><span id="syncDot" class="w-2 h-2 rounded-full bg-slate-300"></span></button>
         <button id="btnTheme" type="button" title="Thème clair / sombre" aria-label="Thème clair / sombre" class="flex-1 md:flex-none justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 sm:px-3.5 py-2.5 rounded-xl border border-slate-200 flex items-center gap-1.5 transition">🌓</button>
         <select id="ambianceSelect" onchange="changerAmbiance(this.value)" title="Ambiance du fond" class="flex-1 md:flex-none"></select>
@@ -84,8 +84,8 @@
     <div id="impactBar" class="impact-bar">
       <div class="ib-cell"><span>Solo</span><b id="ibSolo">—</b></div>
       <div class="ib-cell"><span>Combiné</span><b id="ibCombo">—</b></div>
-      <div class="ib-cell"><span>Jour solo</span><b id="ibJour">—</b></div>
-      <div class="ib-cell"><span>Jour combiné</span><b id="ibJourC">—</b></div>
+      <div class="ib-cell"><span><i class="l-lg">Jour solo</i><i class="l-sm">J. solo</i></span><b id="ibJour">—</b></div>
+      <div class="ib-cell"><span><i class="l-lg">Jour combiné</i><i class="l-sm">J. combiné</i></span><b id="ibJourC">—</b></div>
       <button type="button" class="ib-cell ib-btn" onclick="rgAller('histo','quickSettle')" title="Voir les paris à régler"><span>En attente</span><b id="ibAttente">0</b></button>
       <button type="button" id="ibLive" class="ib-live hidden" onclick="rgAller('histo','quickSettle')"><i class="fa-solid fa-circle"></i> <span id="ibLiveN">0</span><span class="ib-live-t"> en direct</span></button>
       <button type="button" class="ib-add" onclick="rgAller('histo','formCard')" title="Ajouter un pari"><i class="fa-solid fa-plus"></i><span class="ib-add-t"> Pari</span></button>
@@ -260,7 +260,7 @@
           </div>
 
           <div id="activeFiltersBanner" class="hidden flex-wrap items-center gap-2 w-full sm:w-auto"></div>
-          <div class="flex items-center gap-2 w-full sm:w-auto">
+          <div id="filtresRow" class="flex items-center gap-2 w-full sm:w-auto">
             <div class="relative flex-1">
               <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
               <input type="text" id="searchInput" oninput="renderAfterFilterChange()" placeholder="Rechercher... (ou #12)" class="input-field text-xs pl-8 py-1.5 w-full">

@@ -423,3 +423,28 @@ select option{background-color:var(--card);color:var(--txt)}
 @media (min-width:1024px){#trackerViewContent>#resumeJour{grid-column:1/-1;margin-top:0}}
 
 #trackerViewContent.hidden{display:none!important}
+
+/* ===== AJUSTEMENTS PORTABLE ===== */
+@media (max-width:767px){
+  #hdrActions{flex-wrap:wrap}
+  #hdrActions>*{flex:1 1 30%!important;min-width:0}
+  #hdrActions>#ambianceSelect{flex:1 1 100%!important}
+}
+@media (max-width:600px){
+  .impact-bar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr)) auto;gap:2px;padding:6px 6px}
+  .ib-cell{padding:2px 3px;min-width:0;overflow:hidden}
+  .ib-cell span{font-size:8.5px;letter-spacing:0;text-overflow:ellipsis;overflow:hidden}
+  .ib-cell b{font-size:12.5px;text-overflow:ellipsis;overflow:hidden}
+  .ib-live{grid-column:1/-1;justify-content:center;order:9}
+  .ib-add{padding:0 12px}
+  #quickSettle h3{white-space:nowrap}
+  #quickSettle .qs-pill{white-space:nowrap;font-size:10px;padding:1px 7px}
+  .qs-opts{flex-direction:column;gap:6px}
+  .qs-opts label{flex-wrap:wrap;line-height:1.3}
+  .resume-jour{font-size:11.5px;margin-top:-1.25rem}
+}
+
+.ib-cell i{font-style:normal}.l-sm{display:none}
+@media (max-width:600px){.l-lg{display:none}.l-sm{display:inline}}
+
+@media (max-width:639px){#filtresRow{flex-wrap:wrap}#filtresRow>*{min-width:0}#filtresRow>.relative{flex:1 1 100%}#filtresRow select{flex:1 1 40%;max-width:none!important}}
