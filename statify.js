@@ -2176,6 +2176,10 @@ function multiBanner(){
   return D.slice(0,2).map(d=>{ const iso=new Date(d.start).toISOString(), live=d.ms.some(m=>m.st==='in'), hr=+new Date(iso).toLocaleTimeString('fr-FR',{timeZone:'Europe/Paris',hour:'2-digit',hour12:false}).slice(0,2), day=parisDK(iso)===today?(hr>=18?'ce soir':'aujourd\'hui'):(hr>=18?'demain soir':'demain');
     return `<div class="card" style="border-left:4px solid #e04030"><div class="row between"><div>🔥 <b>Multiplex ${esc(footLgName(d.lg))} ${live?'en cours':day}</b> : ${d.ms.length} matchs à ${esc(parisT(iso))}</div><div class="row" style="gap:6px"><button data-act="multigo" data-lg="${esc(d.lg)}" data-d="${esc(parisDK(iso))}">${live?'Suivre en direct':'Ouvrir'}</button><button class="sec" data-act="mbanx" data-k="${esc(d.lg+':'+d.start)}" title="Masquer cette bannière">✕</button></div></div></div>`; }).join('');
 }
+const mxHeroOpen=()=>{ try{ return localStorage.getItem('suivi-multi-hero')==='1'; }catch(e){ return false; } };   // bandeau d'en-tête du multiplex : caché par défaut
+const lrkM={};   // mémoire du classement live du multiplex par championnat+club : détecte « 2e → 1er »
+let mxNext=Infinity, mxT=0;   // prochain effet visuel à faire disparaître (ms) ; minuteur de redessin
+function mxLater(ms){ clearTimeout(mxT); mxT=setTimeout(()=>{ try{ if(ui.sport==='foot'&&ui.ftab==='multi'&&!document.querySelector('input:focus,select:focus,textarea:focus')) render(); }catch(e){} },Math.max(200,ms)+150); }
 function multiTable(lg,ms){
   const LG=foot.leagues[lg]; if(!LG||!LG.standings.length) return '';
   const upd=LG.upd||0, rows=LG.standings.map(r=>({...r,np:r.pts,ngd:r.gd,ngf:r.gf,pl:null})), by=Object.fromEntries(rows.map(r=>[r.id,r]));
@@ -2183,10 +2187,14 @@ function multiTable(lg,ms){
   for(const m of ms){ if(m.st!=='in'&&m.st!=='post') continue; const tt=Date.parse(m.d); if(m.st==='post'&&upd>=tt+115*6e4) continue; used++;
     for(const [id,gf,ga] of [[m.hid,m.hs,m.as],[m.aid,m.as,m.hs]]){ const r=by[id]; if(!r) continue; r.np+=gf>ga?3:gf===ga?1:0; r.ngd+=gf-ga; r.ngf+=gf; r.pl=m; r.res=(gf>ga?'gagne ':gf<ga?'perd ':'nul ')+gf+'-'+ga; } }
   const zoneAt=LG.standings.map(r=>r.zone), srt=[...rows].sort((a,b)=>b.np-a.np||b.ngd-a.ngd||b.ngf-a.ngf||a.rank-b.rank); srt.forEach((r,i)=>{ r.nr=i+1; });
-  const body=srt.map(r=>{ const mv=r.rank-r.nr, ar=mv>0?`<span style="color:var(--ok)">▲${mv}</span>`:mv<0?`<span style="color:var(--bad)">▼${-mv}</span>`:'<span class="mut">=</span>',
+  const tnow=Date.now();
+  for(const r of srt){ const k=lg+':'+r.id, mm=lrkM[k];   // un club pas vu depuis 2 min (onglet fermé) repart de sa place actuelle, sans effet
+    if(!mm||tnow-mm.seen>12e4) lrkM[k]={nr:r.nr,from:null,t:0,seen:tnow}; else { if(mm.nr!==r.nr){ mm.from=mm.nr; mm.nr=r.nr; mm.t=tnow; } mm.seen=tnow; } }
+  const body=srt.map(r=>{ const mv=r.rank-r.nr, mm=lrkM[lg+':'+r.id], hl=mm.from!=null&&tnow-mm.t<8000, hup=hl&&r.nr<mm.from;
+    if(hl) mxNext=Math.min(mxNext,8000-(tnow-mm.t)); ar=mv>0?`<span style="color:var(--ok)">▲${mv}</span>`:mv<0?`<span style="color:var(--bad)">▼${-mv}</span>`:'<span class="mut">=</span>',
     z=zoneAt[r.nr-1], z0=r.zone, ch=mv!==0&&z&&(!z0||z.d!==z0.d), tag=ch?`<span style="display:block;font-size:11px;color:${esc(z.c||'var(--mut)')}">→ ${esc(zoneFr(z.d))}</span>`:'';
     const sc=r.pl?` <span class="mut" style="font-size:12px">(${r.pl.st==='in'?r.res:r.res.replace(/^gagne/,'a gagné').replace(/^perd/,'a perdu').replace(/^nul/,'nul,')})</span>`:'';
-    return `<tr class="${r.pl?'favrow':''}"><td>${r.nr}</td><td>${ar}</td><td class="l">${footLogo(r.logo,18)}${esc(r.name)}${sc}${tag}</td><td><b>${r.np}</b></td><td>${r.ngd>0?'+':''}${r.ngd}</td></tr>`; }).join('');
+    return `<tr class="${r.pl?'favrow':''}${hl?(hup?' rkup':' rkdn'):''}"><td>${r.nr}</td><td>${ar}</td><td class="l">${footLogo(r.logo,18)}${esc(r.name)}${hl?`<span class="rkchg">${ordFr(mm.from)} → ${ordFr(r.nr)}</span>`:''}${sc}${tag}</td><td><b>${r.np}</b></td><td>${r.ngd>0?'+':''}${r.ngd}</td></tr>`; }).join('');
   return `<div class="card"><h2>📈 Classement live <span class="mut" style="font-weight:400;font-size:12px">· projeté avec les scores du moment${used?'':' (aucun match commencé)'}</span></h2><div class="scroll"><table><thead><tr><th>#</th><th></th><th class="l">Club</th><th>Pts</th><th>Diff.</th></tr></thead><tbody>${body}</tbody></table></div><p class="mut" style="font-size:12px;margin:6px 0 0">Basé sur le dernier classement chargé : « ▲▼ » = places gagnées ou perdues si les scores restent ainsi.</p></div>`;
 }
 function multiBilan(ms){
@@ -2225,6 +2233,7 @@ function multiSet(lg){
   return M.filter(m=>m.lg===lg&&multiWin(m)).sort(byT);
 }
 function footMultiView(){
+  mxNext=Infinity;
   if(ui.fMultiDay&&ui.fMultiDay<todayDK()) ui.fMultiDay=null;
   const now=Date.now(), day=multiDay(), M=Object.values(multiAll()), det=multiDetect().filter(d=>dayDK(d.start)===day||(day===todayDK()&&d.ms.some(m=>m.st==='in')));
   const dbar=`<div class="row" style="gap:6px;margin:0 0 10px;flex-wrap:wrap;align-items:center">${multiDays().map(d=>`<button class="${d===day?'':'sec'} fbtn" data-act="mday" data-d="${d}">${esc(dayLabel(d))}</button>`).join('')}<button class="sec fbtn" data-act="multiclose" title="Fermer le multiplex" style="margin-left:auto">✕ Fermer</button></div>`;
@@ -2240,9 +2249,16 @@ function footMultiView(){
   const prog=m=>{ const t=String(m.txt||''); if(/mi-?temps|half/i.test(t)) return 50; const k=t.match(/(\d+)/); return k?Math.max(2,Math.min(100,Math.round(+k[1]/90*100))):0; };
   const evl2=(m,sd)=>m.ev.filter(e=>e.s===sd).sort((x,y)=>x.min-y.min).map(e=>`<div>${e.t==='rc'?'🟥':'⚽'} ${esc(e.p||'?')} <span>${esc(e.ms||e.min+"'")}${e.t==='og'?' (csc)':e.t==='pg'?' (pen.)':''}</span></div>`).join('');
   const card=m=>{ const c=liveMem['f'+m.id], recent=c&&c.chg&&now-c.chg<90000, fv=nfav.foot.includes(m.hid)||nfav.foot.includes(m.aid), pk=!!mpick[m.id], lv=m.st==='in';
+    // « moment du but » : score qui grossit (1,5 s), dernier événement « Nouveau » (10 s), but annulé (10 s)
+    const age=c&&c.chg?now-c.chg:1e9, rt=liveMem['rt'+m.id]||0, fresh=age<1500, od=String((c&&c.old)||'').split('-').map(Number);
+    const fx=(side,sv,i)=>!fresh?'':(c.vd&&sv<od[i])?'shk':(c.sd===side&&!c.vd)?'pop':'';
+    const rcNew=!!rt&&now-rt<10000, gNew=!!(c&&c.sd&&!c.vd&&age<10000), vNew=!!(c&&c.vd&&age<10000&&rt<=c.chg);
+    let nw=null; if(!vNew){ const ev=m.ev||[]; for(let k=ev.length-1;k>=0;k--){ if(rcNew?ev[k].t==='rc':(gNew&&ev[k].s===c.sd&&ev[k].t!=='rc')){ nw=ev[k]; break; } } }
+    if(vNew) mxNext=Math.min(mxNext,10000-age); else if(nw) mxNext=Math.min(mxNext,10000-(rcNew?now-rt:age));
+    const evl3=(sd)=>m.ev.filter(e=>e.s===sd).sort((x,y)=>x.min-y.min).map(e=>`<div${e===nw?' class="mxnw"':''}>${e.t==='rc'?'🟥':'⚽'} ${esc(e.p||'?')} <span>${esc(e.ms||e.min+"'")}${e.t==='og'?' (csc)':e.t==='pg'?' (pen.)':''}</span>${e===nw?'<b class="lm-new">Nouveau</b>':''}</div>`).join('');
     const pill=m.st==='pre'?`<span class="mxp pre">${esc(parisT(m.d))}</span>`:m.st==='post'?'<span class="mxp fin">TERMINÉ</span>':`<span class="mxp live"><i></i>${esc(m.txt||'En cours')}</span>`;
-    const pr=lv?prog(m):0, sc=m.st==='pre'?'<span class="mut">–</span>':`${m.hs}<small>:</small>${m.as}`;
-    const bg=stuFootBig(m); return `<div class="mxc${fv?' fv':''}${recent?' gl':''}${bg?' big':''}" data-act="fmatch" data-id="${esc(m.id)}">${bg?`<div class="bigtag">🔥 ${esc(bg)}</div>`:''}${recent?`<div class="mxg">⚽ BUT ! · il y a ${Math.max(1,Math.round((now-c.chg)/1000))} s</div>`:''}<div class="mxh"><span class="mut">${mixed?esc(footLgName(m.lg)):''}</span>${pill}<span class="mxs">${mpickStar(m)}</span></div><div class="mxr"><div class="mxt">${footLogo(m.hl,28)}<b>${esc(m.hn)}</b></div><div class="mxsc">${sc}</div><div class="mxt r"><b>${esc(m.an)}</b>${footLogo(m.al,28)}</div></div>${pr?`<div class="mxb"><div style="width:${pr}%"></div></div>`:''}${m.ev.length?`<div class="mxe"><div>${evl2(m,'h')}</div><div style="text-align:right">${evl2(m,'a')}</div></div>`:''}</div>`; };
+    const pr=lv?prog(m):0, sc=m.st==='pre'?'<span class="mut">–</span>':`<span class="${fx('h',m.hs,0)}">${m.hs}</span><small>:</small><span class="${fx('a',m.as,1)}">${m.as}</span>`;
+    const bg=stuFootBig(m); return `<div class="mxc${fv?' fv':''}${recent?' gl':''}${bg?' big':''}" data-act="fmatch" data-id="${esc(m.id)}">${bg?`<div class="bigtag">🔥 ${esc(bg)}</div>`:''}${recent?`<div class="mxg${c.vd?' v':''}">${c.vd?'❌ BUT ANNULÉ':'⚽ BUT !'} · il y a ${Math.max(1,Math.round((now-c.chg)/1000))} s</div>`:''}<div class="mxh"><span class="mut">${mixed?esc(footLgName(m.lg)):''}</span>${pill}<span class="mxs">${mpickStar(m)}</span></div><div class="mxr"><div class="mxt">${footLogo(m.hl,28)}<b>${esc(m.hn)}</b></div><div class="mxsc">${sc}</div><div class="mxt r"><b>${esc(m.an)}</b>${footLogo(m.al,28)}</div></div>${pr?`<div class="mxb"><div style="width:${pr}%"></div></div>`:''}${vNew?`<div class="mxv">❌ <b>But annulé</b> <span>· score ${esc(c.old)} → ${m.hs}-${m.as}</span></div>`:''}${m.ev.length?`<div class="mxe"><div>${evl3('h')}</div><div style="text-align:right">${evl3('a')}</div></div>`:''}</div>`; };
   const SEC=[[0,'⚡ Ça vient de bouger'],[1,'🔴 En cours'],[2,'⏰ À venir'],[3,'🏁 Terminés']];
   const onlyLive=live>0&&!ui.mxAll, hid=onlyLive?sorted.filter(m=>rank(m)>=2).length:0;
   const secHtml=SEC.filter(([r])=>!onlyLive||r<=1).map(([r,t])=>{ const L=sorted.filter(m=>rank(m)===r); return L.length?`<div class="mxl">${t}</div>${L.map(card).join('')}`:''; }).join('')
@@ -2250,10 +2266,11 @@ function footMultiView(){
   const first=ms.length?ms[0]:null, title=lg==='all'?'🌍 Multiplex tous championnats':lg==='pick'?'⭐ Mon multiplex':`🔥 ${isMx?'Multiplex':'Soirée'} ${esc(footLgName(lg))}`;
   const empty=lg==='all'?`<p class="mut">Aucun match ${day===todayDK()?'aujourd\'hui':'ce jour-là'}.${(()=>{ const nx=M.filter(m=>m.st==='pre'&&Date.parse(m.d)>now).sort((a,b)=>Date.parse(a.d)-Date.parse(b.d))[0]; return nx?' Prochain match : '+esc(parisD(nx.d))+' à '+esc(parisT(nx.d))+'.':''; })()}</p>`:lg==='pick'?'<p class="mut">Aucun match de ta sélection ce jour-là. Choisis « 🌍 Tous les championnats » et touche ☆ sur les matchs que tu veux suivre (les matchs de tes clubs à étoile dorée y sont ajoutés d\'office).</p>':'<p class="mut">Aucun match.</p>';
   const goals=ms.reduce((n,m)=>n+(m.st==='pre'?0:(+m.hs||0)+(+m.as||0)),0), dd=new Date(Date.parse(first?first.d:Date.now())).toLocaleDateString('fr-FR',{...PARIS,weekday:'long',day:'numeric',month:'long'});
-  h+=`<div class="mxhero"><div class="row between" style="gap:10px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:0"><h2 style="margin:0">${live?'<span class="livedot"></span>':''}${title}</h2><div class="mut" style="font-size:12px;margin-top:2px;text-transform:capitalize">${esc(dd)} · heure de Paris</div></div><select id="fMulti" style="max-width:100%">${opts.map(([c,n])=>`<option value="${esc(c)}" ${c===lg?'selected':''}>${esc(n)}</option>`).join('')}</select></div>
-  <div class="mxchips"><div><b>${ms.length}</b><span>Matchs</span></div><div><b class="${live?'err':''}">${live}</b><span>En cours</span></div><div><b>${goals}</b><span>Buts</span></div></div>
+  const hOpen=mxHeroOpen();
+  h+=`<div class="mxhero${hOpen?'':' min'}"><div class="row between" style="gap:10px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:0"><h2 style="margin:0">${live?'<span class="livedot"></span>':''}${title}</h2><div class="mut" style="font-size:12px;margin-top:2px;text-transform:capitalize">${esc(dd)} · heure de Paris</div></div><div class="row" style="gap:6px;flex-wrap:nowrap;align-items:center"><select id="fMulti" style="max-width:100%">${opts.map(([c,n])=>`<option value="${esc(c)}" ${c===lg?'selected':''}>${esc(n)}</option>`).join('')}</select><button class="sec" data-act="mxhero" title="${hOpen?'Masquer les chiffres et les boutons':'Afficher les chiffres et les boutons (son de but, radio…)'}" aria-expanded="${hOpen}">${hOpen?'▴ Masquer':'▾ Détails'}</button></div></div>
+  ${hOpen?`<div class="mxchips"><div><b>${ms.length}</b><span>Matchs</span></div><div><b class="${live?'err':''}">${live}</b><span>En cours</span></div><div><b>${goals}</b><span>Buts</span></div></div>
   <div class="row" style="margin-top:12px;gap:8px"><button class="sec" data-act="sndtoggle">${sndPref()==='0'?'🔇 Son de but : coupé':'🔊 Son de but : activé'}</button><button class="sec" data-act="gbtest">▶ Tester le bandeau</button><button class="sec rb-btn" data-act="radio">${radio.on?'⏸ Couper RMC':'📻 Écouter RMC en direct'}</button></div>
-  ${ms.length?`<p class="mut" style="margin:10px 0 0;font-size:12px">${first?'Premier coup d\'envoi à '+esc(parisT(first.d))+' · ':''}touche ☆ pour ajouter un match à ta sélection</p>`:''}</div>${secHtml||`<div class="card">${empty}</div>`}`;
+  ${ms.length?`<p class="mut" style="margin:10px 0 0;font-size:12px">${first?'Premier coup d\'envoi à '+esc(parisT(first.d))+' · ':''}touche ☆ pour ajouter un match à ta sélection</p>`:''}`:''}</div>${secHtml||`<div class="card">${empty}</div>`}`;
   // classement live : un championnat à la fois
   const tl=[...new Set(ms.map(m=>m.lg))].filter(l=>foot.leagues[l]&&foot.leagues[l].standings.length);
   if(tl.length){ const liveLg=(ms.find(m=>m.st==='in')||{}).lg; let cur=ui.fMultiT; if(!tl.includes(cur)) cur=tl.includes(liveLg)?liveLg:tl[0];
@@ -2261,6 +2278,7 @@ function footMultiView(){
     if(tl.length>1) tb=tb.replace('<h2>📈 Classement live',`<div class="row" style="margin-bottom:6px"><select id="fMultiT">${tl.map(l=>`<option value="${esc(l)}" ${l===cur?'selected':''}>${esc(footLgName(l))}</option>`).join('')}</select></div><h2>📈 Classement live`);
     h+=tb; }
   h+=multiBilan(ms);
+  if(mxNext<Infinity) mxLater(mxNext);   // redessine quand « Nouveau » / le surlignage du classement doivent disparaître
   return h;
 }
 
@@ -2478,6 +2496,7 @@ function toggleFav(type,id,name){
   else if(a==='footper'){ ui.fPer=+el.dataset.i; ui.fMenu=false; render(); footRefresh(); }
   else if(a==='nbarefresh') nbaRefresh();
   else if(a==='mxall'){ ui.mxAll=!ui.mxAll; render(); }
+  else if(a==='mxhero'){ try{ localStorage.setItem('suivi-multi-hero',mxHeroOpen()?'0':'1'); }catch(e){} render(); }
   else if(a==='gbtest'){ sndUnlock(); playGoal(); goalBanner({h:{n:'Lens',s:2,l:''},a:{n:'Nantes',s:1,l:''},lg:'fra.1',id:'demo'},'h',{p:'Sotoca',m:"68'"}); }
   else if(a==='sndtoggle'){ const off=sndPref()!=='0'; try{ localStorage.setItem('suivi-snd',off?'0':'1'); }catch(e){} if(!off){ sndUnlock(); playGoal(true); } render(); }
   else if(a==='nbell'){ nfavToggle(el.dataset.k,id); }
