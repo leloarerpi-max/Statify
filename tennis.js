@@ -98,10 +98,10 @@ function ensure(){ const t=myTour();
   if(S.tab==='today'||S.tab==='mine') loadBoard(t,S.tab==='mine'?0:S.day);
   if(S.tab==='draw'){ loadBoard(t,0); const e=currentEvent(); if(e) loadDraw(t,e); }
   if(S.tab==='rank'||S.tab==='mine') loadRank(t); }
-// mise à jour automatique : toutes les 20 s s'il y a du direct ou un match imminent, sinon toutes les 3 min
+// mise à jour automatique : toutes les 30 s s'il y a du direct ou un match imminent (le scoreboard pèse ~200 Ko), sinon toutes les 3 min
 function hasLive(){ const c=S.cache.board[bKey(myTour(),0)]; return !!c&&c.ev.some(e=>e.ms.some(m=>m.st==='in'||(m.st==='pre'&&Date.parse(m.t)-Date.now()<20*6e4&&Date.parse(m.t)-Date.now()>-3*36e5))); }
 setInterval(()=>{ if(ui.sport!=='tennis'||document.hidden||S.tab==='rank') return; const c=S.cache.board[bKey(myTour(),S.tab==='today'?S.day:0)], age=Date.now()-((c&&c.t)||0), live=hasLive();
-  if((live&&age>20e3)||(!live&&age>18e4)) tennisRefresh(false); },10000);
+  if((live&&age>30e3)||(!live&&age>18e4)) tennisRefresh(false); },10000);
 
 /* ---------- 5. Données utiles aux écrans ---------- */
 const boardEvents=(tour,off)=>((S.cache.board[bKey(tour,off)]||{}).ev)||[];
@@ -212,8 +212,8 @@ function vMine(){ const t=myTour(), ids=Object.keys(S.fav), all=allMatches(t), n
 /* ---------- 11. Diagnostic ESPN ---------- */
 function diagHtml(){ const d=S.diag||{}, t=myTour();
   return `<div class="card tndiag"><div class="row between"><h2 style="margin:0">🔧 Diagnostic ESPN</h2><button class="sec" data-tn="diagx">Fermer</button></div>
-  <p class="mut" style="margin:8px 0">Pour vérifier ce qu'ESPN renvoie. « Copier le JSON brut » met la réponse dans le presse-papiers (à me coller pour ajuster la lecture). Tu peux aussi coller un JSON ci-dessous pour voir l'écran avec ces données.</p>
-  <div class="row" style="gap:6px;flex-wrap:wrap"><button class="sec" data-tn="diagrun">Tester ${t.toUpperCase()}</button><button class="sec" data-tn="diagcopy" data-v="board">Copier le scoreboard brut</button><button class="sec" data-tn="diagcopy" data-v="rank">Copier le classement brut</button></div>
+  <p class="mut" style="margin:8px 0">Pour vérifier ce qu'ESPN renvoie. « Copier un extrait » met quelques matchs dans le presse-papiers (à me coller pour ajuster la lecture). Tu peux aussi coller un JSON ci-dessous pour voir l'écran avec ces données.</p>
+  <div class="row" style="gap:6px;flex-wrap:wrap"><button class="sec" data-tn="diagrun">Tester ${t.toUpperCase()}</button><button class="sec" data-tn="diagcopy" data-v="sboard">Copier un extrait du scoreboard</button><button class="sec" data-tn="diagcopy" data-v="srank">Copier un extrait du classement</button><button class="sec" data-tn="diagcopy" data-v="board" title="Réponse complète (~200 Ko)">Brut complet</button></div>
   ${d.log?`<pre class="tnlog">${esc(d.log)}</pre>`:''}
   <textarea id="tnPaste" rows="4" placeholder="Colle ici un JSON ESPN (scoreboard ou classement)…" style="width:100%;margin-top:10px">${esc(d.paste||'')}</textarea>
   <div class="row" style="gap:6px;margin-top:6px"><button class="sec" data-tn="pasteboard">Lire comme scoreboard</button><button class="sec" data-tn="pasterank">Lire comme classement</button></div></div>`; }
@@ -221,9 +221,15 @@ async function diagRun(){ const t=myTour(), L=[]; S.diag=S.diag||{}; S.diag.log=
   const one=async(label,u,parse,count)=>{ const t0=Date.now(); try{ const r=await fetch(u,{cache:'no-store'}); const txt=await r.text(); let js=null; try{ js=JSON.parse(txt); }catch(e){}
       L.push(`${label} : HTTP ${r.status} · ${txt.length} octets · ${Date.now()-t0} ms\n  ${u}`); if(!js){ L.push('  ⚠️ réponse non JSON'); return; } const x=parse(js); L.push('  → '+count(x)); return x; }catch(e){ L.push(`${label} : ERREUR ${e.message||e}\n  ${u}`); } };
   await one('Scoreboard',SRC.board(t,''),parseBoard,x=>`${x.length} tournoi(s), ${x.reduce((n,e)=>n+e.ms.length,0)} match(s) de simple lus (${x.map(e=>e.sn+':'+e.ms.length).join(', ')||'aucun'})`);
-  for(const u of SRC.rank(t)) await one('Classement',u,parseRank,x=>`${x.length} joueur(s) classé(s)${x[0]?' · #1 '+x[0].n:''}`);
+  for(const u of SRC.rank(t)){ const x=await one('Classement',u,parseRank,x=>`${x.length} joueur(s) classé(s)${x[0]?' · #1 '+x[0].n:''}`); if(x&&x.length) break; }   // 2e adresse = secours, testée seulement si la 1re ne donne rien
   S.diag.log=L.join('\n'); redraw(); }
-async function diagCopy(kind){ const t=myTour(), u=kind==='board'?SRC.board(t,''):SRC.rank(t)[0]; let txt=''; try{ txt=await (await fetch(u,{cache:'no-store'})).text(); }catch(e){ txt='ERREUR '+(e.message||e); }
+// extrait : tournoi + 1 match en cours / à venir / terminé (ou les 3 premiers) ; classement : 3 premiers joueurs
+function trimJs(o,k){ if(Array.isArray(o)) return (k==='linescores'||k==='competitors'?o:o.slice(0,3)).map(x=>trimJs(x,k)); if(o&&typeof o==='object'){ const r={}; for(const x of Object.keys(o)) r[x]=trimJs(o[x],x); return r; } return o; }
+function sample(js,kind){ try{ if(kind==='rank') return trimJs(js);
+    const c=JSON.parse(JSON.stringify(js)); c.events=(c.events||[]).slice(0,2);
+    for(const ev of c.events){ for(const g of (ev.groupings||[])){ const L=g.competitions||[], pick=[]; for(const st of ['in','pre','post']){ const m=L.find(x=>x.status&&x.status.type&&x.status.type.state===st&&!pick.includes(x)); if(m) pick.push(m); } for(const m of L) if(pick.length<3&&!pick.includes(m)) pick.push(m); g.competitions=pick; } if(ev.competitions) ev.competitions=ev.competitions.slice(0,3); }
+    return trimJs(c); }catch(e){ return js; } }
+async function diagCopy(kind){ const t=myTour(), small=kind==='sboard'||kind==='srank', base=(kind==='board'||kind==='sboard')?'board':'rank', u=base==='board'?SRC.board(t,''):SRC.rank(t)[0]; let txt=''; try{ const raw=await (await fetch(u,{cache:'no-store'})).text(); txt=small?JSON.stringify(sample(JSON.parse(raw),base),null,1):raw; }catch(e){ txt='ERREUR '+(e.message||e); }
   let ok=false; try{ await navigator.clipboard.writeText(txt); ok=true; }catch(e){ const a=document.createElement('textarea'); a.value=txt; document.body.appendChild(a); a.select(); try{ ok=document.execCommand('copy'); }catch(x){} a.remove(); }
   S.diag=S.diag||{}; S.diag.log=(ok?`✅ Copié (${txt.length} caractères). Colle-le dans la conversation.`:'⚠️ Copie impossible : ouvre l\'adresse dans un onglet et copie le texte à la main.')+'\n'+u; redraw(); }
 function diagPaste(kind){ const el=document.getElementById('tnPaste'), txt=el?el.value:''; S.diag=S.diag||{}; S.diag.paste=txt; let js=null; try{ js=JSON.parse(txt); }catch(e){ S.diag.log='⚠️ Ce texte n\'est pas du JSON valide : '+e.message; return redraw(); }
@@ -237,7 +243,7 @@ const TABS=[['today','📅',"Aujourd'hui"],['draw','🏆','Tableau'],['rank','�
 window.tennisRender=function(){ $('#tabs').innerHTML=TABS.map(([k,i,l])=>`<button data-act="tab" data-t="${k}" class="${S.tab===k?'on':''}"><i>${i}</i><span>${esc(l)}</span></button>`).join('');
   const f={today:vToday,draw:vDraw,rank:vRank,mine:vMine}[S.tab]; $('#view').innerHTML=f(); ensure(); };
 window.tennisRefresh=tennisRefresh;
-window.Tennis={parseBoard,parseRank,roundFr,roundIdx,state:S};
+window.Tennis={parseBoard,parseRank,roundFr,roundIdx,sample,state:S};
 if(ui.sport==='tennis') render();   // le premier rendu a eu lieu avant le chargement de ce fichier
 document.addEventListener('click',e=>{ if(ui.sport!=='tennis') return;
   const tb=e.target.closest&&e.target.closest('#tabs [data-act=tab]'); if(tb){ e.stopPropagation(); e.preventDefault(); S.tab=tb.dataset.t; S.more=0; savePref(); render(); window.scrollTo(0,0); return; }
