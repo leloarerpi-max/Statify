@@ -158,6 +158,7 @@
   .lm-lg img{margin:0!important}
   .lm-s{font-weight:800;font-size:34px;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em;white-space:nowrap}
   .lm-s small{opacity:.4;margin:0 7px;font-weight:400}
+  .liveothers{margin-top:8px;font-size:13px;font-weight:600}
   .lm-mid{text-align:center}.lm-pen,.mxpen{font-size:12px;font-weight:800;letter-spacing:.05em;color:var(--warn);margin-top:4px;line-height:1.2}
   .pk{display:inline-block;width:12px;height:12px;border-radius:50%;margin:0 2px;vertical-align:-1px;box-sizing:border-box}.pk.ok{background:var(--ok)}.pk.no{border:2px solid var(--bad)}
   .lm-last.pen{justify-content:space-between}.mxso{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--line)}
