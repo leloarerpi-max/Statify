@@ -22,14 +22,15 @@ function shortN(a,full){ const s=a&&(a.shortName||a.shortDisplayName); if(s&&/^[
 function roundIdx(t){ t=String(t||'').toLowerCase();
   if(/semi/.test(t)) return 6; if(/quarter/.test(t)) return 5; if(/qualif/.test(t)) return 0; if(/\bfinal\b/.test(t)) return 7;
   let m=/round of (\d+)/.exec(t); if(m) return Math.max(1,Math.round(Math.log2(128/+m[1]))+1);
-  m=/(\d+)(?:st|nd|rd|th)\s*round/.exec(t); if(m) return +m[1]; return 3; }
+  m=/(\d+)(?:st|nd|rd|th)\s*round/.exec(t); if(m) return +m[1]; m=/^\s*round\s+(\d+)\s*$/.exec(t); if(m) return +m[1]; return 3; }
 function roundFr(t){ const i=roundIdx(t), s=String(t||'').toLowerCase(), m=/round of (\d+)/.exec(s);
   if(/qualif/.test(s)) return 'Qualifications'; if(i===7) return 'Finale'; if(i===6) return 'Demi-finales'; if(i===5) return 'Quarts de finale';
   if(m) return {16:'8es de finale',32:'16es de finale',64:'32es de finale',128:'64es de finale'}[+m[1]]||t; if(!t) return 'Tour'; return i===1?'1er tour':i+'e tour'; }
+// rk = classement explicite (rare) ; sd = « curatedRank »/tête de série d'ESPN (absent pour certains joueurs) ; le classement affiché vient de la liste « Classement »
 function pPlayer(c){ const a=c.athlete||c.player||{}, full=first(a.displayName,a.fullName,c.displayName,c.name,a.shortName)||'?';
   const ls=(c.linescores||c.sets||[]).map(l=>({g:num(first(l&&l.value,l&&l.score,l&&l.games,l)),tb:num(first(l&&l.tiebreak,l&&l.tieBreak,l&&l.tiebreakScore,l&&l.tb))})).filter(l=>l.g!=null);
-  return {id:String(first(a.id,c.id,full)),n:full,s:shortN(a,full),cc:ccOf(a),rk:num(first(c.curatedRank&&c.curatedRank.current,c.rank,a.rank,c.ranking,c.currentRank,a.ranking)),
-    sd:num(first(c.seed,c.tournamentSeed,a.seed)),w:!!c.winner,sv:!!(c.possession||c.serving||c.isServing||c.hasPossession),gm:first(c.gameScore,c.currentGame,c.points),sets:ls}; }
+  return {id:String(first(a.id,c.id,full)),n:full,s:shortN(a,full),cc:ccOf(a),rk:num(first(c.rank,a.rank,c.ranking,c.currentRank,a.ranking)),
+    sd:num(first(c.seed,c.tournamentSeed,a.seed,c.curatedRank&&c.curatedRank.current)),w:!!c.winner,sv:!!(c.possession||c.serving||c.isServing||c.hasPossession),gm:first(c.gameScore,c.currentGame,c.points),sets:ls}; }
 function pMatch(co,grp,ev){
   const gname=String(first(grp&&grp.displayName,grp&&grp.slug,grp&&grp.name,co.type&&co.type.text,co.type&&co.type.name)||'');
   if(/doubl/i.test(gname)) return null;
@@ -37,7 +38,7 @@ function pMatch(co,grp,ev){
   const [a,b]=cs.slice().sort((x,y)=>(x.order||0)-(y.order||0)).map(pPlayer);
   const tt=(co.status&&co.status.type)||{}; let st=tt.state; if(!st) st=tt.completed?'post':/progress/i.test(tt.name||tt.description||'')?'in':'pre';
   const rd=String(first(co.round&&(co.round.displayName||co.round.name),co.notes&&co.notes[0]&&co.notes[0].text)||'');
-  return {id:String(first(co.id,co.uid)||(ev.id+':'+a.id+'-'+b.id)),ev:ev.id,en:ev.sn,rd,rdf:roundFr(rd),ri:roundIdx(rd),st,t:String(first(co.date,co.startDate,co.startTime,ev.start)||''),
+  return {id:String(first(co.id,co.uid)||(ev.id+':'+a.id+'-'+b.id)),ev:ev.id,en:ev.sn,per:num(co.status&&co.status.period),rd,rdf:roundFr(rd),ri:roundIdx(rd),st,t:String(first(co.date,co.startDate,co.startTime,ev.start)||''),
     ct:String(first(co.venue&&co.venue.court,co.venue&&co.venue.fullName,co.court)||''),dsc:String(first(tt.detail,tt.description,tt.shortDetail)||''),a,b}; }
 function parseBoard(js){ const out=[];
   const evs=(js&&(js.events||(js.leagues&&js.leagues[0]&&js.leagues[0].events)||js.items))||[];
@@ -64,6 +65,7 @@ S.cache.board=S.cache.board||{}; S.cache.rank=S.cache.rank||{};
 const savePref=()=>js_(K.pref,{tab:S.tab,tour:S.tour,mine:S.mine,rankN:S.rankN});
 const saveFav=()=>js_(K.fav,S.fav);
 function saveCache(){ const ks=Object.keys(S.cache.board).sort((a,b)=>S.cache.board[b].t-S.cache.board[a].t); for(const k of ks.slice(6)) delete S.cache.board[k]; js_(K.cache,S.cache); }
+function mergeBoard(tour,evs){ for(const e of evs){ const key=tour+':'+e.id, D=S.draw[key]||(S.draw[key]={ms:{},n:e.sn,start:e.start,end:e.end,t:0}); if(!D.ms) D.ms={}; D.n=e.sn; D.start=e.start||D.start; D.end=e.end||D.end; D.t=Date.now(); for(const m of e.ms) D.ms[m.id]=m; } saveDraw(); }
 function saveDraw(){ const ks=Object.keys(S.draw).sort((a,b)=>(S.draw[b].t||0)-(S.draw[a].t||0)); for(const k of ks.slice(3)) delete S.draw[k]; js_(K.draw,S.draw); }
 const dayKey=off=>parisDK(new Date(Date.now()+off*864e5).toISOString());
 const bKey=(tour,off)=>tour+':'+dayKey(off);
@@ -75,56 +77,52 @@ async function jget(u){ const c=new AbortController(), t=setTimeout(()=>c.abort(
 function redraw(){ if(ui.sport!=='tennis') return; const a=document.activeElement; if(a&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)&&a.closest&&a.closest('#view')) return; render(); }
 async function loadBoard(tour,off,force){ const k=bKey(tour,off), c=S.cache.board[k];
   if(S.busy[k]) return; if(!force&&c&&Date.now()-c.t<25e3) return; if(Date.now()-S.pasteT<6e5&&off===0) return; if(!force&&S.errT[k]&&Date.now()-S.errT[k]<30e3) return;
-  S.busy[k]=1; try{ const js=await jget(SRC.board(tour,off===0?'':dayKey(off).replace(/-/g,''))); S.cache.board[k]={t:Date.now(),ev:parseBoard(js)}; S.err[k]=''; saveCache(); }
+  S.busy[k]=1; try{ const js=await jget(SRC.board(tour,off===0?'':dayKey(off).replace(/-/g,''))); const evs=parseBoard(js); S.cache.board[k]={t:Date.now(),ev:evs}; mergeBoard(tour,evs); S.err[k]=''; saveCache(); }
   catch(e){ S.err[k]=e.name==='AbortError'?'délai dépassé':(e.message||String(e)); S.errT[k]=Date.now(); } finally{ S.busy[k]=0; redraw(); } }
 async function loadRank(tour,force){ const c=S.cache.rank[tour]; if(S.busy['r'+tour]) return; if(!force&&c&&Date.now()-c.t<6*36e5) return; if(!force&&S.errT['r'+tour]&&Date.now()-S.errT['r'+tour]<30e3) return;
   S.busy['r'+tour]=1; let last='';
   for(const u of SRC.rank(tour)){ try{ const rows=parseRank(await jget(u)); if(rows.length){ S.cache.rank[tour]={t:Date.now(),rows:rows.slice(0,200)}; S.err['r'+tour]=''; saveCache(); last=''; break; } last='format inattendu (aucun joueur classé trouvé)'; }catch(e){ last=e.name==='AbortError'?'délai dépassé':(e.message||String(e)); } }
   if(last){ S.err['r'+tour]=last; S.errT['r'+tour]=Date.now(); } S.busy['r'+tour]=0; redraw(); }
-// tableau : on relit chaque jour du tournoi (les jours terminés sont gardés une fois pour toutes)
-async function loadDraw(tour,ev,force){ const key=tour+':'+ev.id; if(S.busy['d'+key]) return; if(!force&&S.errT['d'+key]&&Date.now()-S.errT['d'+key]<30e3) return; S.busy['d'+key]=1;
-  const D=S.draw[key]||(S.draw[key]={days:{},n:ev.sn,start:ev.start,end:ev.end,t:0}); D.n=ev.sn; D.start=ev.start||D.start; D.end=ev.end||D.end; D.t=Date.now();
-  const days=[]; const s=Date.parse(D.start)||Date.now(), e=Math.min(Date.parse(D.end)||Date.now(),Date.now()+864e5);
-  for(let t=s;t<=e+864e5/2&&days.length<18;t+=864e5){ const y=new Date(t).toISOString().slice(0,10); if(!days.includes(y)) days.push(y); }
-  const old=parisDK(new Date(Date.now()-864e5).toISOString()), todo=days.filter(y=>{ const c=D.days[y]; return !c||(force&&y>=old)||(y>=old&&Date.now()-c.t>40e3); });
-  const run=async y=>{ try{ const evs=parseBoard(await jget(SRC.board(tour,y.replace(/-/g,'')))), me=evs.find(x=>x.id===ev.id); D.days[y]={t:Date.now(),ms:me?me.ms:[]}; }catch(x){ S.err['d'+key]=x.message||String(x); S.errT['d'+key]=Date.now(); } };
-  if(!todo.length){ S.busy['d'+key]=0; return; }   // rien à relire : surtout ne pas redessiner (ça relancerait cette fonction en boucle)
-  for(let i=0;i<todo.length;i+=3) await Promise.all(todo.slice(i,i+3).map(run));
-  saveDraw(); S.busy['d'+key]=0; redraw(); }
+// tableau : le scoreboard renvoie déjà tout le tournoi ; ce bouton (facultatif) relit les jours précédents au cas où ESPN n'en renverrait qu'une partie
+async function loadDraw(tour,ev){ const key=tour+':'+ev.id; if(S.busy['d'+key]) return; S.busy['d'+key]=1; redraw();
+  const days=[]; const s0=Date.parse(ev.start)||Date.now(), e0=Math.min(Date.parse(ev.end)||Date.now(),Date.now());
+  for(let t=s0;t<=e0+864e5/2&&days.length<18;t+=864e5){ const y=new Date(t).toISOString().slice(0,10); if(!days.includes(y)) days.push(y); }
+  for(let i=0;i<days.length;i+=2) await Promise.all(days.slice(i,i+2).map(async y=>{ try{ const evs=parseBoard(await jget(SRC.board(tour,y.replace(/-/g,'')))); mergeBoard(tour,evs.filter(x=>x.id===ev.id)); }catch(x){ S.err['d'+key]=x.message||String(x); } }));
+  S.busy['d'+key]=0; redraw(); }
 function tennisRefresh(manual){ const t=myTour();
-  if(S.tab==='rank') loadRank(t,true); else { S.pasteT=0; loadBoard(t,S.day,true); if(S.tab==='draw'){ const e=currentEvent(); if(e) loadDraw(t,e,true); } }
+  if(S.tab==='rank') loadRank(t,true); else { S.pasteT=0; loadBoard(t,0,true); }
   if(manual&&typeof say==='function') say('🎾 Actualisation du tennis…','warn'); }
 function ensure(){ const t=myTour();
-  if(S.tab==='today'||S.tab==='mine') loadBoard(t,S.tab==='mine'?0:S.day);
-  if(S.tab==='draw'){ loadBoard(t,0); const e=currentEvent(); if(e) loadDraw(t,e); }
-  if(S.tab==='rank'||S.tab==='mine') loadRank(t); }
+  loadBoard(t,0); if(S.tab==='today'&&S.day!==0&&!dayMs(t,S.day).length) loadBoard(t,S.day);   // le scoreboard du jour contient déjà les autres jours ; lecture datée seulement en dernier recours
+  loadRank(t); }
 // mise à jour automatique : toutes les 30 s s'il y a du direct ou un match imminent (le scoreboard pèse ~200 Ko), sinon toutes les 3 min
-function hasLive(){ const c=S.cache.board[bKey(myTour(),0)]; return !!c&&c.ev.some(e=>e.ms.some(m=>m.st==='in'||(m.st==='pre'&&Date.parse(m.t)-Date.now()<20*6e4&&Date.parse(m.t)-Date.now()>-3*36e5))); }
-setInterval(()=>{ if(ui.sport!=='tennis'||document.hidden||S.tab==='rank') return; const c=S.cache.board[bKey(myTour(),S.tab==='today'?S.day:0)], age=Date.now()-((c&&c.t)||0), live=hasLive();
+function hasLive(){ return allMatches(myTour()).some(m=>m.st==='in'||(m.st==='pre'&&Date.parse(m.t)-Date.now()<20*6e4&&Date.parse(m.t)-Date.now()>-3*36e5)); }
+setInterval(()=>{ if(ui.sport!=='tennis'||document.hidden||S.tab==='rank') return; const c=S.cache.board[bKey(myTour(),0)], age=Date.now()-((c&&c.t)||0), live=hasLive();
   if((live&&age>30e3)||(!live&&age>18e4)) tennisRefresh(false); },10000);
 
 /* ---------- 5. Données utiles aux écrans ---------- */
 const boardEvents=(tour,off)=>((S.cache.board[bKey(tour,off)]||{}).ev)||[];
-function allMatches(tour){ const M=new Map(); const add=m=>{ if(!M.has(m.id)||m.st!=='pre') M.set(m.id,m); };
-  for(const k of Object.keys(S.cache.board)) if(k.startsWith(tour+':')) for(const e of S.cache.board[k].ev) e.ms.forEach(add);
-  for(const k of Object.keys(S.draw)) if(k.startsWith(tour+':')) for(const d of Object.values(S.draw[k].days)) (d.ms||[]).forEach(add);
-  return [...M.values()]; }
+function allMatches(tour){ const out=[]; for(const k of Object.keys(S.draw)) if(k.startsWith(tour+':')) out.push(...Object.values(S.draw[k].ms||{})); return out; }
+// matchs d'un jour (jour de Paris) ; un match en cours compte pour aujourd'hui quelle que soit son heure de départ
+const dayMs=(tour,off)=>allMatches(tour).filter(m=>m.st==='in'?off===0:!!Date.parse(m.t)&&parisDK(m.t)===dayKey(off));
 function currentEvent(){ const evs=boardEvents(myTour(),0).filter(e=>e.ms.length||true); if(!evs.length) return null; return evs.find(e=>e.id===S.evSel)||evs.slice().sort((a,b)=>b.ms.length-a.ms.length)[0]; }
 const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z]/g,'');
-const rankOf=(tour,p)=>{ const rows=(S.cache.rank[tour]||{}).rows||[]; return rows.find(r=>r.id===p.id)||rows.find(r=>norm(r.n)===norm(p.n))||null; };
+const RM=new WeakMap();
+const rankOf=(tour,p)=>{ const rows=(S.cache.rank[tour]||{}).rows; if(!rows||!rows.length) return null; let M=RM.get(rows); if(!M){ M={id:new Map(),n:new Map()}; rows.forEach(r=>{ M.id.set(r.id,r); M.n.set(norm(r.n),r); }); RM.set(rows,M); } return M.id.get(p.id)||M.n.get(norm(p.n))||null; };
+const rkTxt=p=>{ const r=rankOf(myTour(),p); return r?`#${r.rk}`:p.rk?`#${p.rk}`:p.sd?`(${p.sd})`:''; };
 const isFav=p=>!!S.fav[p.id];
 const ini=n=>String(n||'?').trim().split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase();
 
 /* ---------- 6. Affichage : éléments communs ---------- */
 const star=p=>`<span class="tnst${isFav(p)?' on':''}" data-tn="fav" data-id="${esc(p.id)}" data-n="${esc(p.n)}" data-cc="${esc(p.cc)}" title="${isFav(p)?'Retirer de mes joueurs':'Ajouter à mes joueurs'}">${isFav(p)?'★':'☆'}</span>`;
-function setLabel(m){ if(/suspend|delay|rain|interrupt/i.test(m.dsc)) return 'Interrompu'; const n=Math.max(m.a.sets.length,m.b.sets.length)||1; return n===1?'1er set':n+'e set'; }
+function setLabel(m){ if(/suspend|delay|rain|interrupt/i.test(m.dsc)) return 'Interrompu'; const n=m.per||Math.max(m.a.sets.length,m.b.sets.length)||1; return n===1?'1er set':n+'e set'; }
 function endNote(m){ return /retir|abandon/i.test(m.dsc)?' · abandon':/walkover|w\/o|forfait/i.test(m.dsc)?' · forfait':''; }
 function setsHtml(m,p,q){ const live=m.st==='in', n=Math.max(p.sets.length,q.sets.length); let h='';
   for(let i=0;i<n;i++){ const x=p.sets[i], y=q.sets[i]; if(!x){ h+='<span></span>'; continue; } const cur=live&&i===n-1, won=y?x.g>y.g:true;
-    h+=`<span class="${cur?'cur':won?'w':''}">${x.g}${x.tb!=null?`<sup>${x.tb}</sup>`:''}</span>`; }
+    const showTb=x.tb!=null&&(y&&y.tb!=null?x.tb<y.tb:!won); h+=`<span class="${cur?'cur':won?'w':''}">${x.g}${showTb?`<sup>${x.tb}</sup>`:''}</span>`; }
   if(live&&p.gm!=null) h+=`<span class="gm">${esc(p.gm)}</span>`; return h; }
 function row(m,p,q){ const win=m.st==='post'&&p.w, live=m.st==='in';
-  return `<div class="tnp"><div class="tnn${win?' win':''}"><span class="tnav">${esc(ini(p.n))}</span><b>${esc(p.s)}</b>${p.cc?`<span class="tncc">${esc(p.cc)}</span>`:''}${p.rk?`<span class="tnrk">#${p.rk}</span>`:p.sd?`<span class="tnrk">(${p.sd})</span>`:''}${live&&p.sv?'<span class="tnsv" title="Au service"></span>':''}${star(p)}</div><div class="tns">${setsHtml(m,p,q)}</div></div>`; }
+  return `<div class="tnp"><div class="tnn${win?' win':''}"><span class="tnav">${esc(ini(p.n))}</span><b>${esc(p.s)}</b>${p.cc?`<span class="tncc">${esc(p.cc)}</span>`:''}${rkTxt(p)?`<span class="tnrk">${esc(rkTxt(p))}</span>`:''}${live&&p.sv?'<span class="tnsv" title="Au service"></span>':''}${star(p)}</div><div class="tns">${setsHtml(m,p,q)}</div></div>`; }
 function card(m){ const fv=isFav(m.a)||isFav(m.b), head=`${esc(m.en||'')}${m.en&&m.rdf?' · ':''}${esc(m.rdf)}${m.ct?' · '+esc(m.ct):''}`;
   const pill=m.st==='in'?`<span class="tnpill"><i></i>${esc(setLabel(m))}</span>`:m.st==='post'?`<span class="tnpill fin">Terminé${esc(endNote(m))}</span>`:'';
   return `<div class="tnc${fv?' fv':''}"><div class="tnh"><span>${head}</span>${pill}</div>${row(m,m.a,m.b)}${row(m,m.b,m.a)}</div>`; }
@@ -135,8 +133,8 @@ function status(k){ if(S.busy[k]&&!S.cache.board[k]) return '<div class="card"><
   if(S.err[k]&&!(S.cache.board[k])) return `<div class="card"><p class="err" style="margin:0 0 6px">⚠️ ESPN ne répond pas (${esc(S.err[k])}).</p><button class="sec" data-tn="refresh">Réessayer</button> <button class="sec" data-tn="diag">🔧 Diagnostic ESPN</button></div>`; return ''; }
 
 /* ---------- 7. Écran « Aujourd'hui » ---------- */
-function vToday(){ const t=myTour(), k=bKey(t,S.day), evs=boardEvents(t,S.day);
-  let ms=evs.flatMap(e=>e.ms); if(S.mine) ms=ms.filter(m=>isFav(m.a)||isFav(m.b));
+function vToday(){ const t=myTour(), k=bKey(t,0);
+  let ms=dayMs(t,S.day); if(S.mine) ms=ms.filter(m=>isFav(m.a)||isFav(m.b));
   const fvScore=m=>(isFav(m.a)||isFav(m.b))?0:1, byT=(a,b)=>fvScore(a)-fvScore(b)||(Date.parse(a.t)||0)-(Date.parse(b.t)||0);
   const live=ms.filter(m=>m.st==='in').sort(byT), pre=ms.filter(m=>m.st==='pre').sort((a,b)=>(Date.parse(a.t)||0)-(Date.parse(b.t)||0)||fvScore(a)-fvScore(b)), done=ms.filter(m=>m.st==='post').sort((a,b)=>fvScore(a)-fvScore(b)||(Date.parse(b.t)||0)-(Date.parse(a.t)||0));
   const dl=['Hier',"Aujourd'hui",'Demain'], dn=new Date(Date.now()+S.day*864e5).toLocaleDateString('fr-FR',{timeZone:'Europe/Paris',weekday:'long',day:'numeric',month:'long'});
@@ -154,11 +152,10 @@ function vDraw(){ const t=myTour(); let ev=currentEvent(), key=ev?t+':'+ev.id:''
   if(!ev){ const ks=Object.keys(S.draw).filter(k=>k.startsWith(t+':')).sort((a,b)=>(S.draw[b].t||0)-(S.draw[a].t||0)); if(ks.length){ key=ks[0]; D=S.draw[key]; ev={id:key.split(':')[1],sn:D.n,start:D.start,end:D.end}; past=true; } }
   if(!ev) return hero('🏆 Tableau du tournoi','',false)+status(bKey(t,0))+(S.busy[bKey(t,0)]?'':'<div class="card"><p class="mut" style="margin:0">Aucun tournoi en cours aujourd\'hui. Le tableau apparaît dès qu\'ESPN annonce un tournoi.</p></div>');
   const evs=boardEvents(t,0), sel=evs.length>1?`<select data-tn-sel="ev" style="margin-top:10px">${evs.map(e=>`<option value="${esc(e.id)}" ${e.id===ev.id?'selected':''}>${esc(e.sn)}</option>`).join('')}</select>`:'';
-  const ms=[]; if(D) for(const d of Object.values(D.days)) ms.push(...(d.ms||[])); const seen=new Map(); ms.forEach(m=>{ if(!seen.has(m.id)||m.st!=='pre') seen.set(m.id,m); });
-  const all=[...seen.values()], by={}; all.forEach(m=>{ (by[m.ri]||(by[m.ri]=[])).push(m); });
+  const all=D?Object.values(D.ms||{}):[], by={}; all.forEach(m=>{ (by[m.ri]||(by[m.ri]=[])).push(m); });
   const ris=Object.keys(by).map(Number).sort((a,b)=>a-b);
   const dateTxt=(ev.start?new Date(ev.start).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}):'')+(ev.end?' – '+new Date(ev.end).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}):'');
-  let h=hero('🏆 '+esc(ev.sn||'Tournoi'),(past?'Dernier tournoi enregistré · ':'')+esc(dateTxt),all.some(m=>m.st==='in'),sel)+status(bKey(t,0));
+  let h=hero('🏆 '+esc(ev.sn||'Tournoi'),(past?'Dernier tournoi enregistré · ':'')+esc(dateTxt),all.some(m=>m.st==='in'),sel)+status(bKey(t,0))+`<div class="mut" style="font-size:12px;margin:-4px 4px 8px;text-align:right">${S.busy['d'+key]?'⏳ lecture des jours précédents…':`<span class="link" data-tn="drawdays" data-id="${esc(ev.id)}">↻ Compléter avec les jours précédents</span>`}</div>`;
   if(!all.length) return h+(S.busy['d'+key]?'<div class="card"><p class="mut" style="margin:0">⏳ Chargement du tableau…</p></div>':'<div class="card"><p class="mut" style="margin:0">Aucun match de simple trouvé pour ce tournoi (voir le diagnostic ESPN dans l\'onglet Aujourd\'hui).</p></div>');
   // parcours d'un joueur favori engagé dans le tournoi
   const fp=all.flatMap(m=>[m.a,m.b]).find(isFav);
@@ -169,7 +166,7 @@ function vDraw(){ const t=myTour(); let ev=currentEvent(), key=ev?t+':'+ev.id:''
     h+=`<div class="mxl">⭐ Parcours de ${esc(fp.s)}</div><div class="card" style="padding:10px 14px"><div class="tnparc">${rds.map(cell).join('')}</div></div>`; }
   // tours : en cours d'abord, puis les suivants, puis les tours passés (repliés)
   const curRi=ris.find(r=>by[r].some(m=>m.st!=='post'))??ris[ris.length-1], later=ris.filter(r=>r>curRi), earlier=ris.filter(r=>r<curRi).reverse();
-  const futureMissing=[]; for(let r=Math.max(...ris)+1;r<=7;r++) futureMissing.push(r);
+  const futureMissing=[5,6,7].filter(r=>r>Math.max(...ris));   // seulement quarts / demis / finale (les tours intermédiaires varient selon le tournoi)
   const FR={5:'Quarts de finale',6:'Demi-finales',7:'Finale'};
   const open=r=>S.open[key+':'+r]!==undefined?S.open[key+':'+r]:(r===curRi||r===later[0]);
   const sec=r=>{ const L=(by[r]||[]).slice().sort((a,b)=>(a.st==='in'?0:a.st==='pre'?1:2)-(b.st==='in'?0:b.st==='pre'?1:2)||(Date.parse(a.t)||0)-(Date.parse(b.t)||0)), n=L.length, nl=L.filter(m=>m.st==='in').length, nd=L.filter(m=>m.st==='post').length;
@@ -177,7 +174,7 @@ function vDraw(){ const t=myTour(); let ev=currentEvent(), key=ev?t+':'+ev.id:''
     return `<div class="tnrd" data-tn="rd" data-v="${key}:${r}"><b>${esc(L[0]?L[0].rdf:'Tour')}</b>${bdg}<i>${o?'▾':'▸'}</i></div>`+(o?`<div class="tng">${L.map(mini).join('')}</div>`:''); };
   h+=[curRi,...later,...futureMissing.map(r=>'F'+r),...earlier].map(r=>typeof r==='string'?`<div class="tnrd"><b>${FR[+r.slice(1)]||'Tour'}</b><span class="st">à venir</span></div>`:sec(r)).join('');
   return h; }
-function mini(m){ const fv=isFav(m.a)||isFav(m.b), L=(p,q)=>`<div class="ln"><span class="nm${m.st==='post'&&p.w?' w':''}">${esc(p.s)}${p.rk?`<small>(${p.rk})</small>`:p.sd?`<small>(${p.sd})</small>`:''}${isFav(p)?' <span class="tnstar">★</span>':''}</span><span class="sc">${setsHtml(m,p,q)}</span></div>`;
+function mini(m){ const fv=isFav(m.a)||isFav(m.b), L=(p,q)=>`<div class="ln"><span class="nm${m.st==='post'&&p.w?' w':''}">${esc(p.s)}${rkTxt(p)?`<small>${esc(rkTxt(p))}</small>`:''}${isFav(p)?' <span class="tnstar">★</span>':''}</span><span class="sc">${setsHtml(m,p,q)}</span></div>`;
   const ft=m.st==='in'?`<span>${esc(m.ct||m.en||'')}</span><span style="color:#e8412f;font-weight:800">● ${esc(setLabel(m))}</span>`:m.st==='post'?`<span>Terminé${esc(endNote(m))}</span><span></span>`:`<span>${Date.parse(m.t)?esc(parisDK(m.t)===dayKey(0)?'':new Date(m.t).toLocaleDateString('fr-FR',{timeZone:'Europe/Paris',weekday:'short',day:'numeric'})+' · ')+esc(parisT(m.t)):''}${m.ct?' · '+esc(m.ct):''}</span><span></span>`;
   return `<div class="tnmm${fv?' fv':''}"><div class="ft">${ft}</div>${L(m.a,m.b)}${L(m.b,m.a)}</div>`; }
 
@@ -211,7 +208,7 @@ function vMine(){ const t=myTour(), ids=Object.keys(S.fav), all=allMatches(t), n
 
 /* ---------- 11. Diagnostic ESPN ---------- */
 function diagHtml(){ const d=S.diag||{}, t=myTour();
-  return `<div class="card tndiag"><div class="row between"><h2 style="margin:0">🔧 Diagnostic ESPN</h2><button class="sec" data-tn="diagx">Fermer</button></div>
+  return `<div class="card tndiag"><div class="row between"><h2 style="margin:0">🔧 Diagnostic ESPN <span class="mut" style="font-size:12px;font-weight:400">· tennis.js v5</span></h2><button class="sec" data-tn="diagx">Fermer</button></div>
   <p class="mut" style="margin:8px 0">Pour vérifier ce qu'ESPN renvoie. « Télécharger un extrait » crée un petit fichier (quelques matchs) que tu peux joindre à ta réponse pour que j'ajuste la lecture. Tu peux aussi coller un JSON ci-dessous pour voir l'écran avec ces données.</p>
   <div class="row" style="gap:6px;flex-wrap:wrap"><button class="sec" data-tn="diagrun">Tester ${t.toUpperCase()}</button><button class="sec" data-tn="diagcopy" data-v="dboard">⬇ Télécharger un extrait du scoreboard</button><button class="sec" data-tn="diagcopy" data-v="drank">⬇ Télécharger un extrait du classement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px"><button class="sec" data-tn="diagcopy" data-v="sboard">Copier l'extrait du scoreboard</button><button class="sec" data-tn="diagcopy" data-v="srank">Copier l'extrait du classement</button></div>
   ${d.log?`<pre class="tnlog">${esc(d.log)}</pre>`:''}
@@ -239,7 +236,7 @@ async function diagCopy(kind){   // kind : sboard / srank (copier l'extrait) · 
   S.diag.log=(ok?`✅ Extrait copié (${txt.length} caractères). Va tout de suite dans la conversation et fais Ctrl+V (ne sélectionne pas ce message : ça remplacerait le contenu copié).`:'⚠️ Copie impossible : utilise plutôt « Télécharger ».')+'\n'+u; redraw(); }
 function diagPaste(kind){ const el=document.getElementById('tnPaste'), txt=el?el.value:''; S.diag=S.diag||{}; S.diag.paste=txt; let js=null; try{ js=JSON.parse(txt); }catch(e){ S.diag.log='⚠️ Ce texte n\'est pas du JSON valide : '+e.message; return redraw(); }
   const t=myTour();
-  if(kind==='board'){ const ev=parseBoard(js), n=ev.reduce((a,e)=>a+e.ms.length,0); S.diag.log=`Lu : ${ev.length} tournoi(s), ${n} match(s) de simple.`+(n?' Affichés ci-dessous (données collées, valables 10 min).':' Rien d\'exploitable : colle-moi ce JSON pour que j\'ajuste la lecture.'); if(n){ S.cache.board[bKey(t,0)]={t:Date.now(),ev}; S.pasteT=Date.now(); S.day=0; saveCache(); } }
+  if(kind==='board'){ const ev=parseBoard(js), n=ev.reduce((a,e)=>a+e.ms.length,0); S.diag.log=`Lu : ${ev.length} tournoi(s), ${n} match(s) de simple.`+(n?' Affichés ci-dessous (données collées, valables 10 min).':' Rien d\'exploitable : colle-moi ce JSON pour que j\'ajuste la lecture.'); if(n){ S.cache.board[bKey(t,0)]={t:Date.now(),ev}; mergeBoard(t,ev); S.pasteT=Date.now(); S.day=0; saveCache(); } }
   else { const rows=parseRank(js); S.diag.log=`Lu : ${rows.length} joueur(s) classé(s).`+(rows.length?' Enregistré comme classement '+t.toUpperCase()+'.':' Rien d\'exploitable : colle-moi ce JSON pour que j\'ajuste la lecture.'); if(rows.length){ S.cache.rank[t]={t:Date.now(),rows:rows.slice(0,200)}; saveCache(); } }
   redraw(); }
 
@@ -260,6 +257,7 @@ document.addEventListener('click',e=>{ if(ui.sport!=='tennis') return;
   else if(a==='fav'){ e.stopPropagation(); const id=el.dataset.id; if(S.fav[id]) delete S.fav[id]; else S.fav[id]={n:el.dataset.n,cc:el.dataset.cc}; saveFav(); render(); }
   else if(a==='rd'){ const cur=S.open[v]; const def=el.querySelector('i').textContent==='▾'; S.open[v]=cur===undefined?!def:!cur; render(); }
   else if(a==='refresh') tennisRefresh(true);
+  else if(a==='drawdays'){ const ev=boardEvents(myTour(),0).find(x=>x.id===el.dataset.id)||currentEvent(); if(ev) loadDraw(myTour(),ev); }
   else if(a==='diag'){ S.diag=S.diag||{}; render(); window.scrollTo(0,0); } else if(a==='diagx'){ S.diag=null; render(); }
   else if(a==='diagrun') diagRun(); else if(a==='diagcopy') diagCopy(v); else if(a==='pasteboard') diagPaste('board'); else if(a==='pasterank') diagPaste('rank');
 },true);

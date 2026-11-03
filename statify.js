@@ -398,6 +398,7 @@ function renderBackup(){
 
 function renderSync(){
   const el=document.getElementById('syncBar'); if(!el) return;
+  if(ui.sport==='tennis'){ el.innerHTML=''; return; }   // la barre « Actualiser la NBA » ne concerne pas le tennis
   if(ui.sport==='foot'){ el.innerHTML=''; window._ftSy=''; ftRender(); return; }
   const times=Object.values(games).filter(g=>g.status===3).map(tms).filter(Boolean);
   const btn='<button data-act="nbarefresh" style="margin-right:8px">🔄 Actualiser la NBA</button>';
@@ -2396,7 +2397,7 @@ function render(){
     try{ document.body.classList.remove('sport-foot'); document.body.classList.add('sport-tennis');
       document.querySelectorAll('#sportSeg button').forEach(b=>b.classList.toggle('on',b.dataset.sport===ui.sport));
       const M=$('#modal'); M.classList.remove('on'); document.body.style.overflow='';
-      tennisRender(); }catch(e){ console.error(e); $('#view').innerHTML='<div class="card err">Erreur d\'affichage tennis : '+esc(e.message)+'</div>'; }
+      tennisRender(); try{ renderBackup(); renderSync(); }catch(e){} }catch(e){ console.error(e); $('#view').innerHTML='<div class="card err">Erreur d\'affichage tennis : '+esc(e.message)+'</div>'; }
     try{ liveRender(); }catch(e){}
     return;
   }
