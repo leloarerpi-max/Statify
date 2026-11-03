@@ -63,7 +63,7 @@
       </button>
     </div>
 
-    <div id="trackerViewContent" class="space-y-8">
+    <div id="trackerViewContent" class="space-y-8" data-vue="histo">
 
     <!-- ALERTE DE SAUVEGARDE -->
     <div id="backupBanner" class="hidden items-center justify-between gap-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold px-4 py-3 rounded-xl">
@@ -80,206 +80,39 @@
       <button onclick="resetAllStatsFilters()" class="text-blue-700 hover:text-blue-900 px-2 py-1 font-bold underline whitespace-nowrap shrink-0">Réinitialiser les filtres</button>
     </div>
 
-    <!-- CARTES KPI GLOBALES -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-      <div class="card p-5 flex items-center gap-4 border-l-4 border-l-slate-400">
-        <div class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600">
-          <i class="fa-solid fa-scale-balanced text-lg"></i>
-        </div>
-        <div>
-          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Cote / Mise Moy.</span>
-          <p id="statRisk" class="text-lg font-bold text-slate-800 mt-0.5">1.00 @ 0€</p>
-        </div>
-      </div>
-
-      <div class="card p-5 flex items-center gap-4 border-l-4 border-l-emerald-500">
-        <div class="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-          <i class="fa-solid fa-wallet text-lg"></i>
-        </div>
-        <div>
-          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Bilan Net Solo</span>
-          <p id="statProfit" class="text-xl font-black text-slate-900 mt-0.5">0.00 €</p>
-        </div>
-      </div>
-
-      <div class="card p-5 flex items-center gap-4 border-l-4 border-l-blue-500">
-        <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-          <i class="fa-solid fa-percent text-lg"></i>
-        </div>
-        <div>
-          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">ROI Solo</span>
-          <p id="statROI" class="text-xl font-black text-slate-900 mt-0.5">0.0 %</p>
-        </div>
-      </div>
-
-      <div class="card p-5 flex items-center gap-4 border-l-4 border-l-violet-500">
-        <div class="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center text-violet-600">
-          <i class="fa-solid fa-layer-group text-lg"></i>
-        </div>
-        <div>
-          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Bilan Net Combiné</span>
-          <p id="statProfitCombo" class="text-xl font-black text-slate-900 mt-0.5">0.00 €</p>
-        </div>
-      </div>
-
-      <div class="card p-5 flex items-center gap-4 border-l-4 border-l-fuchsia-500">
-        <div class="w-10 h-10 rounded-xl bg-fuchsia-50 flex items-center justify-center text-fuchsia-600">
-          <i class="fa-solid fa-percent text-lg"></i>
-        </div>
-        <div>
-          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">ROI Combiné</span>
-          <p id="statROICombo" class="text-xl font-black text-slate-900 mt-0.5">0.0 %</p>
-        </div>
-      </div>
+    <!-- BANDEAU IMPACT (fixe) -->
+    <div id="impactBar" class="impact-bar">
+      <div class="ib-cell"><span>Solo</span><b id="ibSolo">—</b></div>
+      <div class="ib-cell"><span>Combiné</span><b id="ibCombo">—</b></div>
+      <div class="ib-cell"><span>Jour solo</span><b id="ibJour">—</b></div>
+      <div class="ib-cell"><span>Jour combiné</span><b id="ibJourC">—</b></div>
+      <button type="button" class="ib-cell ib-btn" onclick="rgAller('histo','quickSettle')" title="Voir les paris à régler"><span>En attente</span><b id="ibAttente">0</b></button>
+      <button type="button" id="ibLive" class="ib-live hidden" onclick="rgAller('histo','quickSettle')"><i class="fa-solid fa-circle"></i> <span id="ibLiveN">0</span><span class="ib-live-t"> en direct</span></button>
+      <button type="button" class="ib-add" onclick="rgAller('histo','formCard')" title="Ajouter un pari"><i class="fa-solid fa-plus"></i><span class="ib-add-t"> Pari</span></button>
     </div>
 
-    <!-- STATS COMBINÉS (toujours visibles) -->
-    <details id="comboStatsDetails" open class="card overflow-hidden border-l-4 border-l-violet-500" ontoggle="if(this.open){try{majDetailCombinesSafe()}catch(e){}}">
-      <summary class="cursor-pointer px-5 py-3 text-xs font-extrabold uppercase tracking-wide text-slate-800 flex items-center gap-2 select-none"><i class="fa-solid fa-layer-group text-violet-600"></i> Stats combinés <span class="ml-auto text-[10px] font-medium normal-case text-slate-400">Touche pour déplier</span></summary>
-      <div id="comboStatsInline" class="p-4 space-y-3"></div>
-    </details>
+    <div id="resumeJour" class="resume-jour"></div>
 
-    <!-- STATS SOLO (repliées par défaut) -->
-    <details id="soloStatsDetails" class="card overflow-hidden">
-      <summary class="cursor-pointer px-5 py-3 text-xs font-extrabold uppercase tracking-wide text-slate-800 flex items-center gap-2 select-none"><i class="fa-solid fa-chart-line text-blue-600"></i> Stats solo <span class="ml-auto text-[10px] font-medium normal-case text-slate-400">Touche pour déplier</span></summary>
-      <div class="p-4 space-y-8">
-
-    <!-- GRAPHIQUE GLOBAL D'ÉVOLUTION DU BANKROLL -->
-    <div class="card p-5 space-y-3">
-      <div class="flex items-center justify-between border-b border-slate-100 pb-2">
-        <h3 class="text-xs font-extrabold uppercase tracking-wide text-slate-800 flex items-center gap-2">
-          <i class="fa-solid fa-chart-area text-blue-600"></i> Évolution du Bankroll
-        </h3>
-        <span class="text-[10px] text-slate-400 font-medium">Profit cumulé sur la sélection filtrée</span>
-      </div>
-      <div class="h-56 w-full">
-        <canvas id="globalBankrollChart"></canvas>
-      </div>
+    <!-- ONGLETS (portable) -->
+    <div id="vueTabs" class="vue-tabs" role="tablist">
+      <button type="button" data-v="histo" onclick="rgVue('histo')"><i class="fa-solid fa-clock-rotate-left"></i> Historique</button>
+      <button type="button" data-v="combos" onclick="rgVue('combos')"><i class="fa-solid fa-layer-group"></i> Combinés</button>
+      <button type="button" data-v="stats" onclick="rgVue('stats')"><i class="fa-solid fa-chart-pie"></i> Stats</button>
+      <button type="button" data-v="plus" onclick="rgVue('plus')"><i class="fa-solid fa-chart-line"></i> Plus</button>
     </div>
 
-    <div id="footballCategoryCard" class="hidden space-y-3">
-      <div class="flex items-center justify-between flex-wrap gap-2">
-        <h3 class="text-xs font-bold flex items-center gap-2 text-slate-700 uppercase tracking-wide">
-          <i class="fa-solid fa-layer-group text-blue-600"></i> Stats par Catégorie de Championnat
-        </h3>
-        <div class="flex items-center gap-2">
-          <span class="text-[10px] text-slate-400 font-medium hidden sm:inline">Mode des cases à cocher :</span>
-          <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
-            <button onclick="setCompFilterMode('include')" id="btnCompModeInclude" class="px-3 py-1 rounded-lg transition text-[11px] font-bold whitespace-nowrap" title="Cocher un championnat = ne garder que celui-ci dans le Bilan">
-              ✅ Inclure
-            </button>
-            <button onclick="setCompFilterMode('exclude')" id="btnCompModeExclude" class="px-3 py-1 rounded-lg transition text-[11px] font-bold whitespace-nowrap" title="Cocher un championnat = le retirer du Bilan (les autres restent inclus)">
-              🚫 Exclure
-            </button>
-          </div>
-        </div>
+    <div id="colG">
+    <!-- À RÉGLER (saisie rapide) -->
+    <div id="quickSettle" class="card p-4 space-y-2">
+      <div class="flex items-center justify-between gap-2">
+        <h3 class="text-xs font-extrabold uppercase tracking-wide flex items-center gap-2"><i class="fa-solid fa-bolt" style="color:var(--warn)"></i> À régler <span id="qsCount" class="qs-pill">0</span></h3>
+        <div class="flex items-center gap-3"><button type="button" id="qsRefresh" onclick="rgRafraichirTermines(true)" title="Actualiser les scores" class="text-[13px]" style="color:var(--mut)"><i class="fa-solid fa-rotate"></i></button><button type="button" onclick="scAllerVoirTout()" class="text-[11px] font-bold underline" style="color:var(--acc)">Tout voir dans l'historique</button></div>
       </div>
-      <div id="footballCategoryAccordion" class="space-y-3"></div>
-    </div>
-
-    <!-- BILAN QUOTIDIEN -->
-    <div id="dailySection" class="card p-5 space-y-3">
-      <div class="flex items-center justify-between border-b border-slate-100 pb-2">
-        <h3 id="dailySectionTitle" class="text-xs font-extrabold uppercase tracking-wide text-slate-800 flex items-center gap-2">
-          <i class="fa-solid fa-calendar-day text-emerald-600"></i> Bilan Quotidien Jour par Jour
-        </h3>
-        <span class="text-[10px] text-slate-400 font-medium">Récapitulatif compact des résultats journaliers</span>
-      </div>
-      <div class="overflow-x-auto max-h-60 overflow-y-auto">
-        <table class="w-full text-center text-xs">
-          <thead class="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 sticky top-0 bg-slate-50 z-10">
-            <tr class="text-[10px] text-slate-500 border-b border-slate-200">
-              <th class="p-1.5 text-left">JJ/MM/AAAA</th>
-              <th class="p-1.5 border-l border-slate-200">Joués (G/P)</th>
-              <th class="p-1.5">Gain Net</th>
-              <th class="p-1.5">ROI</th>
-            </tr>
-          </thead>
-          <tbody id="dailyStatsTbody" class="divide-y divide-slate-100 font-medium"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- STATISTIQUES DÉTAILLÉES -->
-    <div class="space-y-3">
-      <h2 id="detailedStatsTitle" class="text-xs font-extrabold uppercase tracking-wider flex items-center gap-2">
-        <i class="fa-solid fa-chart-pie"></i> Statistiques Détaillées
-      </h2>
-
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="card p-5 space-y-3">
-          <h3 class="text-xs font-bold flex items-center gap-2 text-slate-700 uppercase tracking-wide">
-            <i class="fa-solid fa-bullseye text-blue-600"></i> Stats par Type de Prono (Marché)
-          </h3>
-          <div class="overflow-x-auto">
-            <table class="w-full text-center text-xs">
-              <thead>
-                <tr class="bg-slate-50 text-slate-500 font-bold border-b border-slate-100">
-                  <th class="p-2.5 text-left">Type de Pari</th>
-                  <th class="p-2.5">Joués</th>
-                  <th class="p-2.5">Réussite</th>
-                  <th class="p-2.5">Profit Net</th>
-                  <th class="p-2.5">ROI</th>
-                </tr>
-              </thead>
-              <tbody id="marketStatsTbody" class="divide-y divide-slate-100 font-medium"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="card p-5 space-y-3">
-          <h3 class="text-xs font-bold flex items-center gap-2 text-slate-700 uppercase tracking-wide">
-            <i class="fa-solid fa-percent text-amber-500"></i> Stats par Tranche de Cote
-          </h3>
-          <div class="overflow-x-auto">
-            <table class="w-full text-center text-xs">
-              <thead>
-                <tr class="bg-slate-50 text-slate-500 font-bold border-b border-slate-100">
-                  <th class="p-2.5 text-left">Tranche</th>
-                  <th class="p-2.5">Joués</th>
-                  <th class="p-2.5">Réussite</th>
-                  <th class="p-2.5">Profit Net</th>
-                  <th class="p-2.5">ROI</th>
-                </tr>
-              </thead>
-              <tbody id="oddsStatsTbody" class="divide-y divide-slate-100 font-medium"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="card p-5 space-y-3 lg:col-span-2">
-          <h3 class="text-xs font-bold flex items-center gap-2 text-slate-700 uppercase tracking-wide">
-            <i class="fa-solid fa-shield-halved text-rose-500"></i> Stats par équipe : où tu gagnes, où tu perds
-          </h3>
-          <p class="text-[11px] text-slate-500">Compte tous tes paris terminés sur les matchs de l'équipe, quel que soit le marché. Seules les équipes avec au moins 3 paris sont listées.</p>
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div>
-              <div class="text-[11px] font-extrabold text-emerald-700 mb-1">✅ Les plus rentables</div>
-              <table class="w-full text-center text-xs"><thead><tr class="bg-slate-50 text-slate-500 font-bold border-b border-slate-100">
-                <th class="p-2 text-left">Équipe</th><th class="p-2">Paris</th><th class="p-2">Réussite</th><th class="p-2">Profit</th></tr></thead>
-                <tbody id="teamBestTbody" class="divide-y divide-slate-100 font-medium"></tbody></table>
-            </div>
-            <div>
-              <div class="text-[11px] font-extrabold text-rose-700 mb-1">⚠️ Les pièges (les plus coûteuses)</div>
-              <table class="w-full text-center text-xs"><thead><tr class="bg-slate-50 text-slate-500 font-bold border-b border-slate-100">
-                <th class="p-2 text-left">Équipe</th><th class="p-2">Paris</th><th class="p-2">Réussite</th><th class="p-2">Profit</th></tr></thead>
-                <tbody id="teamWorstTbody" class="divide-y divide-slate-100 font-medium"></tbody></table>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-      </div>
-    </details>
-
-    <!-- MES COMBINÉS -->
-    <div class="card p-5 space-y-3">
-      <h3 class="text-xs font-extrabold uppercase tracking-wide text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
-        <i class="fa-solid fa-layer-group text-violet-600"></i> Mes Combinés
-      </h3>
-      <input type="search" id="comboSearchInput" oninput="setComboSearch(this.value)" placeholder="Rechercher un match, une équipe ou un pronostic…" class="input-field w-full text-xs">
-      <div id="combosListContainer" class="space-y-3"></div>
+      <button type="button" id="qsTout" class="qs-tout hidden" onclick="rgToutAppliquer()"></button>
+      <div class="qs-opts"><label><input type="checkbox" id="optAutoRegler"> Régler automatiquement</label><label><input type="checkbox" id="optAutoCombos" checked> Combinés automatiques : <select id="optPairage" class="input-field" style="padding:1px 4px;font-size:11px"><option value="ordre">1+2, 3+4…</option><option value="extremes">1er+dernier…</option></select> après <select id="optDelai" class="input-field" style="padding:1px 4px;font-size:11px"><option value="0">tout de suite</option><option value="1">1 min</option><option value="2">2 min</option><option value="5">5 min</option><option value="10">10 min</option><option value="30">30 min</option></select> </label></div>
+      <div id="qsAuto" class="text-[11px]" style="color:var(--warn)"></div>
+      <div id="qsDiag" class="text-[11px]" style="color:var(--mut)"></div>
+      <div id="qsList"></div>
     </div>
 
     <!-- FORMULAIRE ET HISTORIQUE -->
@@ -488,6 +321,212 @@
       </div>
 
     </div>
+
+    </div>
+    <div id="colD">
+    <!-- MES COMBINÉS -->
+    <div id="combosCard" class="card p-5 space-y-3">
+      <h3 class="text-xs font-extrabold uppercase tracking-wide text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
+        <i class="fa-solid fa-layer-group text-violet-600"></i> Mes Combinés
+      </h3>
+      <input type="search" id="comboSearchInput" oninput="setComboSearch(this.value)" placeholder="Rechercher un match, une équipe ou un pronostic…" class="input-field w-full text-xs">
+      <div id="combosListContainer" class="space-y-3"></div>
+    </div>
+
+    <!-- STATS COMBINÉS (toujours visibles) -->
+    <details id="comboStatsDetails" open class="card overflow-hidden border-l-4 border-l-violet-500" ontoggle="if(this.open){try{majDetailCombinesSafe()}catch(e){}}">
+      <summary class="cursor-pointer px-5 py-3 text-xs font-extrabold uppercase tracking-wide text-slate-800 flex items-center gap-2 select-none"><i class="fa-solid fa-layer-group text-violet-600"></i> Stats combinés <span class="ml-auto text-[10px] font-medium normal-case text-slate-400">Touche pour déplier</span></summary>
+      <div id="comboStatsInline" class="p-4 space-y-3"></div>
+    </details>
+
+
+    </div>
+    <!-- CARTES KPI GLOBALES -->
+    <div id="kpiGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div class="card p-5 flex items-center gap-4 border-l-4 border-l-slate-400">
+        <div class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600">
+          <i class="fa-solid fa-scale-balanced text-lg"></i>
+        </div>
+        <div>
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Cote / Mise Moy.</span>
+          <p id="statRisk" class="text-lg font-bold text-slate-800 mt-0.5">1.00 @ 0€</p>
+        </div>
+      </div>
+
+      <div class="card p-5 flex items-center gap-4 border-l-4 border-l-emerald-500">
+        <div class="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+          <i class="fa-solid fa-wallet text-lg"></i>
+        </div>
+        <div>
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Bilan Net Solo</span>
+          <p id="statProfit" class="text-xl font-black text-slate-900 mt-0.5">0.00 €</p>
+        </div>
+      </div>
+
+      <div class="card p-5 flex items-center gap-4 border-l-4 border-l-blue-500">
+        <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+          <i class="fa-solid fa-percent text-lg"></i>
+        </div>
+        <div>
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">ROI Solo</span>
+          <p id="statROI" class="text-xl font-black text-slate-900 mt-0.5">0.0 %</p>
+        </div>
+      </div>
+
+      <div class="card p-5 flex items-center gap-4 border-l-4 border-l-violet-500">
+        <div class="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center text-violet-600">
+          <i class="fa-solid fa-layer-group text-lg"></i>
+        </div>
+        <div>
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Bilan Net Combiné</span>
+          <p id="statProfitCombo" class="text-xl font-black text-slate-900 mt-0.5">0.00 €</p>
+        </div>
+      </div>
+
+      <div class="card p-5 flex items-center gap-4 border-l-4 border-l-fuchsia-500">
+        <div class="w-10 h-10 rounded-xl bg-fuchsia-50 flex items-center justify-center text-fuchsia-600">
+          <i class="fa-solid fa-percent text-lg"></i>
+        </div>
+        <div>
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">ROI Combiné</span>
+          <p id="statROICombo" class="text-xl font-black text-slate-900 mt-0.5">0.0 %</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATS SOLO (repliées par défaut) -->
+    <details id="soloStatsDetails" class="card overflow-hidden">
+      <summary class="cursor-pointer px-5 py-3 text-xs font-extrabold uppercase tracking-wide text-slate-800 flex items-center gap-2 select-none"><i class="fa-solid fa-chart-line text-blue-600"></i> Stats solo <span class="ml-auto text-[10px] font-medium normal-case text-slate-400">Touche pour déplier</span></summary>
+      <div class="p-4 space-y-8">
+
+    <!-- GRAPHIQUE GLOBAL D'ÉVOLUTION DU BANKROLL -->
+    <div class="card p-5 space-y-3">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+        <h3 class="text-xs font-extrabold uppercase tracking-wide text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-chart-area text-blue-600"></i> Évolution du Bankroll
+        </h3>
+        <span class="text-[10px] text-slate-400 font-medium">Profit cumulé sur la sélection filtrée</span>
+      </div>
+      <div class="h-56 w-full">
+        <canvas id="globalBankrollChart"></canvas>
+      </div>
+    </div>
+
+    <div id="footballCategoryCard" class="hidden space-y-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <h3 class="text-xs font-bold flex items-center gap-2 text-slate-700 uppercase tracking-wide">
+          <i class="fa-solid fa-layer-group text-blue-600"></i> Stats par Catégorie de Championnat
+        </h3>
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] text-slate-400 font-medium hidden sm:inline">Mode des cases à cocher :</span>
+          <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
+            <button onclick="setCompFilterMode('include')" id="btnCompModeInclude" class="px-3 py-1 rounded-lg transition text-[11px] font-bold whitespace-nowrap" title="Cocher un championnat = ne garder que celui-ci dans le Bilan">
+              ✅ Inclure
+            </button>
+            <button onclick="setCompFilterMode('exclude')" id="btnCompModeExclude" class="px-3 py-1 rounded-lg transition text-[11px] font-bold whitespace-nowrap" title="Cocher un championnat = le retirer du Bilan (les autres restent inclus)">
+              🚫 Exclure
+            </button>
+          </div>
+        </div>
+      </div>
+      <div id="footballCategoryAccordion" class="space-y-3"></div>
+    </div>
+
+    <!-- BILAN QUOTIDIEN -->
+    <div id="dailySection" class="card p-5 space-y-3">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+        <h3 id="dailySectionTitle" class="text-xs font-extrabold uppercase tracking-wide text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-calendar-day text-emerald-600"></i> Bilan Quotidien Jour par Jour
+        </h3>
+        <span class="text-[10px] text-slate-400 font-medium">Récapitulatif compact des résultats journaliers</span>
+      </div>
+      <div class="overflow-x-auto max-h-60 overflow-y-auto">
+        <table class="w-full text-center text-xs">
+          <thead class="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 sticky top-0 bg-slate-50 z-10">
+            <tr class="text-[10px] text-slate-500 border-b border-slate-200">
+              <th class="p-1.5 text-left">JJ/MM/AAAA</th>
+              <th class="p-1.5 border-l border-slate-200">Joués (G/P)</th>
+              <th class="p-1.5">Gain Net</th>
+              <th class="p-1.5">ROI</th>
+            </tr>
+          </thead>
+          <tbody id="dailyStatsTbody" class="divide-y divide-slate-100 font-medium"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- STATISTIQUES DÉTAILLÉES -->
+    <div class="space-y-3">
+      <h2 id="detailedStatsTitle" class="text-xs font-extrabold uppercase tracking-wider flex items-center gap-2">
+        <i class="fa-solid fa-chart-pie"></i> Statistiques Détaillées
+      </h2>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="card p-5 space-y-3">
+          <h3 class="text-xs font-bold flex items-center gap-2 text-slate-700 uppercase tracking-wide">
+            <i class="fa-solid fa-bullseye text-blue-600"></i> Stats par Type de Prono (Marché)
+          </h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-center text-xs">
+              <thead>
+                <tr class="bg-slate-50 text-slate-500 font-bold border-b border-slate-100">
+                  <th class="p-2.5 text-left">Type de Pari</th>
+                  <th class="p-2.5">Joués</th>
+                  <th class="p-2.5">Réussite</th>
+                  <th class="p-2.5">Profit Net</th>
+                  <th class="p-2.5">ROI</th>
+                </tr>
+              </thead>
+              <tbody id="marketStatsTbody" class="divide-y divide-slate-100 font-medium"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card p-5 space-y-3">
+          <h3 class="text-xs font-bold flex items-center gap-2 text-slate-700 uppercase tracking-wide">
+            <i class="fa-solid fa-percent text-amber-500"></i> Stats par Tranche de Cote
+          </h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-center text-xs">
+              <thead>
+                <tr class="bg-slate-50 text-slate-500 font-bold border-b border-slate-100">
+                  <th class="p-2.5 text-left">Tranche</th>
+                  <th class="p-2.5">Joués</th>
+                  <th class="p-2.5">Réussite</th>
+                  <th class="p-2.5">Profit Net</th>
+                  <th class="p-2.5">ROI</th>
+                </tr>
+              </thead>
+              <tbody id="oddsStatsTbody" class="divide-y divide-slate-100 font-medium"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card p-5 space-y-3 lg:col-span-2">
+          <h3 class="text-xs font-bold flex items-center gap-2 text-slate-700 uppercase tracking-wide">
+            <i class="fa-solid fa-shield-halved text-rose-500"></i> Stats par équipe : où tu gagnes, où tu perds
+          </h3>
+          <p class="text-[11px] text-slate-500">Compte tous tes paris terminés sur les matchs de l'équipe, quel que soit le marché. Seules les équipes avec au moins 3 paris sont listées.</p>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+              <div class="text-[11px] font-extrabold text-emerald-700 mb-1">✅ Les plus rentables</div>
+              <table class="w-full text-center text-xs"><thead><tr class="bg-slate-50 text-slate-500 font-bold border-b border-slate-100">
+                <th class="p-2 text-left">Équipe</th><th class="p-2">Paris</th><th class="p-2">Réussite</th><th class="p-2">Profit</th></tr></thead>
+                <tbody id="teamBestTbody" class="divide-y divide-slate-100 font-medium"></tbody></table>
+            </div>
+            <div>
+              <div class="text-[11px] font-extrabold text-rose-700 mb-1">⚠️ Les pièges (les plus coûteuses)</div>
+              <table class="w-full text-center text-xs"><thead><tr class="bg-slate-50 text-slate-500 font-bold border-b border-slate-100">
+                <th class="p-2 text-left">Équipe</th><th class="p-2">Paris</th><th class="p-2">Réussite</th><th class="p-2">Profit</th></tr></thead>
+                <tbody id="teamWorstTbody" class="divide-y divide-slate-100 font-medium"></tbody></table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+      </div>
+    </details>
 
     </div>
     <!-- FIN trackerViewContent -->

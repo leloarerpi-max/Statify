@@ -1053,6 +1053,7 @@
       const activeClass = "px-4 py-2 rounded-xl transition bg-blue-600 text-white shadow-sm font-bold text-sm flex items-center gap-2";
       const inactiveClass = "px-4 py-2 rounded-xl transition text-slate-600 hover:text-slate-900 font-bold text-sm flex items-center gap-2";
 
+      try { window.scrollTo({ top: 0 }); } catch (e) {}
       if (view === 'analyzer') {
         trackerContent.classList.add('hidden');
         analyzerContent.classList.remove('hidden');
@@ -1072,7 +1073,7 @@
       if (g) g.classList.toggle('form-replie', !!replier);
       try { localStorage.setItem('pronotracker_formReplie', replier ? '1' : '0'); } catch (e) {}
     }
-    try { if (localStorage.getItem('pronotracker_formReplie') === '1') document.addEventListener('DOMContentLoaded', () => basculerFormulaire(true)); } catch (e) {}
+    try { if (localStorage.getItem('pronotracker_formReplie') !== '0') document.addEventListener('DOMContentLoaded', () => basculerFormulaire(true)); } catch (e) {}
 
     function switchSport(sport) {
       currentSport = 'football';
@@ -1574,7 +1575,9 @@
     }
 
     function confirmImportPreview() {
-      const toAdd = importPreviewData.filter(b => b.include);
+      let toAdd = importPreviewData.filter(b => b.include);
+      { const dbl = toAdd.filter(b => rgDoublon(b));
+        if (dbl.length && !confirm('⚠️ ' + dbl.length + ' pari(s) sur ' + toAdd.length + ' existe(nt) déjà (même match, même pronostic, même jour).\n\nOK = tout ajouter quand même\nAnnuler = ajouter seulement les nouveaux (sans les doublons)')) toAdd = toAdd.filter(b => !dbl.includes(b)); }
       toAdd.forEach(b => {
         delete b.include;
         delete b.unresolved;
@@ -1675,6 +1678,7 @@
         status: 'Pending'
       };
 
+      { const d = rgDoublon(newBet); if (d && !confirm('⚠️ Ce pari existe déjà :\n' + d.match + ' · ' + (d.prono || '') + ' · cote ' + d.odds + ' · ' + d.date + '\n\nL\'ajouter quand même ?')) return; }
       state[currentSport].unshift(newBet);
       
       const currentMatch = document.getElementById('matchInput').value;
@@ -2391,7 +2395,7 @@
     const SC_JETONS_IGNORES = new Set(['fc', 'cf', 'ac', 'as', 'sc', 'us', 'ssc', 'afc', 'rc', 'rcd', 'sv', 'vfb', 'vfl', 'fsv', 'tsg', 'og', 'ogc', 'ca', 'cd', 'ud', 'sd', 'de', 'la', 'le', 'the', 'el', 'club', 'calcio', 'fk']);
     function scJetons(nom) {
       const n = (nom || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
-      const alias = { psg: ['paris', 'saint', 'germain'], om: ['marseille'], ol: ['lyon'], utd: ['united'], spurs: ['tottenham'], barca: ['barcelona'], atleti: ['atletico'] };
+      const alias = { psg: ['paris', 'saint', 'germain'], om: ['marseille'], ol: ['lyon'], utd: ['united'], spurs: ['tottenham'], barca: ['barcelona'], atleti: ['atletico'], praha: ['prague'], prag: ['prague'], olympiakos: ['olympiacos'], bruges: ['brugge'], club: ['club'], kiev: ['kyiv'], wien: ['vienna'], koln: ['cologne'], dynamo: ['dinamo'], lisboa: ['lisbon'], gladbach: ['monchengladbach'], man: ['manchester'], mnchen: ['munich'], munchen: ['munich'], muenchen: ['munich'], monaco: ['monaco'], 'bodoglimt': ['bodo', 'glimt'], barca: ['barcelona'], 'sporting': ['sporting'], 'psv': ['psv'], 'leverkusen': ['leverkusen'], 'dortmund': ['dortmund'], 'bvb': ['dortmund'], 'juve': ['juventus'], 'atm': ['atletico', 'madrid'], 'real': ['real'] };
       return n.split(' ').filter(t => t && !SC_JETONS_IGNORES.has(t)).flatMap(t => alias[t] || [t]);
     }
     function scJetonEgal(x, y) { return x === y || (Math.min(x.length, y.length) >= 3 && (x.startsWith(y) || y.startsWith(x))); }
@@ -2399,7 +2403,7 @@
     function scMemeEquipe(a, b) {
       const ta = scJetons(a), tb = scJetons(b);
       if (!ta.length || !tb.length) return 0;
-      if (ta.join(' ') === tb.join(' ')) return 2;
+      if (ta.join(' ') === tb.join(' ') || ta.join('') === tb.join('')) return 2;
       const [pt, gd] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
       return pt.every(x => gd.some(y => scJetonEgal(x, y))) ? 1 : 0;
     }
@@ -2420,6 +2424,19 @@
         if (scEcartJours(scJourLocal(m.utcDate), bet.date) > 1) return;
         const h = scMemeEquipeMatch(parts[0], m, 'homeTeam'), a = scMemeEquipeMatch(parts[1], m, 'awayTeam');
         if (h && a && h + a > bestScore) { bestScore = h + a; best = m; }
+      });
+      if (best) return best;
+      // Équipes dans l'ordre inverse chez ESPN (domicile / extérieur inversés par rapport au pari) :
+      // on retourne le match pour que le score soit lu dans l'ordre écrit sur le pari.
+      matchs.forEach(m => {
+        if (!m.homeTeam || !m.awayTeam || !m.esp || !bet.date) return;
+        if (scEcartJours(scJourLocal(m.utcDate), bet.date) > 1) return;
+        const h = scMemeEquipeMatch(parts[0], m, 'awayTeam'), a = scMemeEquipeMatch(parts[1], m, 'homeTeam');
+        if (h && a && h + a > bestScore) {
+          bestScore = h + a;
+          const sw = x => x && { h: x.a, a: x.h };
+          best = Object.assign({}, m, { homeTeam: m.awayTeam, awayTeam: m.homeTeam, esp: Object.assign({}, m.esp, { h: m.esp.a, a: m.esp.h }), vr: m.vr ? Object.assign({}, m.vr, { h: m.vr.a, a: m.vr.h, mt: m.vr.mt ? sw(m.vr.mt) : m.vr.mt }) : m.vr, inverse: true });
+        }
       });
       return best;
     }
@@ -2619,15 +2636,15 @@
     function scSlugEspn(comp) {
       const c = (comp || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
       if (!c || /\bq\b|qualif/.test(c)) return null;           // tours de qualification : non couverts
-      if (/^ligue 1$/.test(c)) return 'fra.1';
-      if (/^ligue 2$/.test(c)) return 'fra.2';
-      if (/^premier league$/.test(c)) return 'eng.1';
-      if (/^(la )?liga$/.test(c)) return 'esp.1';
-      if (/^serie a$/.test(c)) return 'ita.1';
-      if (/^bundesliga$/.test(c)) return 'ger.1';
-      if (/^ligue des champions$/.test(c)) return 'uefa.champions';
-      if (/^ligue europa$/.test(c)) return 'uefa.europa';
-      if (/^ligue conference$/.test(c)) return 'uefa.europa.conf';
+      if (/champions|^ldc$|^c1$/.test(c) && !/fem|women|afc|caf|concacaf/.test(c)) return 'uefa.champions';
+      if (/conference|conf\.? league|^c4$/.test(c)) return 'uefa.europa.conf';
+      if (/europa|^c3$/.test(c)) return 'uefa.europa';
+      if (/^ligue 1\b/.test(c)) return 'fra.1';
+      if (/^ligue 2\b/.test(c)) return 'fra.2';
+      if (/^premier league\b/.test(c) && !/ecosse|scot|russ|ukrain|egypt|kazakh|maroc|ghana|nigeria|singap|armen|malt|bosn|hongr|hungar|irland|ireland/.test(c)) return 'eng.1';
+      if (/^(la ?liga|liga espagnole|primera division)\b/.test(c)) return 'esp.1';
+      if (/^serie a\b/.test(c) && !/bresil|brazil|equateur/.test(c)) return 'ita.1';
+      if (/^bundesliga\b/.test(c) && !/2|autrich|austria/.test(c)) return 'ger.1';
       return null;
     }
     function scStatutEspn(st) {
@@ -2846,15 +2863,28 @@
         .slice()
         .sort((a, b) => (Number(a.id) - Number(b.id)));
       const paires = [], restes = [];
-      let i = 0, j = eligibles.length - 1;
-      while (i < j) {
-        const x = eligibles[i], y = eligibles[j];
-        const kx = normalizeMatchName(x.match), ky = normalizeMatchName(y.match);
-        if (kx && kx === ky) { restes.push(x, y); }       // même match : pas de combiné
-        else paires.push([x, y]);
-        i++; j--;
+      if (rgPairage() === 'ordre') {
+        // Dans l'ordre de dépôt : 1er + 2e, 3e + 4e, etc. (un pari restant reste seul)
+        let i = 0;
+        while (i < eligibles.length) {
+          const x = eligibles[i], y = eligibles[i + 1];
+          if (!y) { restes.push(x); break; }
+          const kx = normalizeMatchName(x.match), ky = normalizeMatchName(y.match);
+          if (kx && kx === ky) { restes.push(x); i += 1; }
+          else { paires.push([x, y]); i += 2; }
+        }
+      } else {
+        // 1er + dernier, 2e + avant-dernier, etc.
+        let i = 0, j = eligibles.length - 1;
+        while (i < j) {
+          const x = eligibles[i], y = eligibles[j];
+          const kx = normalizeMatchName(x.match), ky = normalizeMatchName(y.match);
+          if (kx && kx === ky) { restes.push(x, y); }       // même match : pas de combiné
+          else paires.push([x, y]);
+          i++; j--;
+        }
+        if (i === j) restes.push(eligibles[i]);
       }
-      if (i === j) restes.push(eligibles[i]);
       return { paires, restes, refaisables };
     }
 
@@ -3068,7 +3098,7 @@
         <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[88vh] flex flex-col">
           <div class="p-4 border-b border-slate-100">
             <h3 class="font-extrabold text-sm text-slate-800"><i class="fa-solid fa-wand-magic-sparkles text-violet-600 mr-1"></i> Générer les combinés</h3>
-            <p class="text-[11px] text-slate-500 mt-1">1er pari ajouté + dernier, 2e + avant-dernier, et ainsi de suite. Chaque combiné reprend la mise du 1er pari. Seuls les paris de la date choisie (aujourd'hui par défaut) sont utilisés.</p>
+            <p class="text-[11px] text-slate-500 mt-1">${rgPairage() === 'ordre' ? 'Les paris sont associés dans l\'ordre de dépôt : 1er + 2e, 3e + 4e, et ainsi de suite.' : '1er pari ajouté + dernier, 2e + avant-dernier, et ainsi de suite.'} Chaque combiné reprend la mise du 1er pari. Seuls les paris de la date choisie (aujourd'hui par défaut) sont utilisés.</p>
             <label class="block text-[11px] font-bold text-slate-600 mt-3">Paris du jour :
               <input type="date" id="genJour" value="${genJour}" onchange="genJour = this.value; majApercuGenerateur()" class="input-field w-full text-xs mt-1">
             </label>
@@ -5766,3 +5796,244 @@ function ouvrirVerif() {
   m.classList.remove('hidden'); if (vrPhase === 'calcul') { /* déjà en cours */ } else if (!vrRes) vrPhase = 'accueil'; vrDessiner();
 }
 function fermerVerif() { const m = document.getElementById('verifModal'); if (m) m.classList.add('hidden'); }
+
+/* ===== RÉORGANISATION : bandeau, onglets, saisie rapide ===== */
+const RG_KEY = 'pronotracker_vue';
+function rgEl(id) { return document.getElementById(id); }
+function rgVue(v, sansSauver) {
+  const root = rgEl('trackerViewContent'); if (!root) return;
+  if (!['histo', 'combos', 'stats', 'plus'].includes(v)) v = 'histo';
+  root.setAttribute('data-vue', v);
+  document.querySelectorAll('#vueTabs button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  if (!sansSauver) { try { localStorage.setItem(RG_KEY, v); } catch (e) {} }
+  if (v === 'stats') { try { majDetailCombinesSafe(); } catch (e) {} }
+  if (v === 'plus') { try { window.dispatchEvent(new Event('resize')); } catch (e) {} }
+}
+function rgAller(v, id) {
+  rgVue(v);
+  setTimeout(() => { const e = rgEl(id); if (e) { if (id === 'formCard' && rgEl('mainGrid') && rgEl('mainGrid').classList.contains('form-replie')) { try { basculerFormulaire(false); } catch (x) {} } e.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 60);
+}
+function scAllerVoirTout() { try { setQuickFilter('Pending'); } catch (e) {} const t = rgEl('betsTbody'); const h = document.querySelector('#mainGrid .card:not(#formCard)'); rgVue('histo'); setTimeout(() => { if (h) h.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60); }
+function rgSigne(v) { return (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(2).replace('.', ',') + ' €'; }
+function rgEnDirect(b) { const r = scoresCache[b.id]; return !!(r && (r.st === 'IN_PLAY' || r.st === 'PAUSED')); }
+function rgJourLocal() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function rgKo(b) { const r = scoresCache[b.id], v = (typeof vrCache !== 'undefined') ? vrCache[String(b.id)] : null; return (r && r.ko) || (v && v.ko) || ''; }
+function rgHeure(iso) { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); }
+function rgSuggest(b) {
+  try {
+    const sel = vrParsePari(b); if (!sel || sel.kind === 'x') return null;
+    const sc = vrCache[String(b.id)]; if (!sc || sc.st !== 'FINISHED') return null;
+    const v = vrVerdict(sel, sc); return v && v.res ? { res: v.res, why: v.why } : null;
+  } catch (e) { return null; }
+}
+let rgToastT = null, rgUndo = null;
+function rgToast(msg, annuler) {
+  let t = rgEl('rgToast');
+  if (!t) { t = document.createElement('div'); t.id = 'rgToast'; document.body.appendChild(t); }
+  t.innerHTML = '<span></span><button type="button">Annuler</button>';
+  t.firstChild.textContent = msg; t.classList.add('on');
+  t.querySelector('button').onclick = () => { annuler(); t.classList.remove('on'); };
+  clearTimeout(rgToastT); rgToastT = setTimeout(() => t.classList.remove('on'), 9000);
+}
+function rgChanger(liste, msg, auto) {
+  const prev = [];
+  liste.forEach(x => { const b = (state[currentSport] || []).find(y => String(y.id) === String(x.id)); if (b && b.status !== x.res) { prev.push({ id: b.id, st: b.status }); b.status = x.res; } });
+  if (!prev.length) return;
+  saveState();
+  rgToast(msg || (prev.length + ' pari(s) réglé(s)'), () => {
+    rgRefusAjouter(prev.map(p => p.id));
+    prev.forEach(p => { const b = (state[currentSport] || []).find(y => String(y.id) === String(p.id)); if (b) b.status = p.st; });
+    saveState();
+  });
+}
+function rgReglerRapide(id, st) { rgChanger([{ id, res: st }], st === 'Won' ? 'Pari réglé : gagné' : 'Pari réglé : perdu'); }
+function rgToutAppliquer() {
+  const liste = (state[currentSport] || []).filter(b => b.status === 'Pending').map(b => ({ id: b.id, s: rgSuggest(b) })).filter(x => x.s).map(x => ({ id: x.id, res: x.s.res }));
+  rgChanger(liste, liste.length + ' pari(s) réglé(s) d\'après les scores');
+}
+let rgRafEnCours = false, rgRafDernier = 0, rgDiag = '';
+async function rgRafraichirTermines(force) {
+  try {
+    if (rgRafEnCours || currentSport !== 'football') return;
+    if (!navigator.onLine) { rgDiag = '⚠️ Hors ligne'; majReorg(); return; }
+    if (!force && Date.now() - rgRafDernier < 4 * 60000) return;
+    const auj = rgJourLocal();
+    const demain = scAjouterJours(auj, 1);
+    const bets = (state.football || []).filter(b => b.status === 'Pending' && b.date && b.date <= demain && scSlugEspn(b.comp) && !(vrParsePari(b) || {}).why);
+    if (!bets.length) return;
+    rgRafEnCours = true; rgRafDernier = Date.now();
+    const bt = rgEl('qsRefresh'); if (bt) bt.classList.add('anim');
+    const rr = await vrRecupererScores(bets);
+    const sans = bets.filter(b => !vrCache[String(b.id)]).length;
+    rgDiag = rr.essais && !rr.ok ? '⚠️ ESPN n\'a pas répondu (connexion ou blocage). Réessaie avec ↻.' : sans ? 'ℹ️ ' + sans + ' match(s) non reconnu(s) chez ESPN (nom d\'équipe ou championnat). Heure et score indisponibles pour eux.' : '✓ Scores à jour (' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) + ')';
+  } catch (e) { rgDiag = '⚠️ Erreur de récupération des scores : ' + (e && e.message ? e.message : e); }
+  rgRafEnCours = false; const bt = rgEl('qsRefresh'); if (bt) bt.classList.remove('anim');
+  try { if (rgPref(RG_AUTO_REG) && currentSport === 'football') rgReglerAuto((state.football || []).filter(b => b.status === 'Pending').map(b => ({ b, s: rgSuggest(b) })).filter(x => x.s).map(x => ({ id: x.b.id, res: x.s.res }))); } catch (e) {}
+  majReorg();
+}
+function majReorg() {
+  try {
+    const liste = state[currentSport] || [];
+    const set = (id, txt, cls) => { const e = rgEl(id); if (!e) return; e.textContent = txt; e.classList.remove('pos', 'neg'); if (cls) e.classList.add(cls); };
+    const lire = id => { const e = rgEl(id); return e ? e.textContent.replace(/\s/g, '').replace('−', '-').replace(',', '.').replace('€', '') : ''; };
+    const cl = id => { const v = parseFloat(lire(id)); return v > 0 ? 'pos' : v < 0 ? 'neg' : ''; };
+    const t = id => { const e = rgEl(id); return e ? e.textContent.replace('-', '−').replace('.', ',') : '—'; };
+    set('ibSolo', t('statProfit'), cl('statProfit'));
+    set('ibCombo', t('statProfitCombo'), cl('statProfitCombo'));
+    const auj = rgJourLocal(); let pj = 0;
+    liste.forEach(b => { if (b.date === auj) { if (b.status === 'Won') pj += ((b.odds || 1) - 1) * (b.stake || 0); else if (b.status === 'Lost') pj -= (b.stake || 0); } });
+    set('ibJour', rgSigne(Math.round(pj * 100) / 100), pj > 0 ? 'pos' : pj < 0 ? 'neg' : '');
+    let pc = 0;
+    try { (state.combos[currentSport] || []).forEach(c => { const lg = comboLegs(currentSport, c); const d = lg.reduce((mx, l) => (l.date && l.date > mx ? l.date : mx), ''); if (d === auj) { const s = comboStatus(currentSport, c); if (s === 'Won' || s === 'Lost') pc += comboProfit(currentSport, c); } }); } catch (e) {}
+    set('ibJourC', rgSigne(Math.round(pc * 100) / 100), pc > 0 ? 'pos' : pc < 0 ? 'neg' : '');
+    const att = liste.filter(b => b.status === 'Pending');
+    const live = att.filter(rgEnDirect);
+    const lb = rgEl('ibLive'); if (lb) { lb.classList.toggle('hidden', !live.length); rgEl('ibLiveN').textContent = live.length; }
+    // unités à régler : un combiné = 1 ligne (avec ses sélections), un pari simple = 1 ligne
+    const combos = (state.combos[currentSport] || []);
+    const parId = {}; combos.forEach(c => (c.legIds || []).forEach(id => { parId[String(id)] = c; }));
+    const unites = [], vus = {};
+    att.forEach(b => {
+      const c = b.comboId ? combos.find(x => x.id === b.comboId) : parId[String(b.id)];
+      if (c) { if (!vus[c.id]) { vus[c.id] = 1; unites.push({ combo: c, legs: comboLegs(currentSport, c) }); } }
+      else unites.push({ bet: b });
+    });
+    const rang = b => rgEnDirect(b) ? 0 : (b.date === auj ? 1 : 2);
+    unites.forEach(u => {
+      const pend = (u.legs || [u.bet]).filter(b => b.status === 'Pending');
+      u.rang = Math.min.apply(null, pend.map(rang));
+      u.date = pend.map(b => String(b.date || '')).sort()[0] || '';
+      u.ko = pend.map(rgKo).filter(Boolean).sort()[0] || '9';
+    });
+    unites.sort((a, b) => (a.rang - b.rang) || a.date.localeCompare(b.date) || String(a.ko).localeCompare(String(b.ko)));
+    const nC = unites.filter(u => u.combo).length, nS = unites.length - nC;
+    set('ibAttente', String(unites.length));
+    const c = rgEl('qsCount'); if (c) c.textContent = (nC ? nC + ' combiné' + (nC > 1 ? 's' : '') : '') + (nC && nS ? ' + ' : '') + (nS ? nS + ' pari' + (nS > 1 ? 's' : '') : '') || '0';
+    const L = rgEl('qsList'); if (!L) return;
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+    const maintenant = Date.now();
+    const ligne = (b, dansCombo) => {
+      const sc = (typeof scoreHtml === 'function' ? scoreHtml(b) : ''); const scTxt = sc ? sc.replace(/<[^>]+>/g, '').trim() : '';
+      const ko = rgKo(b), h = rgHeure(ko), futur = ko && !rgEnDirect(b) && new Date(ko).getTime() > maintenant;
+      const sg = rgSuggest(b);
+      const info = `<div class="qs-info"><b>${esc(b.match)}</b><small>${esc(b.prono || '')} · cote ${esc(b.odds)}${dansCombo ? '' : ' · ' + esc(b.date || '')}</small>${rgEnDirect(b) ? `<span class="qs-sc">🔴 ${esc(scTxt || 'En direct')}</span>` : scTxt ? `<span class="qs-sc2">${esc(scTxt)}</span>` : futur ? `<span class="qs-h">⏰ ${esc(h)}</span>` : h ? `<span class="qs-h">${esc(h)}</span>` : ''}${sg ? `<span class="qs-sg">Suggestion : ${sg.res === 'Won' ? 'gagné ✓' : 'perdu ✗'}</span>` : ''}</div>`;
+      const bt = sg ? `<button type="button" class="${sg.res === 'Won' ? 'w sg' : 'l sg'}" data-id="${esc(b.id)}" data-res="${sg.res}" title="Appliquer la suggestion">${sg.res === 'Won' ? '✓' : '✗'}</button><button type="button" class="${sg.res === 'Won' ? 'l' : 'w'} petit" data-id="${esc(b.id)}" data-res="${sg.res === 'Won' ? 'Lost' : 'Won'}" title="${sg.res === 'Won' ? 'Perdu' : 'Gagné'}">${sg.res === 'Won' ? '✗' : '✓'}</button>`
+        : `<button type="button" class="w" data-id="${esc(b.id)}" data-res="Won" title="Gagné">✓</button><button type="button" class="l" data-id="${esc(b.id)}" data-res="Lost" title="Perdu">✗</button>`;
+      return `<div class="qs-row${futur ? ' qs-futur' : ''}">${info}<div class="qs-btns">${bt}</div></div>`;
+    };
+    const MAX = 12; let html = '';
+    unites.slice(0, MAX).forEach(u => {
+      if (u.bet) { html += ligne(u.bet, false); return; }
+      const st = comboStatus(currentSport, u.combo), cote = comboOdds(currentSport, u.combo);
+      const ok = u.legs.filter(l => l.status === 'Won').length;
+      const etat = st === 'Lost' ? '<span class="qs-etat bad">combiné perdu</span>' : `<span class="qs-etat">${ok}/${u.legs.length} gagnée${ok > 1 ? 's' : ''}</span>`;
+      html += `<div class="qs-combo"><div class="qs-ch"><b>🎫 Combiné · ${u.legs.length} sél.</b><span>cote ${esc(Number(cote).toFixed(2))} · mise ${esc(u.combo.stake || 0)} €</span>${etat}</div>` +
+        u.legs.map(l => l.status === 'Pending' ? ligne(l, true) : `<div class="qs-row qs-fait"><div class="qs-info"><b>${esc(l.match)}</b><small>${esc(l.prono || '')} · cote ${esc(l.odds)}</small></div><span>${l.status === 'Won' ? '✅' : '❌'}</span></div>`).join('') + '</div>';
+    });
+    if (!unites.length) html = '<div class="qs-vide">Aucun pari en attente. Tout est réglé.</div>';
+    else if (unites.length > MAX) html += `<div class="qs-vide">+ ${unites.length - MAX} autres : voir l'historique.</div>`;
+    L.innerHTML = html;
+    const dg = rgEl('qsDiag'); if (dg) dg.textContent = rgDiag;
+    const nSg = att.filter(b => rgSuggest(b)).length, tb = rgEl('qsTout');
+    if (tb) { tb.classList.toggle('hidden', !nSg); tb.textContent = 'Tout régler d\'après les scores (' + nSg + ')'; }
+  } catch (e) { /* le bandeau ne doit jamais bloquer l'appli */ }
+}
+document.addEventListener('click', ev => {
+  const bt = ev.target.closest && ev.target.closest('#qsList button[data-id]'); if (!bt) return;
+  rgReglerRapide(bt.dataset.id, bt.dataset.res);
+});
+
+/* ===== DOUBLONS, RÈGLEMENT AUTO, COMBINÉS AUTO, RÉSUMÉ DU JOUR ===== */
+const RG_AUTO_REG = 'pronotracker_autoRegler', RG_AUTO_CMB = 'pronotracker_autoCombos', RG_REFUS = 'pronotracker_auto_refus';
+function rgPref(k) { try { const v = localStorage.getItem(k); return k === RG_AUTO_REG ? v === '1' : v !== '0'; } catch (e) { return k !== RG_AUTO_REG; } }
+function rgRefusLire() { try { return new Set(JSON.parse(localStorage.getItem(RG_REFUS) || '[]').map(String)); } catch (e) { return new Set(); } }
+function rgRefusAjouter(ids) { try { const s = rgRefusLire(); ids.forEach(i => s.add(String(i))); localStorage.setItem(RG_REFUS, JSON.stringify(Array.from(s).slice(-400))); } catch (e) {} }
+function rgNorm(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\bvs\.?\b|[-_/]/g, ' ').replace(/\s+/g, ' ').trim(); }
+function rgDoublon(bet) {
+  const k = x => rgNorm(x.match) + '|' + rgNorm(x.prono) + '|' + rgNorm(x.market);
+  const kb = k(bet);
+  return (state[currentSport] || []).find(b => b !== bet && b.date === bet.date && k(b) === kb) || null;
+}
+function rgReglerAuto(liste) {
+  const refus = rgRefusLire();
+  const l = liste.filter(x => !refus.has(String(x.id)));
+  if (l.length) rgChanger(l, l.length + ' pari(s) réglé(s) automatiquement d\'après les scores', true);
+}
+const RG_DELAI = 'pronotracker_auto_delai', RG_SIG = 'pronotracker_auto_sig', RG_PAIR = 'pronotracker_pairage';
+function rgPairage() { try { return localStorage.getItem(RG_PAIR) === 'extremes' ? 'extremes' : 'ordre'; } catch (e) { return 'ordre'; } }
+function rgDelaiMin() { try { const s = localStorage.getItem(RG_DELAI); if (s === null) return rgPairage() === 'ordre' ? 0 : 5; const v = parseInt(s, 10); return v >= 0 ? v : 5; } catch (e) { return 5; } }
+function rgPairesAuto() {
+  const auj = rgJourLocal(), refus = rgRefusLire();
+  const jours = [...new Set((state.football || []).filter(b => b.status === 'Pending' && b.date && b.date >= auj && !b.comboId).map(b => b.date))].sort();
+  const paires = [];
+  const ancien = genRefaire; genRefaire = false;
+  try { jours.forEach(jr => { calculerPaires(jr).paires.forEach(p => { if (p[0].status === 'Pending' && p[1].status === 'Pending' && !refus.has(String(p[0].id)) && !refus.has(String(p[1].id))) paires.push(p); }); }); } finally { genRefaire = ancien; }
+  return paires;
+}
+function rgAutoCombos(force) {
+  try {
+    const info = rgEl('qsAuto');
+    if (rgAutoBusy || currentSport !== 'football' || !rgPref(RG_AUTO_CMB)) { if (info) info.innerHTML = ''; return; }
+    const paires = rgPairesAuto();
+    if (!paires.length) { if (info) info.innerHTML = ''; try { localStorage.removeItem(RG_SIG); } catch (e) {} return; }
+    // On attend la fin de ta saisie : le délai repart à zéro chaque fois que la liste des paris à combiner change.
+    const sig = paires.flat().map(b => b.id).join(',') + '|' + (state.football || []).filter(b => b.status === 'Pending' && !b.comboId).length;
+    let st = null; try { st = JSON.parse(localStorage.getItem(RG_SIG) || 'null'); } catch (e) {}
+    if (!st || st.sig !== sig) { st = { sig, t: Date.now() }; try { localStorage.setItem(RG_SIG, JSON.stringify(st)); } catch (e) {} }
+    const reste = rgDelaiMin() * 60000 - (Date.now() - st.t);
+    if (!force && reste > 0) {
+      const mm = Math.floor(reste / 60000), ss = String(Math.floor(reste / 1000) % 60).padStart(2, '0');
+      if (info) info.innerHTML = '⏳ ' + paires.length + ' combiné' + (paires.length > 1 ? 's' : '') + ' automatique' + (paires.length > 1 ? 's' : '') + ' dans ' + mm + ':' + ss + ' (le temps que tu finisses de saisir) · <button type="button" onclick="rgAutoCombos(true)" class="underline font-bold" style="color:var(--acc)">Générer maintenant</button>';
+      return;
+    }
+    rgAutoBusy = true;
+    const base = Date.now(), ids = [];
+    paires.forEach(([x, y], k) => {
+      const combo = { id: base + k, stake: parseFloat(x.stake) > 0 ? parseFloat(x.stake) : 1, legIds: [x.id, y.id], createdAt: new Date().toISOString() };
+      x.comboId = combo.id; y.comboId = combo.id; state.combos.football.push(combo); ids.push(combo.id);
+    });
+    dernierLotCombines = { ids, defaits: [] };
+    const legs = paires.flat().map(b => b.id);
+    try { localStorage.removeItem(RG_SIG); } catch (e) {}
+    saveState();
+    rgAutoBusy = false;
+    if (info) info.innerHTML = '';
+    rgToast(ids.length + ' combiné(s) créé(s) automatiquement', () => { rgRefusAjouter(legs); annulerGeneration(); });
+  } catch (e) { rgAutoBusy = false; }
+}
+let rgAutoBusy = false;
+function rgMajResume() {
+  const e = rgEl('resumeJour'); if (!e) return;
+  try {
+    const auj = rgJourLocal(), liste = (state[currentSport] || []).filter(b => b.date === auj);
+    const combos = (state.combos[currentSport] || []).filter(c => { const d = comboLegs(currentSport, c).reduce((mx, l) => (l.date && l.date > mx ? l.date : mx), ''); return d === auj; });
+    const attB = liste.filter(b => b.status === 'Pending'), attC = combos.filter(c => comboStatus(currentSport, c) === 'Pending');
+    const mS = attB.reduce((s, b) => s + (b.stake || 0), 0), gS = attB.reduce((s, b) => s + ((b.odds || 1) - 1) * (b.stake || 0), 0);
+    const mC = attC.reduce((s, c) => s + (c.stake || 0), 0), gC = attC.reduce((s, c) => s + (comboOdds(currentSport, c) - 1) * (c.stake || 0), 0);
+    const f = v => v.toFixed(2).replace('.', ',') + ' €';
+    e.innerHTML = `<b>Aujourd'hui :</b> ${liste.length} pari${liste.length > 1 ? 's' : ''}, ${combos.length} combiné${combos.length > 1 ? 's' : ''} <span class="rj-sep">·</span> <b>Gain potentiel</b> solo <span class="pos">+${f(gS)}</span> (mise ${f(mS)}) <span class="rj-sep">·</span> combinés <span class="pos">+${f(gC)}</span> (mise ${f(mC)})`;
+    e.style.display = (liste.length || combos.length) ? '' : 'none';
+  } catch (x) {}
+}
+document.addEventListener('change', ev => {
+  const t = ev.target; if (!t || !t.id) return;
+  if (t.id === 'optAutoRegler') { try { localStorage.setItem(RG_AUTO_REG, t.checked ? '1' : '0'); } catch (e) {} if (t.checked) rgRafraichirTermines(true); }
+  if (t.id === 'optPairage') { try { localStorage.setItem(RG_PAIR, t.value); localStorage.removeItem(RG_SIG); } catch (e) {} const d = rgEl('optDelai'); if (d) d.value = String(rgDelaiMin()); rgAutoCombos(); }
+  if (t.id === 'optDelai') { try { localStorage.setItem(RG_DELAI, t.value); } catch (e) {} try { localStorage.removeItem(RG_SIG); } catch (e) {} rgAutoCombos(); }
+  if (t.id === 'optAutoCombos') { try { localStorage.setItem(RG_AUTO_CMB, t.checked ? '1' : '0'); } catch (e) {} if (t.checked) rgAutoCombos(); }
+});
+(function () {
+  const r0 = render;
+  render = function () { const x = r0.apply(this, arguments); majReorg(); rgMajResume(); rgAutoCombos(); return x; };
+  let v = 'histo'; try { v = localStorage.getItem(RG_KEY) || 'histo'; } catch (e) {}
+  rgVue(v, true);
+  try { if (typeof setComboFilter === 'function') setComboFilter('Pending'); } catch (e) {}
+  window.addEventListener('load', () => { const o1 = rgEl('optAutoRegler'), o2 = rgEl('optAutoCombos'); if (o1) o1.checked = rgPref(RG_AUTO_REG); if (o2) o2.checked = rgPref(RG_AUTO_CMB); const o3 = rgEl('optDelai'); if (o3) o3.value = String(rgDelaiMin()); const o4 = rgEl('optPairage'); if (o4) o4.value = rgPairage(); majReorg(); rgMajResume(); rgAutoCombos(); setTimeout(() => rgRafraichirTermines(true), 2500); setInterval(() => { majReorg(); rgRafraichirTermines(false); }, 60000); setInterval(() => rgAutoCombos(), 1000); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) rgRafraichirTermines(false); });
+  // Perf : les graphiques de « Stats solo » ne sont recalculés que lorsque le bloc est ouvert
+  const sd = rgEl('soloStatsDetails'); let sale = false;
+  const lourds = ['renderDailyStats', 'renderGroupedStats', 'renderFootballCategoryStats', 'renderGlobalBankrollChart'];
+  const orig = {};
+  lourds.forEach(n => { try { orig[n] = eval(n); eval(n + ' = function () { if (sd && !sd.open) { sale = true; return; } return orig.' + n + '.apply(this, arguments); }'); } catch (e) {} });
+  if (sd) sd.addEventListener('toggle', () => { if (sd.open && sale) { sale = false; lourds.forEach(n => { try { orig[n](); } catch (e) {} }); try { window.dispatchEvent(new Event('resize')); } catch (e) {} } });
+})();

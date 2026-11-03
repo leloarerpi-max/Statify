@@ -689,7 +689,7 @@ function newsParseXml(txt,src){ const doc=new DOMParser().parseFromString(txt,'t
     out.push({t,l,d:Date.parse(g('pubDate'))||0,e:newsStrip(g('description')).slice(0,190),s:src,c:newsClean(g('content:encoded'))}); }
   return out; }
 async function newsGet(url,src){
-  const enc=encodeURIComponent(url), tries=[()=>url,()=>'https://api.allorigins.win/raw?url='+enc,()=>'https://corsproxy.io/?url='+enc,()=>'rss2json'], errs=[];
+  const enc=encodeURIComponent(url), rl=newsRelay(), tries=[...(rl?[()=>rl+'/?url='+enc]:[]),()=>url,()=>'https://api.allorigins.win/raw?url='+enc,()=>'https://corsproxy.io/?url='+enc,()=>'rss2json'], errs=[];
   for(const f of tries){ const u=f(); try{
       if(u==='rss2json'){ const r=await fetch('https://api.rss2json.com/v1/api.json?rss_url='+enc); if(!r.ok) throw new Error('HTTP '+r.status); const j=await r.json(); if(j.status!=='ok') throw new Error('flux illisible'); return (j.items||[]).map(i=>({t:newsStrip(i.title),l:i.link,d:Date.parse(String(i.pubDate||'').replace(' ','T')+'Z')||0,e:newsStrip(i.description).slice(0,190),s:src,c:newsClean(i.content||'')})).filter(i=>i.t&&/^https?:/.test(i.l)); }
       const c=new AbortController(), to=setTimeout(()=>c.abort(),9000); let r; try{ r=await fetch(u,{signal:c.signal}); } finally{ clearTimeout(to); }
@@ -745,7 +745,7 @@ function newsReaderHtml(l){
   const c=newsFull[l];
   const body=c?`<div class="nrd">${newsClean(c)}</div>`
     :ui.newsLoad===l?`<div class="nrd"><p class="mut">⏳ Chargement de l'article complet…</p>${i.e?`<p>${esc(i.e)}${i.e.length>=189?'…':''}</p>`:''}</div>`
-    :`<div class="nrd"><p class="mut">${ui.newsFail===l?'Impossible de charger l\'article complet pour l\'instant (la page ou le relais ne répond pas).':'Le texte complet de cet article n\'est pas disponible dans le flux.'}</p>${i.e?`<p>${esc(i.e)}${i.e.length>=189?'…':''}</p>`:''}<p><button class="sec" data-act="newsretry" data-l="${esc(l)}">🔄 Réessayer</button></p></div>`;
+    :`<div class="nrd"><p class="mut">${ui.newsFail===l?'Impossible de charger l\'article complet pour l\'instant (la page ou le relais ne répond pas).':'Le texte complet de cet article n\'est pas disponible dans le flux.'}</p>${i.e?`<p>${esc(i.e)}${i.e.length>=189?'…':''}</p>`:''}${ui.newsFail===l&&ui.newsErr?`<p class="mut" style="font-size:11.5px">Détail : ${esc(ui.newsErr)}</p>`:''}${ui.newsFail===l&&!newsRelay()?'<p class="mut" style="font-size:11.5px">Les relais publics gratuits sont parfois en panne ou refusés par le site. Pour des articles fiables, configure <b>ton propre relais</b> (réglage « ⚙️ Relais » en bas de la carte Actus).</p>':''}<p><button class="sec" data-act="newsretry" data-l="${esc(l)}">🔄 Réessayer</button></p></div>`;
   const btns=`<div class="row" style="margin-top:14px;gap:8px"><a class="nrd-open" href="${esc(i.l)}" target="_blank" rel="noopener">Lire sur le site d'origine ↗</a><button class="sec" data-act="newsclose">Fermer</button></div>`;
   return `<div class="card nrd-card"><div class="mut" style="font-size:12px;margin-bottom:8px;padding-right:48px">${esc(i.s)}${i.d?' · '+esc(newsAgo(i.d)):''}</div><h2 style="margin:0 0 12px;line-height:1.3;padding-right:44px">${esc(i.t)}</h2>${body}${btns}</div>`;
 }
@@ -767,14 +767,15 @@ function newsExtract(txt,base){
   const h=newsClean(el.innerHTML,base);
   return h.replace(/<[^>]+>/g,'').trim().length>=300?h:'';
 }
+function newsRelay(){ try{ return (localStorage.getItem('suivi-news-relay')||'').trim().replace(/\/+$/,''); }catch(e){ return ''; } }
 async function newsFetchArticle(url){
-  const enc=encodeURIComponent(url), tries=[()=>url,()=>'https://api.allorigins.win/raw?url='+enc,()=>'https://corsproxy.io/?url='+enc], errs=[];
-  for(const f of tries){
+  const enc=encodeURIComponent(url), rl=newsRelay(), tries=[...(rl?[['ton relais',()=>rl+'/?url='+enc]]:[]),['direct',()=>url],['allorigins',()=>'https://api.allorigins.win/raw?url='+enc],['corsproxy',()=>'https://corsproxy.io/?url='+enc]], errs=[];
+  for(const [nm,f] of tries){
     try{ const c=new AbortController(), to=setTimeout(()=>c.abort(),12000); let r; try{ r=await fetch(f(),{signal:c.signal}); } finally{ clearTimeout(to); }
       if(!r.ok) throw new Error('HTTP '+r.status);
-      const h=newsExtract(await r.text(),url); if(h) return h; throw new Error('texte introuvable');
-    }catch(e){ errs.push(e.message||String(e)); } }
-  throw new Error(errs.join(' | '));
+      const h=newsExtract(await r.text(),url); if(h) return h; throw new Error('page reçue mais texte introuvable');
+    }catch(e){ errs.push(nm+' : '+(e.name==='AbortError'?'trop lent':(e.message==='Failed to fetch'?'bloqué par le navigateur':(e.message||String(e))))); } }
+  throw new Error(errs.join(' · '));
 }
 async function newsLoadFull(l){
   if(newsFull[l]||ui.newsLoad===l) return;
@@ -784,7 +785,7 @@ async function newsLoadFull(l){
     const keep=new Set((news.items||[]).slice().sort((a,b)=>(b.d||0)-(a.d||0)).slice(0,30).map(i=>i.l)); keep.add(l);
     for(const k of Object.keys(newsFull)) if(!keep.has(k)) delete newsFull[k];
     saveJ(KEYNF2,newsFull);
-  }catch(e){ ui.newsFail=l; }
+  }catch(e){ ui.newsFail=l; ui.newsErr=String(e.message||e).slice(0,400); }
   finally{ if(ui.newsLoad===l) ui.newsLoad=null; if(ui.newsRead===l) render(); }
 }
 function newsAgo(t){ if(!t) return ''; const m=Math.max(0,Math.round((Date.now()-t)/6e4)); return m<60?`il y a ${m} min`:m<1440?`il y a ${Math.round(m/60)} h`:`il y a ${Math.round(m/1440)} j`; }
@@ -793,7 +794,7 @@ function newsCard(){
   const kw=[...fav.teams.flatMap(t=>{ const n=tname(t).toLowerCase(); return [n,n.split(' ').slice(-1)[0]]; }),...Object.values(fav.players).map(n=>String(n).toLowerCase().split(' ').slice(-1)[0]).filter(w=>w.length>=4)];
   const onlyFav=!!ui.newsFav&&kw.length, list=news.items.filter(i=>!onlyFav||kw.some(k=>(i.t+' '+i.e).toLowerCase().includes(k))).slice(0,ui.newsMore?20:8);
   const rows=list.map(i=>`<div class="alert"><a href="${esc(i.l)}" data-act="newsopen" data-l="${esc(i.l)}" target="_blank" rel="noopener"><b>${esc(i.t)}</b></a> <span class="mut" style="font-size:12px">· ${esc(i.s)} · ${i.d?esc(newsAgo(i.d)):''}</span>${i.e?`<div class="mut" style="margin-top:2px">${esc(i.e)}${i.e.length>=189?'…':''}</div>`:''}</div>`).join('');
-  return `<div class="card"><div class="row between"><h2 style="margin:0">📰 Actus NBA en français</h2><div class="row">${kw.length?`<label class="mut"><input type="checkbox" data-act="newsfav" ${onlyFav?'checked':''}> mes favoris</label>`:''}<button class="sec" data-act="newsrefresh">🔄 Actualiser</button></div></div>${rows||`<p class="mut" style="margin:10px 0 0">${news.items.length?'Aucun article ne parle de tes favoris pour le moment.':(news.err?'Lecture directe refusée par le navigateur. Installe le favori « Actus » (fichier <b>bouton-favori-actus.html</b>), va sur <b>basketusa.com</b>, clique dessus, puis fais <b>Ctrl+V</b> ici.':'Chargement des actus…')}</p>`}${news.items.length>list.length&&!onlyFav?`<p style="margin:8px 0 0"><span class="link" data-act="newsmore">Voir plus d'articles</span></p>`:''}<p class="mut" style="margin:8px 0 0;font-size:11px">Articles du flux public de Basket USA : un clic ouvre l'article ici (lien vers le site d'origine en bas).${news.t?' Mis à jour '+esc(newsAgo(news.t))+'.':''}</p></div>`;
+  return `<div class="card"><div class="row between"><h2 style="margin:0">📰 Actus NBA en français</h2><div class="row">${kw.length?`<label class="mut"><input type="checkbox" data-act="newsfav" ${onlyFav?'checked':''}> mes favoris</label>`:''}<button class="sec" data-act="newsrefresh">🔄 Actualiser</button></div></div>${rows||`<p class="mut" style="margin:10px 0 0">${news.items.length?'Aucun article ne parle de tes favoris pour le moment.':(news.err?'Lecture directe refusée par le navigateur. Installe le favori « Actus » (fichier <b>bouton-favori-actus.html</b>), va sur <b>basketusa.com</b>, clique dessus, puis fais <b>Ctrl+V</b> ici.':'Chargement des actus…')}</p>`}${news.items.length>list.length&&!onlyFav?`<p style="margin:8px 0 0"><span class="link" data-act="newsmore">Voir plus d'articles</span></p>`:''}<p class="mut" style="margin:8px 0 0;font-size:11px">Articles du flux public de Basket USA : un clic ouvre l'article ici (lien vers le site d'origine en bas).${news.t?' Mis à jour '+esc(newsAgo(news.t))+'.':''}</p><details style="margin-top:8px"><summary class="mut" style="cursor:pointer;font-size:12px">⚙️ Relais pour les articles complets${newsRelay()?' · actif ✓':''}</summary><p class="mut" style="font-size:12px;margin:6px 0">Adresse de ton relais Cloudflare (finit par <b>.workers.dev</b>). Laisse vide pour utiliser les relais publics gratuits.</p><div class="row" style="gap:6px"><input id="newsRelayIn" type="url" placeholder="https://relais-statify.ton-compte.workers.dev" value="${esc(newsRelay())}" style="flex:1;min-width:0" autocomplete="off" autocapitalize="off"><button class="sec" data-act="newsrelaysave">Enregistrer</button></div></details></div>`;
 }
 /* ---- Grand bloc d'accueil (dernier résultat de ton équipe) ---- */
 function heroHtml(o){
@@ -2463,6 +2464,8 @@ function toggleFav(type,id,name){
   else if(a==='newsrefresh') newsRefresh(false);
   else if(a==='newsfav'){ ui.newsFav=!ui.newsFav; render(); }
   else if(a==='newsopen'){ if(e.ctrlKey||e.metaKey||e.shiftKey) return; e.preventDefault(); ui.newsRead=el.dataset.l; newsLoadFull(ui.newsRead); render(); $('#modal').scrollTop=0; }
+  else if(a==='newsrelaysave'){ const v=(($('#newsRelayIn')||{}).value||'').trim().replace(/\/+$/,''); if(v&&!/^https:\/\/[^\s/]+\.[^\s]*$/.test(v)){ say('⚠️ L\'adresse du relais doit commencer par https://','err'); }
+    else { try{ localStorage.setItem('suivi-news-relay',v); }catch(e){} say(v?'✓ Relais enregistré. Rouvre un article pour l\'essayer.':'✓ Relais retiré : les relais publics seront utilisés.','ok'); render(); } }
   else if(a==='newsretry'){ ui.newsFail=null; newsLoadFull(el.dataset.l); render(); }
   else if(a==='newsclose'){ ui.newsRead=null; render(); }
   else if(a==='newsmore'){ ui.newsMore=1; render(); }

@@ -335,3 +335,91 @@ select option{background-color:var(--card);color:var(--txt)}
 #gnav a i{font-style:normal;font-size:18px;line-height:1.1}
 #gnav a[aria-current=page]{background:color-mix(in srgb,var(--acc) 16%,transparent);color:var(--txt)}
 #gnav a:active{opacity:.7}
+
+/* ===== RÉORGANISATION : bandeau, onglets, colonnes ===== */
+.impact-bar{position:sticky;top:6px;z-index:40;display:flex;align-items:stretch;gap:6px;background:color-mix(in srgb,var(--card) 94%,transparent);border:1px solid var(--line);border-radius:16px;padding:6px;box-shadow:var(--shadow);backdrop-filter:blur(8px)}
+.ib-cell{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;padding:2px 8px;font-size:10px;color:var(--mut);text-align:left;background:none;border:0;border-radius:10px}
+.ib-cell span{text-transform:uppercase;letter-spacing:.04em;font-weight:700;white-space:nowrap}
+.ib-cell b{font-size:15px;font-weight:800;color:var(--txt);white-space:nowrap}
+.ib-cell b.pos{color:var(--ok)}.ib-cell b.neg{color:var(--bad)}
+.ib-btn{cursor:pointer}.ib-btn:hover{background:var(--hover)}.ib-btn b{color:var(--warn)}
+.ib-live{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:800;background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad);border:0;cursor:pointer;white-space:nowrap}
+.ib-live.hidden{display:none}
+.ib-live i{font-size:8px;animation:ibp 1.2s infinite}
+@keyframes ibp{50%{opacity:.25}}
+.ib-add{background:var(--acc);color:var(--onacc);border:0;border-radius:12px;padding:0 14px;font-weight:800;font-size:13px;cursor:pointer;white-space:nowrap}
+.vue-tabs{display:flex;gap:6px;overflow-x:auto}
+.vue-tabs button{flex:1;white-space:nowrap;padding:9px 10px;border-radius:12px;font-size:12px;font-weight:800;background:var(--card);color:var(--mut);border:1px solid var(--line);cursor:pointer}
+.vue-tabs button.on{background:var(--acc);color:var(--onacc);border-color:var(--acc)}
+#colG,#colD{display:flex;flex-direction:column;gap:1.5rem;min-width:0}
+#colG>*,#colD>*{margin-top:0!important}
+.qs-pill{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn);border-radius:999px;padding:1px 9px;font-size:11px}
+.qs-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid color-mix(in srgb,var(--line) 70%,transparent)}
+.qs-row:first-child{border-top:0}
+.qs-info{min-width:0;font-size:12px}
+.qs-info b{display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qs-info small{color:var(--mut);font-size:11px;display:block}
+.qs-info .qs-sc{color:var(--bad);font-weight:800;font-size:11px}
+.qs-btns{display:flex;gap:6px;flex-shrink:0}
+.qs-btns button{width:42px;height:36px;border-radius:10px;font-size:16px;font-weight:800;border:1px solid var(--line);background:var(--field);cursor:pointer}
+.qs-btns .w{color:var(--ok)}.qs-btns .w:hover{background:color-mix(in srgb,var(--ok) 20%,transparent)}
+.qs-btns .l{color:var(--bad)}.qs-btns .l:hover{background:color-mix(in srgb,var(--bad) 20%,transparent)}
+.qs-vide{font-size:12px;color:var(--mut);padding:6px 0}
+@media (max-width:1023px){
+  #vueTabs{position:sticky;top:64px;z-index:39}
+  [data-vue]:not([data-vue=histo]) #colG{display:none}
+  [data-vue]:not([data-vue=combos]) #combosCard{display:none}
+  [data-vue]:not([data-vue=stats]) #comboStatsDetails{display:none}
+  [data-vue]:not([data-vue=plus]) #soloStatsDetails{display:none}
+  [data-vue=histo] #kpiGrid,[data-vue=combos] #kpiGrid{display:none}
+  [data-vue=combos] #colD,[data-vue=stats] #colD{display:flex}
+  [data-vue=histo] #colD,[data-vue=plus] #colD{display:none}
+  [data-vue=plus] #colD{display:none}
+}
+@media (min-width:1024px){
+  #vueTabs{display:none}
+  #trackerViewContent{display:grid!important;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:1.5rem;align-items:start}
+  #trackerViewContent>*{margin-top:0!important}
+  #trackerViewContent>#backupBanner,#trackerViewContent>#statsFilterBanner,#trackerViewContent>#impactBar,#trackerViewContent>#kpiGrid,#trackerViewContent>#soloStatsDetails{grid-column:1/-1}
+  #mainGrid{grid-template-columns:minmax(0,1fr)!important}
+  #mainGrid>*{grid-column:1/-1!important}
+  #mainGrid #formCard{order:2}
+  #mainGrid>.card:not(#formCard){order:1}
+  #mainGrid.form-replie{grid-template-columns:minmax(0,1fr)!important}
+  #mainGrid.form-replie #formCard{padding:.6rem}
+  #mainGrid.form-replie #formStrip{flex-direction:row!important}
+  #mainGrid.form-replie #formStrip .strip-txt{writing-mode:horizontal-tb!important;transform:none!important}
+}
+@media (max-width:420px){.ib-cell b{font-size:13px}.ib-add-t{display:none}.ib-cell{padding:2px 5px}}
+
+@media (max-width:600px){.ib-live-t{display:none}.ib-live{padding:4px 8px}.vue-tabs button{padding:9px 4px}.vue-tabs button i{display:none}}
+
+@media (min-width:1024px){#mainGrid.form-replie #formCard{order:0}}
+
+.qs-combo{border:1px solid var(--line);border-radius:12px;padding:4px 10px;margin:8px 0;background:color-mix(in srgb,var(--field) 60%,transparent)}
+.qs-ch{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;font-size:12px;padding:6px 0 2px}
+.qs-ch span{color:var(--mut)}
+.qs-etat{margin-left:auto;background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)!important;border-radius:999px;padding:1px 9px;font-weight:700}
+.qs-etat.bad{background:color-mix(in srgb,var(--bad) 20%,transparent);color:var(--bad)!important}
+.qs-fait{opacity:.6}
+.qs-futur{opacity:.6}
+.qs-h{color:var(--mut);font-size:11px;font-weight:700}
+.qs-sc2{color:var(--mut);font-size:11px}
+.qs-sg{display:block;color:var(--ok);font-weight:800;font-size:11px}
+.qs-btns .sg{background:color-mix(in srgb,var(--ok) 22%,transparent);border-color:var(--ok)}
+.qs-btns .l.sg{background:color-mix(in srgb,var(--bad) 22%,transparent);border-color:var(--bad)}
+.qs-btns .petit{width:30px;opacity:.6}
+.qs-tout{width:100%;margin:6px 0;padding:9px;border-radius:12px;background:var(--acc);color:var(--onacc);font-weight:800;font-size:12px;border:0;cursor:pointer}
+.qs-tout.hidden{display:none}
+#qsRefresh.anim i{animation:qsr 1s linear infinite}@keyframes qsr{to{transform:rotate(360deg)}}
+#rgToast{position:fixed;left:50%;bottom:104px;transform:translate(-50%,30px);opacity:0;pointer-events:none;z-index:80;display:flex;align-items:center;gap:14px;background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:14px;padding:10px 14px;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.35);transition:.25s}
+#rgToast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+#rgToast button{background:none;border:0;color:var(--acc);font-weight:800;cursor:pointer}
+
+.resume-jour{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px 14px;font-size:12px;color:var(--txt);margin-top:-1rem}
+.resume-jour .pos{color:var(--ok);font-weight:800}.rj-sep{color:var(--mut);margin:0 4px}
+.qs-opts{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:11px;color:var(--mut)}
+.qs-opts label{display:flex;align-items:center;gap:5px;cursor:pointer}
+@media (min-width:1024px){#trackerViewContent>#resumeJour{grid-column:1/-1;margin-top:0}}
+
+#trackerViewContent.hidden{display:none!important}
