@@ -48,7 +48,7 @@ const saveFav = () => saveJ(KEYF,fav);
 
 const ui = {tab:'home', openGame:null, openPlayer:null, openTeam:null, gTeam:'',
   pMode:'avg', pSort:{k:'pts',d:-1}, pTeam:'', pSearch:'', pMin:1, pFav:false,
-  cmpMode:'players', cmpA:'', cmpB:'', confF:'EW', recMin:1, schedFav:false, raceF:'E', sport:(()=>{ try{ return localStorage.getItem('suivi-sport')==='foot'?'foot':'nba'; }catch(e){ return 'nba'; } })(), ftab:'home', fLg:'', fPer:0, calEarly:false, calTeam:'', calWhen:'up', calMonth:'', weekMin:2, homeEdit:false, rkT:null};
+  cmpMode:'players', cmpA:'', cmpB:'', confF:'EW', recMin:1, schedFav:false, raceF:'E', sport:(()=>{ try{ const v=localStorage.getItem('suivi-sport'); return v==='foot'||v==='tennis'?v:'nba'; }catch(e){ return 'nba'; } })(), ftab:'home', fLg:'', fPer:0, calEarly:false, calTeam:'', calWhen:'up', calMonth:'', weekMin:2, homeEdit:false, rkT:null};
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2391,6 +2391,16 @@ function modalHist(on){
 window.addEventListener('popstate',()=>{ if($('#modal').classList.contains('on')){ modalWas=false; closeModals(); render(); } });
 function render(){
   const act=document.activeElement, aid=act&&act.id, sel=act&&act.selectionStart;
+  if(ui.sport==='tennis'){   // tennis : écran dessiné par tennis.js (si le fichier n'est pas encore chargé, tennis.js redessine à son chargement)
+    if(typeof tennisRender!=='function') return;
+    try{ document.body.classList.remove('sport-foot'); document.body.classList.add('sport-tennis');
+      document.querySelectorAll('#sportSeg button').forEach(b=>b.classList.toggle('on',b.dataset.sport===ui.sport));
+      const M=$('#modal'); M.classList.remove('on'); document.body.style.overflow='';
+      tennisRender(); }catch(e){ console.error(e); $('#view').innerHTML='<div class="card err">Erreur d\'affichage tennis : '+esc(e.message)+'</div>'; }
+    try{ liveRender(); }catch(e){}
+    return;
+  }
+  document.body.classList.remove('sport-tennis');
   try{
     const S=buildStats(); S.prev=prevStats();
     const FT=ui.sport==='foot', TT=FT?FTABS:TABS, cur=FT?ui.ftab:ui.tab;
@@ -2596,7 +2606,7 @@ $('#fileImport').onchange=async e=>{
   }catch(err){ say('Fichier invalide.','err'); }
 };
 $('#btnMore').onclick=()=>document.body.classList.toggle('menu-open');
-$('#btnRefresh').onclick=()=>{ if(ui.sport==='foot'){ if(footBusy) return; ui.fMenu=true; render(); window.scrollTo({top:0,behavior:'smooth'}); } else nbaRefresh(); };
+$('#btnRefresh').onclick=()=>{ if(ui.sport==='tennis'){ if(typeof tennisRefresh==='function') tennisRefresh(true); return; } if(ui.sport==='foot'){ if(footBusy) return; ui.fMenu=true; render(); window.scrollTo({top:0,behavior:'smooth'}); } else nbaRefresh(); };
 ['#msg','#fmsg'].forEach(q=>{ const n=$(q); if(n) n.addEventListener('click',()=>{ n.innerHTML=''; n.style.display='none'; }); });
 window.addEventListener('afterprint',()=>document.body.classList.remove('print-one'));
 $('#welcome').addEventListener('click',e=>{ if(e.target.id==='welcome') closeWelcome(); });
@@ -2642,7 +2652,7 @@ $('#gs').addEventListener('click',e=>{
 });
 
 /* ================= Cloud (GitHub Gist privé) ================= */
-const CLOUD_KEYS=['suivi-nba-v1','suivi-nba-fav','suivi-nba-sched','suivi-nba-notes','suivi-nba-home','suivi-nba-lead','suivi-foot-v1','suivi-foot-fav','suivi-foot-favp','suivi-foot-home','suivi-multi-pick','suivi-live-fav','suivi-notif-fav'];
+const CLOUD_KEYS=['suivi-tennis-fav','suivi-nba-v1','suivi-nba-fav','suivi-nba-sched','suivi-nba-notes','suivi-nba-home','suivi-nba-lead','suivi-foot-v1','suivi-foot-fav','suivi-foot-favp','suivi-foot-home','suivi-multi-pick','suivi-live-fav','suivi-notif-fav'];
 const KEYC='suivi-cloud';
 let cloud=loadJ(KEYC,{tok:'',gid:'',auto:false,last:0,sig:''});
 const cloudSave=()=>{ try{ localStorage.setItem(KEYC,JSON.stringify(cloud)); }catch(e){} };
@@ -2928,6 +2938,7 @@ function liveFootRow(x,mine,rk,go,fl,barHtml,lg){
 }
 function liveRender(){
   const box=document.getElementById('liveBox'); if(!box) return;
+  if(ui.sport==='tennis'){ box.innerHTML=''; return; }
   const want=ui.sport==='foot'?'f':'n', ALL=(liveData.items||[]).filter(x=>x.st==='in'&&x.k===want); if(!ALL.length||(ui.sport==='foot'&&ui.ftab==='multi')){ box.innerHTML=''; return; }
   // foot : on ne montre ici que mes clubs (étoile, étoile dorée, matchs choisis) ; les autres matchs en cours sont dans le Multiplex
   const mineF=x=>ffav.includes(x.h.id)||ffav.includes(x.a.id)||nfav.foot.includes(x.h.id)||nfav.foot.includes(x.a.id)||!!mpick[x.id];
@@ -3016,7 +3027,7 @@ function liveNeed(){
 }
 let liveFull=0, liveSig='', liveRen=0, liveFail=0, liveTry=0;
 function liveTick(){
-  if(document.hidden) return; const now=Date.now(), age=now-liveLast;
+  if(document.hidden||ui.sport==='tennis') return; const now=Date.now(), age=now-liveLast;
   // 1 échec isolé : on garde le rythme ; échecs répétés ou refus d'ESPN : 30 s, 1 min, 2 min… (max 5 min)
   if(liveFail>=2&&now-liveTry<Math.min(3e5,15e3*2**(liveFail-1))){ liveRender(); return; }
   const soon=x=>{ const t=Date.parse(x.d); return x.st==='pre'&&t&&t<=now+15*6e4&&t>=now-45*6e4; };
