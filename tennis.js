@@ -245,12 +245,19 @@ function diagPaste(kind){ const el=document.getElementById('tnPaste'), txt=el?el
 /* ---------- 11b. Notifications (ordinateur, navigateur ouvert) ---------- */
 // Pour les joueurs suivis (☆) : début, chaque jeu (🔥 BREAK si le service est perdu), fin de set, fin de match.
 // Fonctionne tant que Statify est ouvert (onglet ou appli, même réduit), quel que soit le sport affiché. Réglages propres à cet appareil (non synchronisés).
-const NT0=jl(K.notif,{}), NT={on:!!NT0.on,scope:NT0.scope==='fav'?'fav':'all',start:NT0.start!==false,game:NT0.game!==false,set:NT0.set!==false,end:NT0.end!==false};
+const NT0=jl(K.notif,{}), NT={on:!!NT0.on,snd:NT0.snd!==false,scope:NT0.scope==='fav'?'fav':'all',start:NT0.start!==false,game:NT0.game!==false,set:NT0.set!==false,end:NT0.end!==false};
 const saveNt=()=>js_(K.notif,NT);
 const NT_API=typeof Notification!=='undefined', NT_PHONE=!!(window.matchMedia&&matchMedia('(hover:none) and (pointer:coarse)').matches), NT_OK=NT_API&&!NT_PHONE;
 const ntActive=()=>NT_OK&&NT.on&&Notification.permission==='granted';
 // envoi : via le service worker quand il existe (plus fiable sous Windows/Chrome), sinon directement depuis la page ; NT.last garde le résultat du dernier essai
-const NTS={send(title,body,tag){ const o={body,tag,icon:'icon-192.png'};
+// son : joué par la page (une notification de navigateur ne peut pas jouer de son personnalisé) ; un son au plus toutes les 1,5 s
+let ntAud=null, ntSndT=0;
+const ntAudio=()=>ntAud||(ntAud=Object.assign(new Audio('tennis-ball.mp3'),{preload:'auto',volume:.8}));
+function ntSound(){ if(!NT.snd||Date.now()-ntSndT<1500) return; ntSndT=Date.now(); try{ const a=ntAudio(); a.currentTime=0; const p=a.play(); if(p&&p.catch) p.catch(e=>{ NT.lastSnd='son bloqué par le navigateur (clique une fois dans Statify)'; }); }catch(e){ NT.lastSnd='erreur son : '+(e.message||e); } }
+// les navigateurs n'autorisent un son qu'après un clic dans la page : on « débloque » l'audio au premier clic
+const ntUnlock=()=>{ document.removeEventListener('pointerdown',ntUnlock,true); document.removeEventListener('keydown',ntUnlock,true); try{ const a=ntAudio(), v=a.volume; a.volume=0; const p=a.play(); const done=()=>{ a.pause(); a.currentTime=0; a.volume=v; }; if(p&&p.then) p.then(done).catch(()=>{ a.volume=v; }); else done(); }catch(e){} };
+document.addEventListener('pointerdown',ntUnlock,true); document.addEventListener('keydown',ntUnlock,true);
+const NTS={send(title,body,tag){ ntSound(); const o={body,tag,icon:'icon-192.png'};
   const direct=()=>{ try{ const n=new Notification(title,{body,tag}); n.onclick=()=>{ try{ window.focus(); }catch(e){} n.close(); }; NT.last='ok (page)'; }catch(e){ NT.last='erreur : '+(e.message||e); } };
   try{ if(navigator.serviceWorker&&navigator.serviceWorker.getRegistration) navigator.serviceWorker.getRegistration().then(r=>{ if(r&&r.active&&r.showNotification) return r.showNotification(title,o).then(()=>{ NT.last='ok (service worker)'; }); direct(); }).catch(direct); else direct(); }catch(e){ direct(); } }};
 let ntSeq=0;
@@ -322,7 +329,7 @@ function ntCard(){ if(!NT_OK) return `<div class="card"><h2 style="margin:0">�
       :NT.scope!=='all'&&!Object.keys(S.fav).length?'Suis au moins un joueur avec ☆ pour recevoir des alertes.'
     :'Actives tant que Statify reste ouvert (onglet ou application, même réduit, quel que soit le sport affiché). Le 🔥 BREAK apparaît quand ESPN indique qui sert.';
   return `<div class="card"><div class="row between" style="gap:10px;flex-wrap:wrap;align-items:center"><h2 style="margin:0">🔔 Notifications sur cet ordinateur</h2><button class="${on?'':'sec '}fbtn" data-tn="nton">${on?'Activées':'Activer'}</button></div>
-    <p class="mut" style="margin:8px 0 0;font-size:13px">${txt}</p>${on?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="${NT.scope==='all'?'':'sec '}fbtn" data-tn="ntscope" data-v="all">Tous les matchs en direct</button><button class="${NT.scope==='fav'?'':'sec '}fbtn" data-tn="ntscope" data-v="fav">Mes joueurs seulement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${opt('start','Début')}${opt('game','Chaque jeu')}${opt('set','Chaque set')}${opt('end','Fin du match')}<button class="sec fbtn" data-tn="nttest">Tester</button></div>${NT.last?`<p class="mut" style="margin:8px 0 0;font-size:12px">Dernier essai : ${esc(NT.last)}. Si rien n'apparaît à l'écran alors que c'est « ok » : Windows → Paramètres → Système → Notifications → active ton navigateur et coupe « Ne pas déranger » / « Assistant de concentration » ; sur Mac : Réglages → Notifications → ton navigateur.</p>`:''}`:''}</div>`; }
+    <p class="mut" style="margin:8px 0 0;font-size:13px">${txt}</p>${on?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="${NT.scope==='all'?'':'sec '}fbtn" data-tn="ntscope" data-v="all">Tous les matchs en direct</button><button class="${NT.scope==='fav'?'':'sec '}fbtn" data-tn="ntscope" data-v="fav">Mes joueurs seulement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${opt('start','Début')}${opt('game','Chaque jeu')}${opt('set','Chaque set')}${opt('end','Fin du match')}<button class="${NT.snd?'':'sec '}fbtn" data-tn="ntopt" data-v="snd">${NT.snd?'🔊 Son':'🔇 Son'}</button><button class="sec fbtn" data-tn="nttest">Tester</button></div>${NT.last?`<p class="mut" style="margin:8px 0 0;font-size:12px">Dernier essai : ${esc(NT.last)}${NT.lastSnd?' · '+esc(NT.lastSnd):''}. Si rien n'apparaît à l'écran alors que c'est « ok » : Windows → Paramètres → Système → Notifications → active ton navigateur et coupe « Ne pas déranger » / « Assistant de concentration » ; sur Mac : Réglages → Notifications → ton navigateur.</p>`:''}`:''}</div>`; }
 
 /* ---------- 12. Affichage principal + clics ---------- */
 const TABS=[['today','📅',"Aujourd'hui"],['draw','🏆','Tableau'],['rank','📊','Classement'],['mine','⭐','Mes joueurs']];
