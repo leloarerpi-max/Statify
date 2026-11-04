@@ -1,4 +1,4 @@
-const C='statify-v31';
+const C='statify-v32';
 const ASSETS=['./','index.html','backup.js','xlsx.js','statify.css','statify.js','tennis.js','prono.html','prono.css','prono.js','chart.umd.min.js','fa.css','fa-solid-900.woff2','manifest.webmanifest','icon-192.png','icon-512.png','icon-180.png'];
 // un fichier manquant ne doit pas faire échouer toute l'installation
 self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>Promise.all(ASSETS.map(a=>c.add(a).catch(()=>{})))).then(()=>self.skipWaiting()));});
@@ -25,3 +25,5 @@ self.addEventListener('fetch',e=>{
   if(u.origin!==location.origin) return;
   e.respondWith(netFirst(e.request));
 });
+// clic sur une notification : ramène Statify au premier plan
+self.addEventListener('notificationclick',e=>{ e.notification.close(); e.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(L=>{ for(const c of L){ if('focus' in c) return c.focus(); } return self.clients.openWindow('./'); })); });

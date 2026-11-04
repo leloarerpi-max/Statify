@@ -249,7 +249,10 @@ const NT0=jl(K.notif,{}), NT={on:!!NT0.on,scope:NT0.scope==='fav'?'fav':'all',st
 const saveNt=()=>js_(K.notif,NT);
 const NT_API=typeof Notification!=='undefined', NT_PHONE=!!(window.matchMedia&&matchMedia('(hover:none) and (pointer:coarse)').matches), NT_OK=NT_API&&!NT_PHONE;
 const ntActive=()=>NT_OK&&NT.on&&Notification.permission==='granted';
-const NTS={send(title,body,tag){ try{ const n=new Notification(title,{body,tag}); n.onclick=()=>{ try{ window.focus(); }catch(e){} n.close(); }; }catch(e){} }};
+// envoi : via le service worker quand il existe (plus fiable sous Windows/Chrome), sinon directement depuis la page ; NT.last garde le résultat du dernier essai
+const NTS={send(title,body,tag){ const o={body,tag,icon:'icon-192.png'};
+  const direct=()=>{ try{ const n=new Notification(title,{body,tag}); n.onclick=()=>{ try{ window.focus(); }catch(e){} n.close(); }; NT.last='ok (page)'; }catch(e){ NT.last='erreur : '+(e.message||e); } };
+  try{ if(navigator.serviceWorker&&navigator.serviceWorker.getRegistration) navigator.serviceWorker.getRegistration().then(r=>{ if(r&&r.active&&r.showNotification) return r.showNotification(title,o).then(()=>{ NT.last='ok (service worker)'; }); direct(); }).catch(direct); else direct(); }catch(e){ direct(); } }};
 let ntSeq=0;
 const sumG=a=>a.reduce((s,x)=>s+x,0), ntOther=s=>s==='a'?'b':s==='b'?'a':'';
 const setDone=(x,y)=>{ const hi=Math.max(x,y), lo=Math.min(x,y); return (hi>=6&&hi-lo>=2)||(hi===7&&lo>=5); };
@@ -319,7 +322,7 @@ function ntCard(){ if(!NT_OK) return `<div class="card"><h2 style="margin:0">�
       :NT.scope!=='all'&&!Object.keys(S.fav).length?'Suis au moins un joueur avec ☆ pour recevoir des alertes.'
     :'Actives tant que Statify reste ouvert (onglet ou application, même réduit, quel que soit le sport affiché). Le 🔥 BREAK apparaît quand ESPN indique qui sert.';
   return `<div class="card"><div class="row between" style="gap:10px;flex-wrap:wrap;align-items:center"><h2 style="margin:0">🔔 Notifications sur cet ordinateur</h2><button class="${on?'':'sec '}fbtn" data-tn="nton">${on?'Activées':'Activer'}</button></div>
-    <p class="mut" style="margin:8px 0 0;font-size:13px">${txt}</p>${on?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="${NT.scope==='all'?'':'sec '}fbtn" data-tn="ntscope" data-v="all">Tous les matchs en direct</button><button class="${NT.scope==='fav'?'':'sec '}fbtn" data-tn="ntscope" data-v="fav">Mes joueurs seulement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${opt('start','Début')}${opt('game','Chaque jeu')}${opt('set','Chaque set')}${opt('end','Fin du match')}<button class="sec fbtn" data-tn="nttest">Tester</button></div>`:''}</div>`; }
+    <p class="mut" style="margin:8px 0 0;font-size:13px">${txt}</p>${on?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="${NT.scope==='all'?'':'sec '}fbtn" data-tn="ntscope" data-v="all">Tous les matchs en direct</button><button class="${NT.scope==='fav'?'':'sec '}fbtn" data-tn="ntscope" data-v="fav">Mes joueurs seulement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${opt('start','Début')}${opt('game','Chaque jeu')}${opt('set','Chaque set')}${opt('end','Fin du match')}<button class="sec fbtn" data-tn="nttest">Tester</button></div>${NT.last?`<p class="mut" style="margin:8px 0 0;font-size:12px">Dernier essai : ${esc(NT.last)}. Si rien n'apparaît à l'écran alors que c'est « ok » : Windows → Paramètres → Système → Notifications → active ton navigateur et coupe « Ne pas déranger » / « Assistant de concentration » ; sur Mac : Réglages → Notifications → ton navigateur.</p>`:''}`:''}</div>`; }
 
 /* ---------- 12. Affichage principal + clics ---------- */
 const TABS=[['today','📅',"Aujourd'hui"],['draw','🏆','Tableau'],['rank','📊','Classement'],['mine','⭐','Mes joueurs']];
@@ -341,7 +344,7 @@ document.addEventListener('click',e=>{ if(ui.sport!=='tennis') return;
   else if(a==='ntgo'){ S.tab='mine'; savePref(); render(); window.scrollTo(0,0); ntToggle(); }
   else if(a==='ntscope'){ NT.scope=v; saveNt(); js_(K.snap,{}); ntPoll(true); render(); }
   else if(a==='ntopt'){ NT[v]=!NT[v]; saveNt(); render(); }
-  else if(a==='nttest') NTS.send('🎾 C. Alcaraz – J. Sinner','🔥 BREAK ! Jeu C. Alcaraz · 2e set : 3-2 · sets 1-0 (test)','tn-test');
+  else if(a==='nttest'){ NT.last='envoi…'; NTS.send('🎾 C. Alcaraz – J. Sinner','🔥 BREAK ! Jeu C. Alcaraz · 2e set : 3-2 · sets 1-0 (test)','tn-test-'+Date.now()); render(); setTimeout(()=>{ if(ui.sport==='tennis') render(); },700); }
   else if(a==='refresh') tennisRefresh(true);
   else if(a==='drawdays'){ const ev=boardEvents(myTour(),0).find(x=>x.id===el.dataset.id)||currentEvent(); if(ev) loadDraw(myTour(),ev); }
   else if(a==='diag'){ S.diag=S.diag||{}; render(); window.scrollTo(0,0); } else if(a==='diagx'){ S.diag=null; render(); }
