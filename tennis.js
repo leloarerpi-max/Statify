@@ -139,7 +139,7 @@ function vToday(){ const t=myTour(), k=bKey(t,0);
   const live=ms.filter(m=>m.st==='in').sort(byT), pre=ms.filter(m=>m.st==='pre').sort((a,b)=>(Date.parse(a.t)||0)-(Date.parse(b.t)||0)||fvScore(a)-fvScore(b)), done=ms.filter(m=>m.st==='post').sort((a,b)=>fvScore(a)-fvScore(b)||(Date.parse(b.t)||0)-(Date.parse(a.t)||0));
   const dl=['Hier',"Aujourd'hui",'Demain'], dn=new Date(Date.now()+S.day*864e5).toLocaleDateString('fr-FR',{timeZone:'Europe/Paris',weekday:'long',day:'numeric',month:'long'});
   const ex=`<div class="row" style="margin-top:10px;gap:6px;flex-wrap:wrap">${[-1,0,1].map(d=>`<button class="${S.day===d?'':'sec '}fbtn" data-tn="day" data-v="${d}">${dl[d+1]}</button>`).join('')}<button class="${S.mine?'':'sec '}fbtn" data-tn="mine">⭐ Mes joueurs</button><span class="mut" style="margin-left:auto;font-size:12px">${(S.cache.board[k]&&S.cache.board[k].t)?'mis à jour '+new Date(S.cache.board[k].t).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):''} · <span class="link" data-tn="diag">🔧 Diagnostic ESPN</span></span></div>`;
-  let h=hero('🎾 Tennis '+(S.day===0?'du jour':dl[S.day+1].toLowerCase()),esc(dn)+' · heure de Paris',live.length>0,ex)+(S.diag?diagHtml():'')+status(k);
+  let h=hero('🎾 Tennis '+(S.day===0?'du jour':dl[S.day+1].toLowerCase()),esc(dn)+' · heure de Paris',live.length>0,ex)+(S.diag?diagHtml():'')+status(k)+(NT_OK&&!ntActive()?'<div class="card" style="padding:10px 14px"><div class="row between" style="gap:10px;align-items:center"><span style="font-size:13px">🔔 Alertes de matchs : début, jeux, breaks, sets, fin</span><button class="fbtn" data-tn="ntgo">Activer</button></div></div>':'');
   if(!ms.length&&!status(k)&&!S.busy[k]) h+=`<div class="card"><p class="mut" style="margin:0">${S.mine?'Aucun match de tes joueurs ce jour-là. Touche ☆ à côté d\'un joueur pour le suivre.':'Aucun match de simple ce jour-là. Pas de tournoi ou pas de données reçues : ouvre le <span class="link" data-tn="diag">diagnostic ESPN</span> pour vérifier.'}</p></div>`;
   if(live.length) h+=`<div class="mxl">🔴 En cours</div>`+live.map(card).join('');
   if(pre.length){ const g=new Map(); for(const m of pre){ const key=m.t||'?'; if(!g.has(key)) g.set(key,[]); g.get(key).push(m); }
@@ -247,7 +247,7 @@ function diagPaste(kind){ const el=document.getElementById('tnPaste'), txt=el?el
 // Fonctionne tant que Statify est ouvert (onglet ou appli, même réduit), quel que soit le sport affiché. Réglages propres à cet appareil (non synchronisés).
 const NT0=jl(K.notif,{}), NT={on:!!NT0.on,scope:NT0.scope==='fav'?'fav':'all',start:NT0.start!==false,game:NT0.game!==false,set:NT0.set!==false,end:NT0.end!==false};
 const saveNt=()=>js_(K.notif,NT);
-const NT_OK=typeof Notification!=='undefined'&&!(window.matchMedia&&matchMedia('(pointer:coarse)').matches);
+const NT_API=typeof Notification!=='undefined', NT_PHONE=!!(window.matchMedia&&matchMedia('(hover:none) and (pointer:coarse)').matches), NT_OK=NT_API&&!NT_PHONE;
 const ntActive=()=>NT_OK&&NT.on&&Notification.permission==='granted';
 const NTS={send(title,body,tag){ try{ const n=new Notification(title,{body,tag}); n.onclick=()=>{ try{ window.focus(); }catch(e){} n.close(); }; }catch(e){} }};
 let ntSeq=0;
@@ -312,7 +312,7 @@ setInterval(ntPoll,10000);
 function ntToggle(){
   if(NT.on&&Notification.permission==='granted'){ NT.on=false; saveNt(); return render(); }
   Promise.resolve(Notification.requestPermission()).then(r=>{ NT.on=r==='granted'; saveNt(); if(NT.on){ js_(K.snap,{}); ntPoll(true); } render(); }).catch(()=>render()); }
-function ntCard(){ if(!NT_OK) return '';
+function ntCard(){ if(!NT_OK) return `<div class="card"><h2 style="margin:0">🔔 Notifications</h2><p class="mut" style="margin:8px 0 0;font-size:13px">${NT_PHONE?'Les notifications tennis sont réservées à l\'ordinateur : ouvre Statify sur ton PC pour les activer.':'Ce navigateur ne gère pas les notifications : essaie avec Chrome, Edge ou Firefox sur ordinateur.'}</p></div>`;
   const perm=Notification.permission, on=NT.on&&perm==='granted', opt=(k,l)=>`<button class="${NT[k]?'':'sec '}fbtn" data-tn="ntopt" data-v="${k}">${NT[k]?'✓ ':''}${l}</button>`;
   const txt=perm==='denied'?'Les notifications sont bloquées pour ce site : autorise-les dans les réglages du navigateur (cadenas à côté de l\'adresse), puis réactive-les ici.'
     :!on?'Reçois une alerte pour les matchs en direct : début du match, chaque jeu (🔥 BREAK quand le service est perdu), chaque set et fin du match. Uniquement sur cet ordinateur.'
@@ -338,6 +338,7 @@ document.addEventListener('click',e=>{ if(ui.sport!=='tennis') return;
   else if(a==='fav'){ e.stopPropagation(); const id=el.dataset.id; if(S.fav[id]) delete S.fav[id]; else S.fav[id]={n:el.dataset.n,cc:el.dataset.cc,tr:S.tour}; saveFav(); render(); }
   else if(a==='rd'){ const cur=S.open[v]; const def=el.querySelector('i').textContent==='▾'; S.open[v]=cur===undefined?!def:!cur; render(); }
   else if(a==='nton') ntToggle();
+  else if(a==='ntgo'){ S.tab='mine'; savePref(); render(); window.scrollTo(0,0); ntToggle(); }
   else if(a==='ntscope'){ NT.scope=v; saveNt(); js_(K.snap,{}); ntPoll(true); render(); }
   else if(a==='ntopt'){ NT[v]=!NT[v]; saveNt(); render(); }
   else if(a==='nttest') NTS.send('🎾 C. Alcaraz – J. Sinner','🔥 BREAK ! Jeu C. Alcaraz · 2e set : 3-2 · sets 1-0 (test)','tn-test');
