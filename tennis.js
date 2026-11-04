@@ -55,7 +55,7 @@ function parseRank(js){ return (findRanks(js)||[]).map(r=>{ const a=r.athlete||r
   .filter(r=>r.rk!=null).sort((x,y)=>x.rk-y.rk); }
 
 /* ---------- 3. État, mémoire locale ---------- */
-const K={fav:'suivi-tennis-fav',pref:'suivi-tennis-pref',cache:'suivi-tennis-cache',draw:'suivi-tennis-draw'};
+const K={fav:'suivi-tennis-fav',pref:'suivi-tennis-pref',cache:'suivi-tennis-cache',draw:'suivi-tennis-draw',notif:'suivi-tennis-notif',snap:'suivi-tennis-snap'};
 const jl=(k,d)=>{ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } };
 const js_=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
 const P0=jl(K.pref,{});
@@ -77,7 +77,7 @@ async function jget(u){ const c=new AbortController(), t=setTimeout(()=>c.abort(
 function redraw(){ if(ui.sport!=='tennis') return; const a=document.activeElement; if(a&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)&&a.closest&&a.closest('#view')) return; render(); }
 async function loadBoard(tour,off,force){ const k=bKey(tour,off), c=S.cache.board[k];
   if(S.busy[k]) return; if(!force&&c&&Date.now()-c.t<25e3) return; if(Date.now()-S.pasteT<6e5&&off===0) return; if(!force&&S.errT[k]&&Date.now()-S.errT[k]<30e3) return;
-  S.busy[k]=1; try{ const js=await jget(SRC.board(tour,off===0?'':dayKey(off).replace(/-/g,''))); const evs=parseBoard(js); S.cache.board[k]={t:Date.now(),ev:evs}; mergeBoard(tour,evs); S.err[k]=''; saveCache(); }
+  S.busy[k]=1; try{ const js=await jget(SRC.board(tour,off===0?'':dayKey(off).replace(/-/g,''))); const evs=parseBoard(js); S.cache.board[k]={t:Date.now(),ev:evs}; mergeBoard(tour,evs); S.err[k]=''; saveCache(); try{ ntScan(tour,evs); }catch(x){} }
   catch(e){ S.err[k]=e.name==='AbortError'?'délai dépassé':(e.message||String(e)); S.errT[k]=Date.now(); } finally{ S.busy[k]=0; redraw(); } }
 async function loadRank(tour,force){ const c=S.cache.rank[tour]; if(S.busy['r'+tour]) return; if(!force&&c&&Date.now()-c.t<6*36e5) return; if(!force&&S.errT['r'+tour]&&Date.now()-S.errT['r'+tour]<30e3) return;
   S.busy['r'+tour]=1; let last='';
@@ -192,6 +192,7 @@ function vRank(){ const t=myTour(), R=S.cache.rank[t], k='r'+t; let h=hero('📊
 /* ---------- 10. Écran « Mes joueurs » ---------- */
 function vMine(){ const t=myTour(), ids=Object.keys(S.fav), all=allMatches(t), now=Date.now();
   let h=hero('⭐ Mes joueurs','Touche ☆ à côté d\'un joueur (matchs ou classement) pour le suivre',all.some(m=>m.st==='in'&&(S.fav[m.a.id]||S.fav[m.b.id])),'')+status(bKey(t,0));
+  h+=ntCard();
   if(!ids.length) return h+'<div class="card"><h2>Aucun joueur pour l\'instant</h2><p class="mut">Dans « Aujourd\'hui » ou « Classement », touche ☆ à côté d\'un joueur : il apparaît ici avec son classement, son match en cours, son prochain match et son dernier résultat. Les joueurs suivis passent aussi en premier dans les listes.</p></div>';
   const R=(S.cache.rank[t]||{}).rows||[];
   h+=ids.map(id=>{ const f=S.fav[id], p={id,n:f.n,cc:f.cc,s:f.n}, r=rankOf(t,p), mine=all.filter(m=>m.a.id===id||m.b.id===id);
@@ -208,7 +209,7 @@ function vMine(){ const t=myTour(), ids=Object.keys(S.fav), all=allMatches(t), n
 
 /* ---------- 11. Diagnostic ESPN ---------- */
 function diagHtml(){ const d=S.diag||{}, t=myTour();
-  return `<div class="card tndiag"><div class="row between"><h2 style="margin:0">🔧 Diagnostic ESPN <span class="mut" style="font-size:12px;font-weight:400">· tennis.js v5</span></h2><button class="sec" data-tn="diagx">Fermer</button></div>
+  return `<div class="card tndiag"><div class="row between"><h2 style="margin:0">🔧 Diagnostic ESPN <span class="mut" style="font-size:12px;font-weight:400">· tennis.js v6</span></h2><button class="sec" data-tn="diagx">Fermer</button></div>
   <p class="mut" style="margin:8px 0">Pour vérifier ce qu'ESPN renvoie. « Télécharger un extrait » crée un petit fichier (quelques matchs) que tu peux joindre à ta réponse pour que j'ajuste la lecture. Tu peux aussi coller un JSON ci-dessous pour voir l'écran avec ces données.</p>
   <div class="row" style="gap:6px;flex-wrap:wrap"><button class="sec" data-tn="diagrun">Tester ${t.toUpperCase()}</button><button class="sec" data-tn="diagcopy" data-v="dboard">⬇ Télécharger un extrait du scoreboard</button><button class="sec" data-tn="diagcopy" data-v="drank">⬇ Télécharger un extrait du classement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px"><button class="sec" data-tn="diagcopy" data-v="sboard">Copier l'extrait du scoreboard</button><button class="sec" data-tn="diagcopy" data-v="srank">Copier l'extrait du classement</button></div>
   ${d.log?`<pre class="tnlog">${esc(d.log)}</pre>`:''}
@@ -240,12 +241,92 @@ function diagPaste(kind){ const el=document.getElementById('tnPaste'), txt=el?el
   else { const rows=parseRank(js); S.diag.log=`Lu : ${rows.length} joueur(s) classé(s).`+(rows.length?' Enregistré comme classement '+t.toUpperCase()+'.':' Rien d\'exploitable : colle-moi ce JSON pour que j\'ajuste la lecture.'); if(rows.length){ S.cache.rank[t]={t:Date.now(),rows:rows.slice(0,200)}; saveCache(); } }
   redraw(); }
 
+
+/* ---------- 11b. Notifications (ordinateur, navigateur ouvert) ---------- */
+// Pour les joueurs suivis (☆) : début, chaque jeu (🔥 BREAK si le service est perdu), fin de set, fin de match.
+// Fonctionne tant que Statify est ouvert (onglet ou appli, même réduit), quel que soit le sport affiché. Réglages propres à cet appareil (non synchronisés).
+const NT0=jl(K.notif,{}), NT={on:!!NT0.on,scope:NT0.scope==='fav'?'fav':'all',start:NT0.start!==false,game:NT0.game!==false,set:NT0.set!==false,end:NT0.end!==false};
+const saveNt=()=>js_(K.notif,NT);
+const NT_OK=typeof Notification!=='undefined'&&!(window.matchMedia&&matchMedia('(pointer:coarse)').matches);
+const ntActive=()=>NT_OK&&NT.on&&Notification.permission==='granted';
+const NTS={send(title,body,tag){ try{ const n=new Notification(title,{body,tag}); n.onclick=()=>{ try{ window.focus(); }catch(e){} n.close(); }; }catch(e){} }};
+let ntSeq=0;
+const sumG=a=>a.reduce((s,x)=>s+x,0), ntOther=s=>s==='a'?'b':s==='b'?'a':'';
+const setDone=(x,y)=>{ const hi=Math.max(x,y), lo=Math.min(x,y); return (hi>=6&&hi-lo>=2)||(hi===7&&lo>=5); };
+const ordSet=n=>n===1?'1er set':n+'e set';
+const ntSnap=m=>({t:Date.now(),st:m.st,a:m.a.sets.map(s=>s.g),b:m.b.sets.map(s=>s.g),sv:m.a.sv?'a':m.b.sv?'b':''});
+// compare deux lectures successives d'un match (p = avant, c = maintenant) ; renvoie les alertes et le serveur probable du prochain jeu
+function ntEvents(m,p,c){
+  const me=(S.fav[m.b.id]&&!S.fav[m.a.id])?'b':'a', op=ntOther(me), X=m[me], Y=m[op], ev=[], g=(arr,i)=>arr[i]||0;
+  const pa=p?p.a:[], pb=p?p.b:[], ca=c.a, cb=c.b, n=Math.max(ca.length,cb.length);
+  const mineA=me==='a'?ca:cb, oppA=me==='a'?cb:ca, ttl=`🎾 ${X.s} – ${Y.s}${NT.scope==='all'&&(m.ct||m.en)?' · '+(m.ct||m.en):''}`, ctx=[m.en,m.rdf].filter(Boolean).join(' · ');
+  const scAll=side=>{ const u=side==='a'?ca:cb, v=side==='a'?cb:ca; return u.map((x,i)=>x+'-'+g(v,i)).join(' '); };
+  const won=(upTo)=>{ let a=0,b=0; for(let i=0;i<=upTo;i++){ if(!setDone(g(mineA,i),g(oppA,i))&&i>=n-1&&c.st!=='post') continue; if(g(mineA,i)>g(oppA,i)) a++; else if(g(oppA,i)>g(mineA,i)) b++; } return [a,b]; };
+  if((!p&&c.st==='in'&&sumG(ca)+sumG(cb)===0)||(p&&p.st==='pre'&&c.st==='in'))
+    ev.push({k:'start',title:ttl,body:`▶️ Début du match${ctx?' · '+ctx:''}${m.ct?' · '+m.ct:''}`});
+  if(!p) return {ev,nx:''};
+  let nx=p.nx||'';
+  if(c.st==='post'&&p.st!=='post'){
+    let sa=0,sb=0; for(let i=0;i<n;i++){ if(g(ca,i)>g(cb,i)) sa++; else if(g(cb,i)>g(ca,i)) sb++; }
+    const w=m.a.w?'a':m.b.w?'b':sa>sb?'a':sb>sa?'b':'', W=w?m[w]:X, L=w?m[ntOther(w)]:Y, both=S.fav[m.a.id]&&S.fav[m.b.id];
+    const head=both||!w?'🏁':(w===me?'✅':'❌');
+    ev.push({k:'end',title:`${head} ${W.s} bat ${L.s}`,body:`${w?scAll(w):scAll('a')}${endNote(m)}${ctx?' · '+ctx:''}`});
+  }
+  const d=sumG(ca)+sumG(cb)-(sumG(pa)+sumG(pb));
+  if(p.st==='in'&&c.st==='in'&&d>0){
+    const ch=[]; for(let i=0;i<n;i++) if(g(ca,i)!==g(pa,i)||g(cb,i)!==g(pb,i)) ch.push(i);
+    const srv=p.sv||p.nx||''; nx=srv?(d%2?ntOther(srv):srv):'';
+    if(d===1&&ch.length===1){
+      const i=ch[0], w=g(ca,i)>g(pa,i)?'a':'b', W=m[w], tbk=(g(ca,i)===7&&g(cb,i)===6)||(g(ca,i)===6&&g(cb,i)===7), brk=!!srv&&!tbk&&srv!==w;
+      const wm=w===me?mineA:oppA, wo=w===me?oppA:mineA;
+      if(setDone(g(ca,i),g(cb,i))){
+        const [x,y]=won(i), lead=x>y?X:Y, hi=Math.max(x,y), lo=Math.min(x,y);
+        ev.push({k:'set',title:ttl,body:`${brk?'🔥 Break décisif · ':'✅ '}${W.s} remporte le ${ordSet(i+1)} ${g(wm,i)}-${g(wo,i)}${tbk?' (tie-break)':''} · ${x===y?x+' set partout':lead.s+' mène '+hi+' set'+(hi>1?'s':'')+' à '+lo}`});
+      } else {
+        const [x,y]=i>0?won(i-1):[0,0];
+        ev.push({k:'game',title:ttl,body:`${brk?'🔥 BREAK ! ':''}Jeu ${W.s}${!brk&&srv?' (service tenu)':''} · ${ordSet(i+1)} : ${g(mineA,i)}-${g(oppA,i)}${i>0?` · sets ${x}-${y}`:''}`});
+      }
+    } else {
+      const fin=ch.some(i=>setDone(g(ca,i),g(cb,i))||i<n-1);
+      ev.push({k:fin?'set':'game',title:ttl,body:`${fin?'✅ Set terminé · ':`${d} jeux · `}${scAll(me)}`});
+    }
+  }
+  return {ev,nx};
+}
+function ntScan(tour,evs){
+  if(!ntActive()||(NT.scope!=='all'&&!Object.keys(S.fav).length)) return;
+  const snap=jl(K.snap,{}), now=Date.now(), out=[];   // relue à chaque fois : deux onglets ouverts n'envoient pas l'alerte en double
+  for(const k of Object.keys(snap)) if(now-snap[k].t>36*36e5) delete snap[k];
+  for(const e of evs) for(const m of e.ms){ if(NT.scope!=='all'&&!(S.fav[m.a.id]||S.fav[m.b.id])) continue;
+    const p=snap[m.id], c=ntSnap(m); let r={ev:[],nx:''}; try{ r=ntEvents(m,p,c); }catch(x){}
+    c.nx=r.nx; snap[m.id]=c;
+    for(const x of r.ev){ const k=x.k==='set'&&!NT.set&&NT.game?'game':x.k; if(NT[k]) out.push({m,x}); } }
+  js_(K.snap,snap);
+  for(const o of out.slice(-12)) NTS.send(o.x.title,o.x.body,'tn-'+o.m.id+'-'+(++ntSeq));
+}
+const favTours=()=>NT.scope==='all'?['atp','wta']:[...new Set(Object.values(S.fav).map(f=>f.tr==='wta'?'wta':'atp'))];
+function favBusy(tour){ const now=Date.now(); return allMatches(tour).some(m=>(NT.scope==='all'||S.fav[m.a.id]||S.fav[m.b.id])&&(m.st==='in'||(m.st==='pre'&&Date.parse(m.t)-now<25*6e4&&Date.parse(m.t)-now>-3*36e5))); }
+// lecture en arrière-plan : toutes les 30 s s'il y a un match d'un joueur suivi en cours ou imminent, sinon toutes les 3 min (même si l'onglet est réduit)
+function ntPoll(force){ if(!ntActive()) return; for(const t of favTours()){ const c=S.cache.board[bKey(t,0)], age=Date.now()-((c&&c.t)||0); if(force===true||(favBusy(t)&&age>28e3)||age>18e4) loadBoard(t,0,true); } }
+setInterval(ntPoll,10000);
+function ntToggle(){
+  if(NT.on&&Notification.permission==='granted'){ NT.on=false; saveNt(); return render(); }
+  Promise.resolve(Notification.requestPermission()).then(r=>{ NT.on=r==='granted'; saveNt(); if(NT.on){ js_(K.snap,{}); ntPoll(true); } render(); }).catch(()=>render()); }
+function ntCard(){ if(!NT_OK) return '';
+  const perm=Notification.permission, on=NT.on&&perm==='granted', opt=(k,l)=>`<button class="${NT[k]?'':'sec '}fbtn" data-tn="ntopt" data-v="${k}">${NT[k]?'✓ ':''}${l}</button>`;
+  const txt=perm==='denied'?'Les notifications sont bloquées pour ce site : autorise-les dans les réglages du navigateur (cadenas à côté de l\'adresse), puis réactive-les ici.'
+    :!on?'Reçois une alerte pour les matchs en direct : début du match, chaque jeu (🔥 BREAK quand le service est perdu), chaque set et fin du match. Uniquement sur cet ordinateur.'
+      :NT.scope!=='all'&&!Object.keys(S.fav).length?'Suis au moins un joueur avec ☆ pour recevoir des alertes.'
+    :'Actives tant que Statify reste ouvert (onglet ou application, même réduit, quel que soit le sport affiché). Le 🔥 BREAK apparaît quand ESPN indique qui sert.';
+  return `<div class="card"><div class="row between" style="gap:10px;flex-wrap:wrap;align-items:center"><h2 style="margin:0">🔔 Notifications sur cet ordinateur</h2><button class="${on?'':'sec '}fbtn" data-tn="nton">${on?'Activées':'Activer'}</button></div>
+    <p class="mut" style="margin:8px 0 0;font-size:13px">${txt}</p>${on?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="${NT.scope==='all'?'':'sec '}fbtn" data-tn="ntscope" data-v="all">Tous les matchs en direct</button><button class="${NT.scope==='fav'?'':'sec '}fbtn" data-tn="ntscope" data-v="fav">Mes joueurs seulement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${opt('start','Début')}${opt('game','Chaque jeu')}${opt('set','Chaque set')}${opt('end','Fin du match')}<button class="sec fbtn" data-tn="nttest">Tester</button></div>`:''}</div>`; }
+
 /* ---------- 12. Affichage principal + clics ---------- */
 const TABS=[['today','📅',"Aujourd'hui"],['draw','🏆','Tableau'],['rank','📊','Classement'],['mine','⭐','Mes joueurs']];
 window.tennisRender=function(){ $('#tabs').innerHTML=TABS.map(([k,i,l])=>`<button data-act="tab" data-t="${k}" class="${S.tab===k?'on':''}"><i>${i}</i><span>${esc(l)}</span></button>`).join('');
   const f={today:vToday,draw:vDraw,rank:vRank,mine:vMine}[S.tab]; $('#view').innerHTML=f(); ensure(); };
 window.tennisRefresh=tennisRefresh;
-window.Tennis={parseBoard,parseRank,roundFr,roundIdx,sample,state:S};
+window.Tennis={parseBoard,parseRank,roundFr,roundIdx,sample,state:S,nt:NT,ntScan,ntEvents,ntSend:NTS};
 if(ui.sport==='tennis') render();   // le premier rendu a eu lieu avant le chargement de ce fichier
 document.addEventListener('click',e=>{ if(ui.sport!=='tennis') return;
   const tb=e.target.closest&&e.target.closest('#tabs [data-act=tab]'); if(tb){ e.stopPropagation(); e.preventDefault(); S.tab=tb.dataset.t; S.more=0; savePref(); render(); window.scrollTo(0,0); return; }
@@ -254,8 +335,12 @@ document.addEventListener('click',e=>{ if(ui.sport!=='tennis') return;
   else if(a==='day'){ S.day=+v; S.more=0; render(); }
   else if(a==='mine'){ S.mine=!S.mine; savePref(); render(); }
   else if(a==='more'){ S.more++; render(); }
-  else if(a==='fav'){ e.stopPropagation(); const id=el.dataset.id; if(S.fav[id]) delete S.fav[id]; else S.fav[id]={n:el.dataset.n,cc:el.dataset.cc}; saveFav(); render(); }
+  else if(a==='fav'){ e.stopPropagation(); const id=el.dataset.id; if(S.fav[id]) delete S.fav[id]; else S.fav[id]={n:el.dataset.n,cc:el.dataset.cc,tr:S.tour}; saveFav(); render(); }
   else if(a==='rd'){ const cur=S.open[v]; const def=el.querySelector('i').textContent==='▾'; S.open[v]=cur===undefined?!def:!cur; render(); }
+  else if(a==='nton') ntToggle();
+  else if(a==='ntscope'){ NT.scope=v; saveNt(); js_(K.snap,{}); ntPoll(true); render(); }
+  else if(a==='ntopt'){ NT[v]=!NT[v]; saveNt(); render(); }
+  else if(a==='nttest') NTS.send('🎾 C. Alcaraz – J. Sinner','🔥 BREAK ! Jeu C. Alcaraz · 2e set : 3-2 · sets 1-0 (test)','tn-test');
   else if(a==='refresh') tennisRefresh(true);
   else if(a==='drawdays'){ const ev=boardEvents(myTour(),0).find(x=>x.id===el.dataset.id)||currentEvent(); if(ev) loadDraw(myTour(),ev); }
   else if(a==='diag'){ S.diag=S.diag||{}; render(); window.scrollTo(0,0); } else if(a==='diagx'){ S.diag=null; render(); }
