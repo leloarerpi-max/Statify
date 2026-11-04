@@ -55,7 +55,7 @@ function parseRank(js){ return (findRanks(js)||[]).map(r=>{ const a=r.athlete||r
   .filter(r=>r.rk!=null).sort((x,y)=>x.rk-y.rk); }
 
 /* ---------- 3. État, mémoire locale ---------- */
-const K={fav:'suivi-tennis-fav',pref:'suivi-tennis-pref',cache:'suivi-tennis-cache',draw:'suivi-tennis-draw',notif:'suivi-tennis-notif',snap:'suivi-tennis-snap'};
+const K={fav:'suivi-tennis-fav',pref:'suivi-tennis-pref',cache:'suivi-tennis-cache',draw:'suivi-tennis-draw',notif:'suivi-tennis-notif',snap:'suivi-tennis-snap',starm:'suivi-tennis-starm'};
 const jl=(k,d)=>{ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } };
 const js_=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
 const P0=jl(K.pref,{});
@@ -64,6 +64,10 @@ const S={errT:{},tab:['today','draw','rank','mine'].includes(P0.tab)?P0.tab:'tod
 S.cache.board=S.cache.board||{}; S.cache.rank=S.cache.rank||{};
 const savePref=()=>js_(K.pref,{tab:S.tab,tour:S.tour,mine:S.mine,rankN:S.rankN});
 const saveFav=()=>js_(K.fav,S.fav);
+// matchs étoilés (★) : {idMatch:{t:date,tr:circuit}} ; propres à cet appareil, oubliés après 3 jours
+S.starM=jl(K.starm,{}); for(const k of Object.keys(S.starM)) if(Date.now()-((S.starM[k]||{}).t||0)>3*864e5) delete S.starM[k];
+const saveStarM=()=>js_(K.starm,S.starM);
+const isStar=m=>!!S.starM[m.id];
 function saveCache(){ const ks=Object.keys(S.cache.board).sort((a,b)=>S.cache.board[b].t-S.cache.board[a].t); for(const k of ks.slice(6)) delete S.cache.board[k]; js_(K.cache,S.cache); }
 function mergeBoard(tour,evs){ for(const e of evs){ const key=tour+':'+e.id, D=S.draw[key]||(S.draw[key]={ms:{},n:e.sn,start:e.start,end:e.end,t:0}); if(!D.ms) D.ms={}; D.n=e.sn; D.start=e.start||D.start; D.end=e.end||D.end; D.t=Date.now(); for(const m of e.ms) D.ms[m.id]=m; } saveDraw(); }
 function saveDraw(){ const ks=Object.keys(S.draw).sort((a,b)=>(S.draw[b].t||0)-(S.draw[a].t||0)); for(const k of ks.slice(3)) delete S.draw[k]; js_(K.draw,S.draw); }
@@ -125,7 +129,8 @@ function row(m,p,q){ const win=m.st==='post'&&p.w, live=m.st==='in';
   return `<div class="tnp"><div class="tnn${win?' win':''}"><span class="tnav">${esc(ini(p.n))}</span><b>${esc(p.s)}</b>${p.cc?`<span class="tncc">${esc(p.cc)}</span>`:''}${rkTxt(p)?`<span class="tnrk">${esc(rkTxt(p))}</span>`:''}${live&&p.sv?'<span class="tnsv" title="Au service"></span>':''}${star(p)}</div><div class="tns">${setsHtml(m,p,q)}</div></div>`; }
 function card(m){ const fv=isFav(m.a)||isFav(m.b), head=`${esc(m.en||'')}${m.en&&m.rdf?' · ':''}${esc(m.rdf)}${m.ct?' · '+esc(m.ct):''}`;
   const pill=m.st==='in'?`<span class="tnpill"><i></i>${esc(setLabel(m))}</span>`:m.st==='post'?`<span class="tnpill fin">Terminé${esc(endNote(m))}</span>`:'';
-  return `<div class="tnc${fv?' fv':''}"><div class="tnh"><span>${head}</span>${pill}</div>${row(m,m.a,m.b)}${row(m,m.b,m.a)}</div>`; }
+  const ms=m.st==='post'?'':`<span class="tnst${isStar(m)?' on':''}" data-tn="mstar" data-id="${esc(m.id)}" title="${isStar(m)?'Ne plus recevoir les alertes de ce match':'Recevoir les alertes de ce match'}">${isStar(m)?'★':'☆'}</span>`;
+  return `<div class="tnc${fv||isStar(m)?' fv':''}"><div class="tnh"><span>${head}</span><span style="display:flex;gap:6px;align-items:center;flex:none">${pill}${ms}</span></div>${row(m,m.a,m.b)}${row(m,m.b,m.a)}</div>`; }
 function hero(title,sub,live,extra){ const t=myTour();
   return `<div class="mxhero"><div class="row between" style="gap:10px;align-items:center;flex-wrap:wrap"><div style="min-width:0"><h2 style="margin:0">${live?'<span class="livedot"></span>':''}${title}</h2><div class="mut" style="font-size:12px;margin-top:2px">${sub}</div></div>
     <div class="row" style="gap:6px;flex-wrap:nowrap"><button class="${t==='atp'?'':'sec '}fbtn" data-tn="tour" data-v="atp">ATP</button><button class="${t==='wta'?'':'sec '}fbtn" data-tn="tour" data-v="wta">WTA</button></div></div>${extra||''}</div>`; }
@@ -193,6 +198,7 @@ function vRank(){ const t=myTour(), R=S.cache.rank[t], k='r'+t; let h=hero('📊
 function vMine(){ const t=myTour(), ids=Object.keys(S.fav), all=allMatches(t), now=Date.now();
   let h=hero('⭐ Mes joueurs','Touche ☆ à côté d\'un joueur (matchs ou classement) pour le suivre',all.some(m=>m.st==='in'&&(S.fav[m.a.id]||S.fav[m.b.id])),'')+status(bKey(t,0));
   h+=ntCard();
+  { const st=allMatches(t).filter(m=>isStar(m)&&m.st!=='post').sort((a,b)=>(Date.parse(a.t)||0)-(Date.parse(b.t)||0)); if(st.length) h+='<div class="mxl">★ Matchs choisis pour les alertes</div>'+st.map(card).join(''); }
   if(!ids.length) return h+'<div class="card"><h2>Aucun joueur pour l\'instant</h2><p class="mut">Dans « Aujourd\'hui » ou « Classement », touche ☆ à côté d\'un joueur : il apparaît ici avec son classement, son match en cours, son prochain match et son dernier résultat. Les joueurs suivis passent aussi en premier dans les listes.</p></div>';
   const R=(S.cache.rank[t]||{}).rows||[];
   h+=ids.map(id=>{ const f=S.fav[id], p={id,n:f.n,cc:f.cc,s:f.n}, r=rankOf(t,p), mine=all.filter(m=>m.a.id===id||m.b.id===id);
@@ -209,7 +215,7 @@ function vMine(){ const t=myTour(), ids=Object.keys(S.fav), all=allMatches(t), n
 
 /* ---------- 11. Diagnostic ESPN ---------- */
 function diagHtml(){ const d=S.diag||{}, t=myTour();
-  return `<div class="card tndiag"><div class="row between"><h2 style="margin:0">🔧 Diagnostic ESPN <span class="mut" style="font-size:12px;font-weight:400">· tennis.js v7</span></h2><button class="sec" data-tn="diagx">Fermer</button></div>
+  return `<div class="card tndiag"><div class="row between"><h2 style="margin:0">🔧 Diagnostic ESPN <span class="mut" style="font-size:12px;font-weight:400">· tennis.js v8</span></h2><button class="sec" data-tn="diagx">Fermer</button></div>
   <p class="mut" style="margin:8px 0">Pour vérifier ce qu'ESPN renvoie. « Télécharger un extrait » crée un petit fichier (quelques matchs) que tu peux joindre à ta réponse pour que j'ajuste la lecture. Tu peux aussi coller un JSON ci-dessous pour voir l'écran avec ces données.</p>
   <div class="row" style="gap:6px;flex-wrap:wrap"><button class="sec" data-tn="diagrun">Tester ${t.toUpperCase()}</button><button class="sec" data-tn="diagcopy" data-v="dboard">⬇ Télécharger un extrait du scoreboard</button><button class="sec" data-tn="diagcopy" data-v="drank">⬇ Télécharger un extrait du classement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px"><button class="sec" data-tn="diagcopy" data-v="sboard">Copier l'extrait du scoreboard</button><button class="sec" data-tn="diagcopy" data-v="srank">Copier l'extrait du classement</button></div>
   ${d.log?`<pre class="tnlog">${esc(d.log)}</pre>`:''}
@@ -245,7 +251,7 @@ function diagPaste(kind){ const el=document.getElementById('tnPaste'), txt=el?el
 /* ---------- 11b. Notifications (ordinateur, navigateur ouvert) ---------- */
 // Pour les joueurs suivis (☆) : début, chaque jeu (🔥 BREAK si le service est perdu), fin de set, fin de match.
 // Fonctionne tant que Statify est ouvert (onglet ou appli, même réduit), quel que soit le sport affiché. Réglages propres à cet appareil (non synchronisés).
-const NT0=jl(K.notif,{}), NT={on:!!NT0.on,snd:NT0.snd!==false,scope:NT0.scope==='fav'?'fav':'all',start:NT0.start!==false,game:NT0.game!==false,set:NT0.set!==false,end:NT0.end!==false};
+const NT0=jl(K.notif,{}), NT={on:!!NT0.on,snd:NT0.snd!==false,scope:['fav','pick'].includes(NT0.scope)?NT0.scope:'all',start:NT0.start!==false,game:NT0.game!==false,set:NT0.set!==false,end:NT0.end!==false};
 const saveNt=()=>js_(K.notif,NT);
 const NT_API=typeof Notification!=='undefined', NT_PHONE=!!(window.matchMedia&&matchMedia('(hover:none) and (pointer:coarse)').matches), NT_OK=NT_API&&!NT_PHONE;
 const ntActive=()=>NT_OK&&NT.on&&Notification.permission==='granted';
@@ -271,7 +277,7 @@ const ntSnap=m=>({t:Date.now(),st:m.st,a:m.a.sets.map(s=>s.g),b:m.b.sets.map(s=>
 function ntEvents(m,p,c){
   const me=(S.fav[m.b.id]&&!S.fav[m.a.id])?'b':'a', op=ntOther(me), X=m[me], Y=m[op], ev=[], g=(arr,i)=>arr[i]||0;
   const pa=p?p.a:[], pb=p?p.b:[], ca=c.a, cb=c.b, n=Math.max(ca.length,cb.length);
-  const mineA=me==='a'?ca:cb, oppA=me==='a'?cb:ca, ttl=`🎾 ${X.s} – ${Y.s}${NT.scope==='all'&&(m.ct||m.en)?' · '+(m.ct||m.en):''}`, ctx=[m.en,m.rdf].filter(Boolean).join(' · ');
+  const mineA=me==='a'?ca:cb, oppA=me==='a'?cb:ca, ttl=`🎾 ${X.s} – ${Y.s}${NT.scope!=='fav'&&(m.ct||m.en)?' · '+(m.ct||m.en):''}`, ctx=[m.en,m.rdf].filter(Boolean).join(' · ');
   const scAll=side=>{ const u=side==='a'?ca:cb, v=side==='a'?cb:ca; return u.map((x,i)=>x+'-'+g(v,i)).join(' '); };
   const won=(upTo)=>{ let a=0,b=0; for(let i=0;i<=upTo;i++){ if(!setDone(g(mineA,i),g(oppA,i))&&i>=n-1&&c.st!=='post') continue; if(g(mineA,i)>g(oppA,i)) a++; else if(g(oppA,i)>g(mineA,i)) b++; } return [a,b]; };
   if((!p&&c.st==='in'&&sumG(ca)+sumG(cb)===0)||(p&&p.st==='pre'&&c.st==='in'))
@@ -305,19 +311,20 @@ function ntEvents(m,p,c){
   }
   return {ev,nx};
 }
+const ntWanted=m=>NT.scope==='all'||isStar(m)||(NT.scope==='fav'&&!!(S.fav[m.a.id]||S.fav[m.b.id]));
 function ntScan(tour,evs){
-  if(!ntActive()||(NT.scope!=='all'&&!Object.keys(S.fav).length)) return;
+  if(!ntActive()||(NT.scope!=='all'&&!Object.keys(S.starM).length&&(NT.scope==='pick'||!Object.keys(S.fav).length))) return;
   const snap=jl(K.snap,{}), now=Date.now(), out=[];   // relue à chaque fois : deux onglets ouverts n'envoient pas l'alerte en double
   for(const k of Object.keys(snap)) if(now-snap[k].t>36*36e5) delete snap[k];
-  for(const e of evs) for(const m of e.ms){ if(NT.scope!=='all'&&!(S.fav[m.a.id]||S.fav[m.b.id])) continue;
+  for(const e of evs) for(const m of e.ms){ if(!ntWanted(m)) continue;
     const p=snap[m.id], c=ntSnap(m); let r={ev:[],nx:''}; try{ r=ntEvents(m,p,c); }catch(x){}
     c.nx=r.nx; snap[m.id]=c;
     for(const x of r.ev){ const k=x.k==='set'&&!NT.set&&NT.game?'game':x.k; if(NT[k]) out.push({m,x}); } }
   js_(K.snap,snap);
   for(const o of out.slice(-12)) NTS.send(o.x.title,o.x.body,'tn-'+o.m.id+'-'+(++ntSeq));
 }
-const favTours=()=>NT.scope==='all'?['atp','wta']:[...new Set(Object.values(S.fav).map(f=>f.tr==='wta'?'wta':'atp'))];
-function favBusy(tour){ const now=Date.now(); return allMatches(tour).some(m=>(NT.scope==='all'||S.fav[m.a.id]||S.fav[m.b.id])&&(m.st==='in'||(m.st==='pre'&&Date.parse(m.t)-now<25*6e4&&Date.parse(m.t)-now>-3*36e5))); }
+const favTours=()=>NT.scope==='all'?['atp','wta']:[...new Set([...(NT.scope==='fav'?Object.values(S.fav):[]),...Object.values(S.starM)].map(f=>f.tr==='wta'?'wta':'atp'))];
+function favBusy(tour){ const now=Date.now(); return allMatches(tour).some(m=>ntWanted(m)&&(m.st==='in'||(m.st==='pre'&&Date.parse(m.t)-now<25*6e4&&Date.parse(m.t)-now>-3*36e5))); }
 // lecture en arrière-plan : toutes les 30 s s'il y a un match d'un joueur suivi en cours ou imminent, sinon toutes les 3 min (même si l'onglet est réduit)
 function ntPoll(force){ if(!ntActive()) return; for(const t of favTours()){ const c=S.cache.board[bKey(t,0)], age=Date.now()-((c&&c.t)||0); if(force===true||(favBusy(t)&&age>28e3)||age>18e4) loadBoard(t,0,true); } }
 setInterval(ntPoll,10000);
@@ -328,10 +335,11 @@ function ntCard(){ if(!NT_OK) return `<div class="card"><h2 style="margin:0">�
   const perm=Notification.permission, on=NT.on&&perm==='granted', opt=(k,l)=>`<button class="${NT[k]?'':'sec '}fbtn" data-tn="ntopt" data-v="${k}">${NT[k]?'✓ ':''}${l}</button>`;
   const txt=perm==='denied'?'Les notifications sont bloquées pour ce site : autorise-les dans les réglages du navigateur (cadenas à côté de l\'adresse), puis réactive-les ici.'
     :!on?'Reçois une alerte pour les matchs en direct : début du match, chaque jeu (🔥 BREAK quand le service est perdu), chaque set et fin du match. Uniquement sur cet ordinateur.'
-      :NT.scope!=='all'&&!Object.keys(S.fav).length?'Suis au moins un joueur avec ☆ pour recevoir des alertes.'
+      :NT.scope==='pick'&&!Object.keys(S.starM).length?'Touche ☆ en haut à droite d\'un match (onglet Aujourd\'hui) pour choisir ceux dont tu veux les alertes.'
+      :NT.scope==='fav'&&!Object.keys(S.fav).length&&!Object.keys(S.starM).length?'Suis au moins un joueur avec ☆, ou étoile un match, pour recevoir des alertes.'
     :'Actives tant que Statify reste ouvert (onglet ou application, même réduit, quel que soit le sport affiché). Le 🔥 BREAK apparaît quand ESPN indique qui sert.';
   return `<div class="card"><div class="row between" style="gap:10px;flex-wrap:wrap;align-items:center"><h2 style="margin:0">🔔 Notifications sur cet ordinateur</h2><button class="${on?'':'sec '}fbtn" data-tn="nton">${on?'Activées':'Activer'}</button></div>
-    <p class="mut" style="margin:8px 0 0;font-size:13px">${txt}</p>${on?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="${NT.scope==='all'?'':'sec '}fbtn" data-tn="ntscope" data-v="all">Tous les matchs en direct</button><button class="${NT.scope==='fav'?'':'sec '}fbtn" data-tn="ntscope" data-v="fav">Mes joueurs seulement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${opt('start','Début')}${opt('game','Chaque jeu')}${opt('set','Chaque set')}${opt('end','Fin du match')}<button class="${NT.snd?'':'sec '}fbtn" data-tn="ntopt" data-v="snd">${NT.snd?'🔊 Son':'🔇 Son'}</button><button class="sec fbtn" data-tn="ntsnd">Tester le son</button><button class="sec fbtn" data-tn="nttest">Tester la notification</button></div>${NT.lastSnd?`<p class="mut" style="margin:8px 0 0;font-size:12px">${esc(NT.lastSnd)}</p>`:''}${NT.last?`<p class="mut" style="margin:8px 0 0;font-size:12px">Dernier essai : ${esc(NT.last)}. Si rien n'apparaît à l'écran alors que c'est « ok » : Windows → Paramètres → Système → Notifications → active ton navigateur et coupe « Ne pas déranger » / « Assistant de concentration » ; sur Mac : Réglages → Notifications → ton navigateur.</p>`:''}`:''}</div>`; }
+    <p class="mut" style="margin:8px 0 0;font-size:13px">${txt}</p>${on?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="${NT.scope==='all'?'':'sec '}fbtn" data-tn="ntscope" data-v="all">Tous les matchs en direct</button><button class="${NT.scope==='fav'?'':'sec '}fbtn" data-tn="ntscope" data-v="fav">Mes joueurs + matchs ★</button><button class="${NT.scope==='pick'?'':'sec '}fbtn" data-tn="ntscope" data-v="pick">Matchs ★ seulement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${opt('start','Début')}${opt('game','Chaque jeu')}${opt('set','Chaque set')}${opt('end','Fin du match')}<button class="${NT.snd?'':'sec '}fbtn" data-tn="ntopt" data-v="snd">${NT.snd?'🔊 Son':'🔇 Son'}</button><button class="sec fbtn" data-tn="ntsnd">Tester le son</button><button class="sec fbtn" data-tn="nttest">Tester la notification</button></div>${NT.lastSnd?`<p class="mut" style="margin:8px 0 0;font-size:12px">${esc(NT.lastSnd)}</p>`:''}${NT.last?`<p class="mut" style="margin:8px 0 0;font-size:12px">Dernier essai : ${esc(NT.last)}. Si rien n'apparaît à l'écran alors que c'est « ok » : Windows → Paramètres → Système → Notifications → active ton navigateur et coupe « Ne pas déranger » / « Assistant de concentration » ; sur Mac : Réglages → Notifications → ton navigateur.</p>`:''}`:''}</div>`; }
 
 /* ---------- 12. Affichage principal + clics ---------- */
 const TABS=[['today','📅',"Aujourd'hui"],['draw','🏆','Tableau'],['rank','📊','Classement'],['mine','⭐','Mes joueurs']];
@@ -349,6 +357,10 @@ document.addEventListener('click',e=>{ if(ui.sport!=='tennis') return;
   else if(a==='more'){ S.more++; render(); }
   else if(a==='fav'){ e.stopPropagation(); const id=el.dataset.id; if(S.fav[id]) delete S.fav[id]; else S.fav[id]={n:el.dataset.n,cc:el.dataset.cc,tr:S.tour}; saveFav(); render(); }
   else if(a==='rd'){ const cur=S.open[v]; const def=el.querySelector('i').textContent==='▾'; S.open[v]=cur===undefined?!def:!cur; render(); }
+  else if(a==='mstar'){ e.stopPropagation(); const id=el.dataset.id;
+    if(S.starM[id]) delete S.starM[id]; else { const first=!Object.keys(S.starM).length; S.starM[id]={t:Date.now(),tr:S.tour};
+      if(first&&NT.on&&NT.scope==='all'){ NT.scope='pick'; saveNt(); js_(K.snap,{}); } if(typeof say==='function') say(ntActive()?'★ Match choisi : tu recevras ses alertes (réglable dans « Mes joueurs »).':'★ Match choisi. Pour recevoir les alertes, active les notifications dans « Mes joueurs ».','warn'); }
+    saveStarM(); ntPoll(true); render(); }
   else if(a==='nton') ntToggle();
   else if(a==='ntgo'){ S.tab='mine'; savePref(); render(); window.scrollTo(0,0); ntToggle(); }
   else if(a==='ntscope'){ NT.scope=v; saveNt(); js_(K.snap,{}); ntPoll(true); render(); }
