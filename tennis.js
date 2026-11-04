@@ -209,7 +209,7 @@ function vMine(){ const t=myTour(), ids=Object.keys(S.fav), all=allMatches(t), n
 
 /* ---------- 11. Diagnostic ESPN ---------- */
 function diagHtml(){ const d=S.diag||{}, t=myTour();
-  return `<div class="card tndiag"><div class="row between"><h2 style="margin:0">🔧 Diagnostic ESPN <span class="mut" style="font-size:12px;font-weight:400">· tennis.js v6</span></h2><button class="sec" data-tn="diagx">Fermer</button></div>
+  return `<div class="card tndiag"><div class="row between"><h2 style="margin:0">🔧 Diagnostic ESPN <span class="mut" style="font-size:12px;font-weight:400">· tennis.js v7</span></h2><button class="sec" data-tn="diagx">Fermer</button></div>
   <p class="mut" style="margin:8px 0">Pour vérifier ce qu'ESPN renvoie. « Télécharger un extrait » crée un petit fichier (quelques matchs) que tu peux joindre à ta réponse pour que j'ajuste la lecture. Tu peux aussi coller un JSON ci-dessous pour voir l'écran avec ces données.</p>
   <div class="row" style="gap:6px;flex-wrap:wrap"><button class="sec" data-tn="diagrun">Tester ${t.toUpperCase()}</button><button class="sec" data-tn="diagcopy" data-v="dboard">⬇ Télécharger un extrait du scoreboard</button><button class="sec" data-tn="diagcopy" data-v="drank">⬇ Télécharger un extrait du classement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px"><button class="sec" data-tn="diagcopy" data-v="sboard">Copier l'extrait du scoreboard</button><button class="sec" data-tn="diagcopy" data-v="srank">Copier l'extrait du classement</button></div>
   ${d.log?`<pre class="tnlog">${esc(d.log)}</pre>`:''}
