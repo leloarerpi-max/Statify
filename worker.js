@@ -449,7 +449,10 @@ async function tennisDuJour(dateParam, debug) {
         taille: html.length, lignes: (html.match(/<tr/gi) || []).length, liensJoueur: (html.match(/\/player\//gi) || []).length, liensMatch: (html.match(/\/match-detail\//gi) || []).length,
         dates: [...new Set(html.match(/\b\d{2}\.\d{2}\.\d{4}\b/g) || [])].slice(0, 6), mainTournaments: k >= 0, coursesCells: (html.match(/class="[^"]*course/gi) || []).length,
         extraitMatchs: i >= 0 ? html.slice(Math.max(0, i - 1500), i + 1500) : html.slice(0, 1500),
-        extraitMain: k >= 0 ? html.slice(k, k + 600) : null, lus: lireTE(html, jour, tour).length
+        extraitMain: k >= 0 ? html.slice(k, k + 600) : null, lus: lireTE(html, jour, tour).length,
+        titresTournois: (html.match(/<tr[^>]*class="[^"]*head[^"]*"[\s\S]*?<\/tr>/gi) || []).slice(0, 14).map(r => txt(r).slice(0, 80) + ' | ' + ((r.match(/href="([^"]*)"/i) || [])[1] || '')),
+        extraitQualif: (() => { const q = html.search(/qualif/i); return q >= 0 ? html.slice(Math.max(0, q - 700), q + 700) : 'aucun mot « qualif » dans la page'; })(),
+        matchsLus: lireTE(html, jour, tour).slice(0, 6).map(m => m.tournoi + ' | ' + m.heure + ' | ' + m.j1 + ' - ' + m.j2)
       };
     }
     matchs = matchs.concat(lireTE(html, jour, tour));
