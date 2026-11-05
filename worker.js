@@ -377,33 +377,34 @@ function estPrincipal(nom, href, liste) {
   const n = norm(nom);
   if (/challenger|futures|\bitf\b|utr|\b125\b|exhibition|exhibit/.test(n)) return false;
   if (liste) return [...liste].some(x => n === x || n.startsWith(x + ' ') || x.startsWith(n + ' '));
-  return /\/(atp-men|wta-women)\//.test(href || '') || !href;   // secours si la liste n'a pas été trouvée
+  return !/challenger|futures|itf|utr/i.test(href || '');          // secours si la liste n'a pas été trouvée
 }
 function lireTE(html, ymdStr, tour) {
   const [Y, M, D] = ymdStr.split('-'), cible = `${D}.${M}.${Y}`;
   const liste = tournoisPrincipaux(html);
+  const sansDates = !/\b\d{2}\.\d{2}\.\d{4}\b/.test(html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ''));   // page sans aucune date : on garde tout
   const out = [];
   let date = null, tournoi = null, tHref = '', cur = null;
-  const fin = () => { if (cur && cur.p.length >= 2 && date === cible && estPrincipal(tournoi, tHref, liste)) out.push({ tour, tournoi, heure: cur.h, j1: cur.p[0], j2: cur.p[1], c1: cur.o[0] ?? null, c2: cur.o[1] ?? null }); cur = null; };
+  const fin = () => { if (cur && cur.p.length >= 2 && tournoi && (sansDates || date === cible || date === null) && estPrincipal(tournoi, tHref, liste)) out.push({ tour, tournoi, heure: cur.h, j1: cur.p[0], j2: cur.p[1], c1: cur.o[0] ?? null, c2: cur.o[1] ?? null }); cur = null; };
   const rows = html.match(/<tr[\s\S]*?<\/tr>/gi) || [];
   for (const r of rows) {
     const t = txt(r);
-    const joueurs = [...r.matchAll(/<a [^>]*href="\/player\/[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)].map(m => txt(m[1])).filter(Boolean);
-    const duel = r.match(/<a [^>]*href="\/match-detail\/[^"]*"[^>]*>([\s\S]*?)<\/a>/i);
-    const heure = (r.match(/<td[^>]*class="[^"]*\btime\b[^"]*"[^>]*>\s*(\d{1,2}:\d{2})/i) || [])[1];
+    const joueurs = [...r.matchAll(/<a [^>]*href="[^"]*\/player\/[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)].map(m => txt(m[1])).filter(Boolean);
+    const duel = r.match(/<a [^>]*href="[^"]*\/match-detail\/[^"]*"[^>]*>([\s\S]*?)<\/a>/i);
+    const heure = (r.match(/(?:class="[^"]*\btime\b[^"]*"[^>]*>|>)\s*(\d{1,2}:\d{2})\s*</i) || [])[1];
     if (!joueurs.length && !duel) {                         // ligne de titre : date ou tournoi
       fin();
       const dm = t.match(/(\d{2}\.\d{2}\.\d{4})/);
-      if (dm && t.replace(dm[1], '').replace(/[A-Za-z,]/g, '').trim().length < 3) { date = dm[1]; continue; }
+      if (dm && t.replace(dm[1], '').replace(/[^\p{L}\d]/gu, '').length < 12) { date = dm[1]; continue; }
       const lk = r.match(/<a [^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/i);
-      if (lk && /head|flags/i.test(r.slice(0, 160))) { tHref = lk[1]; tournoi = txt(lk[2]); }
+      if (lk && txt(lk[2]) && !/<th[\s>]/i.test(r)) { tHref = lk[1]; tournoi = txt(lk[2]); }
       continue;
     }
     if (heure) { fin(); cur = { h: heure, p: [], o: [] }; }
-    if (!cur) continue;
+    else if (!cur) cur = { h: '', p: [], o: [] };
     let noms = joueurs;
-    if (noms.length < 2 && duel) noms = txt(duel[1]).split(/\s+-\s+/).map(x => x.replace(/\(\d+\)/g, '').trim());   // « A - B » dans un seul lien
-    for (const n of noms) if (cur.p.length < 2) cur.p.push(n.replace(/\s*\(\d+\)\s*/g, ' ').trim());
+    if (noms.length < 2 && duel) noms = txt(duel[1]).split(/\s+-\s+/);
+    for (const n of noms) if (cur.p.length < 2) cur.p.push(n.replace(/\s*\(\d+\)\s*/g, ' ').replace(/\s+/g, ' ').trim());
     const cotes = [...r.matchAll(/<td[^>]*class="[^"]*\bcourse[^"]*"[^>]*>([\s\S]*?)<\/td>/gi)].map(m => parseFloat(txt(m[1]))).filter(x => x > 1 && x < 200);
     for (const c of cotes) if (cur.o.length < 2) cur.o.push(c);
   }
@@ -421,7 +422,15 @@ async function tennisDuJour(dateParam, debug) {
     const res = await fetch(`${TE}/next/?type=${type}&year=${Y}&month=${M}&day=${D}`, { headers: heads });
     if (!res.ok) { erreurs.push(`${tour} : Tennis Explorer a répondu ${res.status}`); continue; }
     const html = await res.text();
-    if (debug) brut[tour] = html.slice(html.search(/<table[^>]*class="result/i) >= 0 ? html.search(/<table[^>]*class="result/i) : 0).slice(0, 6000);
+    if (debug) {
+      const i = html.search(/\/player\//i), k = html.search(/Main tournaments/i);
+      brut[tour] = {
+        taille: html.length, lignes: (html.match(/<tr/gi) || []).length, liensJoueur: (html.match(/\/player\//gi) || []).length, liensMatch: (html.match(/\/match-detail\//gi) || []).length,
+        dates: [...new Set(html.match(/\b\d{2}\.\d{2}\.\d{4}\b/g) || [])].slice(0, 6), mainTournaments: k >= 0, coursesCells: (html.match(/class="[^"]*course/gi) || []).length,
+        extraitMatchs: i >= 0 ? html.slice(Math.max(0, i - 1500), i + 1500) : html.slice(0, 1500),
+        extraitMain: k >= 0 ? html.slice(k, k + 600) : null, lus: lireTE(html, jour, tour).length
+      };
+    }
     matchs = matchs.concat(lireTE(html, jour, tour));
   }
   if (debug) return { ok: true, debug: brut, matchs };

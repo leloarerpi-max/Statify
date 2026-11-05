@@ -138,7 +138,9 @@
       <p style="font-size:12px;opacity:.7;margin:6px 0">Adresse de ton robot (ex. https://statify-robot.ton-compte.workers.dev) et la clé SYNC_KEY.</p>
       <input id="tnUrl" placeholder="Adresse du robot" value="${esc(S.robot.url)}" autocomplete="off" style="width:100%;box-sizing:border-box;min-height:44px;padding:8px;border-radius:8px;border:1px solid ${BD};background:transparent;color:inherit;margin-bottom:6px">
       <input id="tnKey" type="password" placeholder="Clé SYNC_KEY" value="${esc(S.robot.key)}" autocomplete="off" style="width:100%;box-sizing:border-box;min-height:44px;padding:8px;border-radius:8px;border:1px solid ${BD};background:transparent;color:inherit;margin-bottom:6px">
-      <button type="button" onclick="tennisSauver()" style="min-height:44px;padding:0 14px;border-radius:10px;font-weight:700;font-size:12px;background:#16a34a;color:#fff;border:0;cursor:pointer">Enregistrer et charger</button></details>`;
+      <button type="button" onclick="tennisSauver()" style="min-height:44px;padding:0 14px;border-radius:10px;font-weight:700;font-size:12px;background:#16a34a;color:#fff;border:0;cursor:pointer">Enregistrer et charger</button>
+      <button type="button" onclick="tennisDiag()" style="min-height:44px;padding:0 14px;margin-left:6px;border-radius:10px;font-weight:700;font-size:12px;background:transparent;color:inherit;border:1px solid ${BD};cursor:pointer">Diagnostic</button>
+      ${S.diag ? `<p style="font-size:12px;opacity:.7;margin:8px 0 4px">Copie tout ce texte et envoie-le moi :</p><textarea readonly onclick="this.select()" style="width:100%;box-sizing:border-box;height:160px;font-size:11px;border-radius:8px;border:1px solid ${BD};background:transparent;color:inherit">${esc(S.diag)}</textarea>` : ''}</details>`;
   }
 
   function render() {
@@ -179,6 +181,14 @@
   window.tennisSet = (k, v) => { S[k] = v; render(); };
   window.tennisJour = n => { S.jour = n === 0 ? auj() : decaler(S.jour, n); S.err = ''; render(); charger(false); };
   window.tennisMise = v => { const x = parseFloat(String(v).replace(',', '.')); S.mise = x > 0 ? x : 1; render(); };
+  window.tennisDiag = async () => {
+    S.diag = 'Chargement du diagnostic…'; render();
+    try {
+      const r = await fetch(S.robot.url.replace(/\/+$/, '') + '/tennis?debug=1&date=' + S.jour, { headers: { 'x-key': S.robot.key }, cache: 'no-store' });
+      S.diag = (await r.text()).slice(0, 12000);
+    } catch (e) { S.diag = 'Erreur : ' + e.message; }
+    render();
+  };
   window.tennisSauver = () => {
     S.robot = { url: (document.getElementById('tnUrl').value || '').trim(), key: (document.getElementById('tnKey').value || '').trim() };
     try { localStorage.setItem(KEY_ROBOT, JSON.stringify(S.robot)); } catch (e) {}
