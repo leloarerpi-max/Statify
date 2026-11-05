@@ -215,7 +215,7 @@ function vMine(){ const t=myTour(), ids=Object.keys(S.fav), all=allMatches(t), n
 
 /* ---------- 11. Diagnostic ESPN ---------- */
 function diagHtml(){ const d=S.diag||{}, t=myTour();
-  return `<div class="card tndiag"><div class="row between"><h2 style="margin:0">🔧 Diagnostic ESPN <span class="mut" style="font-size:12px;font-weight:400">· tennis.js v8</span></h2><button class="sec" data-tn="diagx">Fermer</button></div>
+  return `<div class="card tndiag"><div class="row between"><h2 style="margin:0">🔧 Diagnostic ESPN <span class="mut" style="font-size:12px;font-weight:400">· tennis.js v9</span></h2><button class="sec" data-tn="diagx">Fermer</button></div>
   <p class="mut" style="margin:8px 0">Pour vérifier ce qu'ESPN renvoie. « Télécharger un extrait » crée un petit fichier (quelques matchs) que tu peux joindre à ta réponse pour que j'ajuste la lecture. Tu peux aussi coller un JSON ci-dessous pour voir l'écran avec ces données.</p>
   <div class="row" style="gap:6px;flex-wrap:wrap"><button class="sec" data-tn="diagrun">Tester ${t.toUpperCase()}</button><button class="sec" data-tn="diagcopy" data-v="dboard">⬇ Télécharger un extrait du scoreboard</button><button class="sec" data-tn="diagcopy" data-v="drank">⬇ Télécharger un extrait du classement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px"><button class="sec" data-tn="diagcopy" data-v="sboard">Copier l'extrait du scoreboard</button><button class="sec" data-tn="diagcopy" data-v="srank">Copier l'extrait du classement</button></div>
   ${d.log?`<pre class="tnlog">${esc(d.log)}</pre>`:''}
@@ -313,14 +313,14 @@ function ntEvents(m,p,c){
 }
 const ntWanted=m=>NT.scope==='all'||isStar(m)||(NT.scope==='fav'&&!!(S.fav[m.a.id]||S.fav[m.b.id]));
 function ntScan(tour,evs){
-  if(!ntActive()||(NT.scope!=='all'&&!Object.keys(S.starM).length&&(NT.scope==='pick'||!Object.keys(S.fav).length))) return;
-  const snap=jl(K.snap,{}), now=Date.now(), out=[];   // relue à chaque fois : deux onglets ouverts n'envoient pas l'alerte en double
+  if(!ntActive()) return; if(NT.scope!=='all'&&!Object.keys(S.starM).length&&(NT.scope==='pick'||!Object.keys(S.fav).length)){ NT.stat={t:Date.now(),n:0}; return; }
+  const snap=jl(K.snap,{}), now=Date.now(), out=[]; let watched=0;   // relue à chaque fois : deux onglets ouverts n'envoient pas l'alerte en double
   for(const k of Object.keys(snap)) if(now-snap[k].t>36*36e5) delete snap[k];
-  for(const e of evs) for(const m of e.ms){ if(!ntWanted(m)) continue;
+  for(const e of evs) for(const m of e.ms){ if(!ntWanted(m)) continue; if(m.st!=='post') watched++;
     const p=snap[m.id], c=ntSnap(m); let r={ev:[],nx:''}; try{ r=ntEvents(m,p,c); }catch(x){}
     c.nx=r.nx; snap[m.id]=c;
     for(const x of r.ev){ const k=x.k==='set'&&!NT.set&&NT.game?'game':x.k; if(NT[k]) out.push({m,x}); } }
-  js_(K.snap,snap);
+  js_(K.snap,snap); NT.stat={t:now,n:watched};
   for(const o of out.slice(-12)) NTS.send(o.x.title,o.x.body,'tn-'+o.m.id+'-'+(++ntSeq));
 }
 const favTours=()=>NT.scope==='all'?['atp','wta']:[...new Set([...(NT.scope==='fav'?Object.values(S.fav):[]),...Object.values(S.starM)].map(f=>f.tr==='wta'?'wta':'atp'))];
@@ -339,7 +339,7 @@ function ntCard(){ if(!NT_OK) return `<div class="card"><h2 style="margin:0">�
       :NT.scope==='fav'&&!Object.keys(S.fav).length&&!Object.keys(S.starM).length?'Suis au moins un joueur avec ☆, ou étoile un match, pour recevoir des alertes.'
     :'Actives tant que Statify reste ouvert (onglet ou application, même réduit, quel que soit le sport affiché). Le 🔥 BREAK apparaît quand ESPN indique qui sert.';
   return `<div class="card"><div class="row between" style="gap:10px;flex-wrap:wrap;align-items:center"><h2 style="margin:0">🔔 Notifications sur cet ordinateur</h2><button class="${on?'':'sec '}fbtn" data-tn="nton">${on?'Activées':'Activer'}</button></div>
-    <p class="mut" style="margin:8px 0 0;font-size:13px">${txt}</p>${on?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="${NT.scope==='all'?'':'sec '}fbtn" data-tn="ntscope" data-v="all">Tous les matchs en direct</button><button class="${NT.scope==='fav'?'':'sec '}fbtn" data-tn="ntscope" data-v="fav">Mes joueurs + matchs ★</button><button class="${NT.scope==='pick'?'':'sec '}fbtn" data-tn="ntscope" data-v="pick">Matchs ★ seulement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${opt('start','Début')}${opt('game','Chaque jeu')}${opt('set','Chaque set')}${opt('end','Fin du match')}<button class="${NT.snd?'':'sec '}fbtn" data-tn="ntopt" data-v="snd">${NT.snd?'🔊 Son':'🔇 Son'}</button><button class="sec fbtn" data-tn="ntsnd">Tester le son</button><button class="sec fbtn" data-tn="nttest">Tester la notification</button></div>${NT.lastSnd?`<p class="mut" style="margin:8px 0 0;font-size:12px">${esc(NT.lastSnd)}</p>`:''}${NT.last?`<p class="mut" style="margin:8px 0 0;font-size:12px">Dernier essai : ${esc(NT.last)}. Si rien n'apparaît à l'écran alors que c'est « ok » : Windows → Paramètres → Système → Notifications → active ton navigateur et coupe « Ne pas déranger » / « Assistant de concentration » ; sur Mac : Réglages → Notifications → ton navigateur.</p>`:''}`:''}</div>`; }
+    <p class="mut" style="margin:8px 0 0;font-size:13px">${txt}</p>${on?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="${NT.scope==='all'?'':'sec '}fbtn" data-tn="ntscope" data-v="all">Tous les matchs en direct</button><button class="${NT.scope==='fav'?'':'sec '}fbtn" data-tn="ntscope" data-v="fav">Mes joueurs + matchs ★</button><button class="${NT.scope==='pick'?'':'sec '}fbtn" data-tn="ntscope" data-v="pick">Matchs ★ seulement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${opt('start','Début')}${opt('game','Chaque jeu')}${opt('set','Chaque set')}${opt('end','Fin du match')}<button class="${NT.snd?'':'sec '}fbtn" data-tn="ntopt" data-v="snd">${NT.snd?'🔊 Son':'🔇 Son'}</button><button class="sec fbtn" data-tn="ntsnd">Tester le son</button><button class="sec fbtn" data-tn="nttest">Tester la notification</button></div>${NT.stat?`<p class="mut" style="margin:8px 0 0;font-size:12px">Surveillance : ${NT.stat.n} match${NT.stat.n>1?'s':''} · dernière lecture d\'ESPN à ${new Date(NT.stat.t).toLocaleTimeString('fr-FR',{timeZone:'Europe/Paris'})}</p>`:'<p class="mut" style="margin:8px 0 0;font-size:12px">Surveillance : pas encore de lecture depuis l\'ouverture de la page.</p>'}${NT.lastSnd?`<p class="mut" style="margin:8px 0 0;font-size:12px">${esc(NT.lastSnd)}</p>`:''}${NT.last?`<p class="mut" style="margin:8px 0 0;font-size:12px">Dernier essai : ${esc(NT.last)}. Si rien n'apparaît à l'écran alors que c'est « ok » : Windows → Paramètres → Système → Notifications → active ton navigateur et coupe « Ne pas déranger » / « Assistant de concentration » ; sur Mac : Réglages → Notifications → ton navigateur.</p>`:''}`:''}</div>`; }
 
 /* ---------- 12. Affichage principal + clics ---------- */
 const TABS=[['today','📅',"Aujourd'hui"],['draw','🏆','Tableau'],['rank','📊','Classement'],['mine','⭐','Mes joueurs']];
