@@ -92,7 +92,7 @@
   }
   // restauration des résultats tennis : fusion par identifiant, on ne supprime ni ne modifie jamais un résultat déjà présent sur l'appareil
   function restoreTennis(d) {
-    const inc = (d && Array.isArray(d.tennis) ? d.tennis : []).filter(b => b && typeof b === 'object' && b.id && (b.w === 1 || b.w === 2) && b.c1 > 1 && b.c2 > 1);
+    const inc = (d && Array.isArray(d.tennis) ? d.tennis : []).filter(b => b && typeof b === 'object' && b.id && (b.w === 0 || b.w === 1 || b.w === 2) && b.c1 > 1 && b.c2 > 1);
     if (!inc.length) return '';
     const cur = tennisBets(), ids = new Set(cur.map(b => String(b.id)));
     let added = 0;

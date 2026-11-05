@@ -85,7 +85,8 @@
     }));
     return [...m.values()].filter(o => o.n >= min).map(o => Object.assign(o, { pct: o.g / o.n * 100, roi: o.profit / o.n * 100 })).sort((a, b) => b.profit - a.profit);
   }
-  const filtrer = () => S.res.filter(r => !estQualif(r.tournoi) && (S.tour === 'all' || r.tour === S.tour));
+  const filtrer = () => S.res.filter(r => r.w !== 0 && !estQualif(r.tournoi) && (S.tour === 'all' || r.tour === S.tour));
+  const tousSaisis = () => S.res.filter(r => !estQualif(r.tournoi) && (S.tour === 'all' || r.tour === S.tour));
   window.__tennis = { info, stats, parTranche, parCle, cumul, matchId, parJoueur, ecartDe, jourSem, moment };
 
   /* ---------- Styles ---------- */
@@ -114,12 +115,14 @@
     if (!avecCotes(m)) return `<div style="${card};border-style:dashed">${titre}<div style="font-size:12px;opacity:.7;margin-top:4px">${m.c1 > 1 && m.c2 > 1 ? 'Cotes identiques : favori impossible à déterminer.' : 'Cotes pas encore disponibles.'}</div></div>`;
     let bilan = '';
     if (!saisi && (m.w === 1 || m.w === 2)) bilan = `<div style="margin-top:8px;font-size:12px;opacity:.85">Résultat lu sur la page : <b>${esc(m.w === 1 ? m.j1 : m.j2)}</b> a gagné. Touche-le pour valider.</div>`;
-    if (saisi) {
+    if (saisi && saisi.w === 0) bilan = `<div style="margin-top:8px;font-size:12px"><b>Match annulé ou abandon : pari remboursé</b> · pas compté dans les stats</div>`;
+    else if (saisi) {
       const x = info(saisi);
       bilan = `<div style="margin-top:8px;font-size:12px;line-height:1.5"><b style="color:${x.gagnantBas ? BLEU : AMBRE}">${x.gagnantBas ? 'Cote basse gagnante (favori)' : 'Cote haute gagnante (surprise)'}</b><br>
         1 € sur la cote basse : <b style="color:${col(x.gainB)}">${signe(x.gainB)}</b> · 1 € sur la cote haute : <b style="color:${col(x.gainH)}">${signe(x.gainH)}</b></div>`;
     }
-    return `<div style="${card}">${titre}<div style="display:flex;gap:8px;margin-top:10px">${boutonJoueur(m, 1, jour, saisi)}${boutonJoueur(m, 2, jour, saisi)}</div>${bilan}</div>`;
+    return `<div style="${card}">${titre}<div style="display:flex;gap:8px;margin-top:10px">${boutonJoueur(m, 1, jour, saisi)}${boutonJoueur(m, 2, jour, saisi)}</div>
+      <button type="button" onclick="tennisAnnule('${eid(id)}')" style="margin-top:8px;min-height:44px;width:100%;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;${saisi && saisi.w === 0 ? 'background:#6b7280;color:#fff;border:1px solid #6b7280' : 'background:transparent;color:inherit;border:1px dashed ' + BD}">${saisi && saisi.w === 0 ? 'Annulé · remettre en jeu' : 'Abandon / annulé (pari remboursé)'}</button>${bilan}</div>`;
   }
   function vueCalendrier() {
     const data = S.days[S.jour], cfgOk = S.robot.url && S.robot.key;
@@ -131,7 +134,7 @@
       ms.forEach(m => { const k = m.tour + '|' + m.tournoi; if (!(k in idx)) { idx[k] = groupes.length; groupes.push({ tour: m.tour, tournoi: m.tournoi, l: [] }); } groupes[idx[k]].l.push(m); });
       corps += groupes.map(g => `<div style="display:flex;align-items:center;gap:8px;margin-top:18px"><span style="font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px;background:rgba(128,128,128,.28)">${esc(g.tour)}</span><span style="font-size:14px;font-weight:800">${esc(g.tournoi)}</span></div>${g.l.map(m => carte(m, S.jour)).join('')}`).join('');
       const jouables = ms.filter(avecCotes).length, saisis = ms.filter(m => S.res.some(r => r.id === matchId(S.jour, m))).length;
-      const duJour = S.res.filter(r => r.date === S.jour && (S.tour === 'all' || r.tour === S.tour));
+      const duJour = S.res.filter(r => r.w !== 0 && r.date === S.jour && (S.tour === 'all' || r.tour === S.tour));
       const sj = stats(duJour);
       resume = `<div style="margin-top:14px;border:1px solid #2563eb;border-radius:12px;padding:10px 12px;font-size:13px"><b>${saisis} résultat${saisis > 1 ? 's' : ''} saisi${saisis > 1 ? 's' : ''} sur ${jouables}</b>${duJour.length ? ` · sur ces matchs, 1 € sur chaque cote basse : <b style="color:${col(sj.pB)}">${signe(sj.pB)}</b> · sur chaque cote haute : <b style="color:${col(sj.pH)}">${signe(sj.pH)}</b>` : ' · touche le vainqueur de chaque match'}</div>`;
     } else if (cfgOk && !S.err) corps = '<p style="text-align:center;opacity:.7;margin-top:24px">Chargement…</p>';
@@ -165,7 +168,7 @@
   function detailBas() {
     const L = filtrer(), s = stats(L);
     if (!s.n) return '';
-    const liste = L.slice().sort((a, b) => (b.date + b.heure).localeCompare(a.date + a.heure));
+    const liste = tousSaisis().sort((a, b) => (b.date + b.heure).localeCompare(a.date + a.heure));
     const E5 = ['', 'Matchs', 'Favori gagne', 'Cote basse', 'Cote haute'];
     const duo = (titre, prem, l) => tab(titre, [prem].concat(E5.slice(1)), l.map(o => [o.label, o.n, pct(o.pctFav), P(o.pB), P(o.pH)]));
     const tr = strat => parTranche(L, strat).map(o => [o.label, o.n, o.g, pct(o.pct), P(o.profit), { t: (o.roi > 0 ? '+' : o.roi < 0 ? '−' : '') + fr(Math.abs(o.roi), 0) + ' %', s: 'color:' + col(o.roi) }]);
@@ -180,8 +183,8 @@
       ${duo('Par jour de la semaine', 'Jour', trier(parCle(L, jourSem), ORDRE_JOURS))}
       ${joueurs.length ? tab('Par joueur (3 matchs saisis ou plus) · si tu avais joué 1 € sur lui', ['Joueur', 'Matchs', 'Gagnés', 'Réussite', 'Bénéfice'], joueurs.slice(0, 15).map(o => [o.label, o.n, o.g, pct(o.pct), P(o.profit)])) : ''}
       <p style="font-size:11px;opacity:.6;margin:8px 0 0">« Favori gagne » = part des matchs où le joueur à la cote basse l'emporte. « Cote basse » / « Cote haute » = bénéfice si tu avais joué 1 € sur chaque favori / chaque outsider. Sur peu de matchs ces chiffres bougent beaucoup : ne conclus rien avant d'en avoir plusieurs dizaines (idéalement des centaines).</p>
-      <details style="margin-top:12px"><summary style="cursor:pointer;font-size:13px;font-weight:800;min-height:44px;display:flex;align-items:center">Résultats saisis (${liste.length})</summary>
-        ${liste.map(r => { const x = info(r); return `<div style="${card};margin-top:6px;padding:8px 12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-size:12px;opacity:.7">${esc(r.date.slice(8, 10) + '/' + r.date.slice(5, 7))} · ${esc(r.tournoi)}${r.auto ? ' · lu automatiquement' : ''}</span><button type="button" aria-label="Supprimer ce résultat" onclick="tennisSupprimer('${eid(r.id)}')" style="width:44px;height:44px;border:0;background:transparent;color:inherit;opacity:.6;font-size:16px;cursor:pointer">✕</button></div>
+      <details style="margin-top:12px"><summary style="cursor:pointer;font-size:13px;font-weight:800;min-height:44px;display:flex;align-items:center">Résultats saisis (${liste.length}, dont ${liste.filter(r => r.w === 0).length} annulé${liste.filter(r => r.w === 0).length > 1 ? 's' : ''})</summary>
+        ${liste.map(r => { if (r.w === 0) return `<div style="${card};margin-top:6px;padding:8px 12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-size:12px;opacity:.7">${esc(r.date.slice(8, 10) + '/' + r.date.slice(5, 7))} · ${esc(r.tournoi)}</span><button type="button" aria-label="Supprimer ce résultat" onclick="tennisSupprimer('${eid(r.id)}')" style="width:44px;height:44px;border:0;background:transparent;color:inherit;opacity:.6;font-size:16px;cursor:pointer">✕</button></div><div style="font-size:14px;font-weight:800">${esc(r.j1)} – ${esc(r.j2)}</div><div style="font-size:12px;margin-top:2px">Annulé / abandon : remboursé, hors stats</div></div>`; const x = info(r); return `<div style="${card};margin-top:6px;padding:8px 12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-size:12px;opacity:.7">${esc(r.date.slice(8, 10) + '/' + r.date.slice(5, 7))} · ${esc(r.tournoi)}${r.auto ? ' · lu automatiquement' : ''}</span><button type="button" aria-label="Supprimer ce résultat" onclick="tennisSupprimer('${eid(r.id)}')" style="width:44px;height:44px;border:0;background:transparent;color:inherit;opacity:.6;font-size:16px;cursor:pointer">✕</button></div>
           <div style="font-size:14px;font-weight:800"><span style="color:#16a34a">${esc(x.gagnant)}</span> bat ${esc(r.w === 1 ? r.j2 : r.j1)}</div>
           <div style="font-size:12px;margin-top:2px"><span style="color:${x.gagnantBas ? BLEU : AMBRE};font-weight:800">${x.gagnantBas ? 'Cote basse' : 'Cote haute'}</span> (${fr(x.gagnantBas ? x.cB : x.cH)}) · basse ${signe(x.gainB)} · haute ${signe(x.gainH)}</div></div>`; }).join('')}</details>
       <button type="button" onclick="tennisExport()" style="margin-top:16px;min-height:44px;padding:0 14px;border-radius:12px;border:1px solid ${BD};background:transparent;color:inherit;font-weight:700;font-size:12px;cursor:pointer">Exporter les résultats (CSV)</button>`;
@@ -310,10 +313,22 @@
     aValider().forEach(({ j, m }) => S.res.push({ id: matchId(j, m), date: j, heure: m.heure, tour: m.tour, tournoi: m.tournoi, j1: m.j1, j2: m.j2, c1: m.c1, c2: m.c2, w: m.w, auto: true }));
     sauver(); render();
   };
+  // Abandon / match annulé : pari remboursé, le match ne compte dans aucune stat. Retouche = remet en jeu.
+  window.tennisAnnule = id => {
+    id = decodeURIComponent(id);
+    const jour = id.slice(0, 10), data = S.days[jour], i = S.res.findIndex(r => r.id === id);
+    if (i >= 0 && S.res[i].w === 0) S.res.splice(i, 1);
+    else if (i >= 0) S.res[i].w = 0;
+    else {
+      const m = data && data.matchs.find(x => matchId(jour, x) === id); if (!avecCotes(m)) return;
+      S.res.push({ id, date: jour, heure: m.heure, tour: m.tour, tournoi: m.tournoi, j1: m.j1, j2: m.j2, c1: m.c1, c2: m.c2, w: 0 });
+    }
+    sauver(); render();
+  };
   window.tennisSupprimer = id => { id = decodeURIComponent(id); S.res = S.res.filter(r => r.id !== id); sauver(); render(); };
   window.tennisExport = () => {
     const l = [['Date', 'Heure', 'Circuit', 'Tournoi', 'Joueur 1', 'Cote 1', 'Joueur 2', 'Cote 2', 'Vainqueur', 'Gagnant', 'Gain cote basse', 'Gain cote haute']];
-    S.res.forEach(r => { const x = info(r); l.push([r.date, r.heure, r.tour, r.tournoi, r.j1, fr(r.c1), r.j2, fr(r.c2), x.gagnant, x.gagnantBas ? 'Cote basse' : 'Cote haute', fr(x.gainB), fr(x.gainH)]); });
+    S.res.forEach(r => { if (r.w === 0) { l.push([r.date, r.heure, r.tour, r.tournoi, r.j1, fr(r.c1), r.j2, fr(r.c2), 'Annulé / abandon', 'Remboursé', '0,00', '0,00']); return; } const x = info(r); l.push([r.date, r.heure, r.tour, r.tournoi, r.j1, fr(r.c1), r.j2, fr(r.c2), x.gagnant, x.gagnantBas ? 'Cote basse' : 'Cote haute', fr(x.gainB), fr(x.gainH)]); });
     const csv = '﻿' + l.map(r => r.map(x => '"' + String(x).replace(/"/g, '""') + '"').join(';')).join('\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     a.download = 'tennis-resultats-' + auj() + '.csv'; document.body.appendChild(a); a.click(); a.remove();
