@@ -31,6 +31,7 @@
 
   /* ---------- Calculs (fonctions pures) ---------- */
   const matchId = (jour, m) => jour + '|' + m.j1 + '|' + m.j2;
+  const estQualif = t => /qualif|\bqual\b|\(q\)/i.test(String(t || ''));
   const avecCotes = m => m && m.c1 > 1 && m.c2 > 1 && m.c1 !== m.c2;       // cotes égales : on ne peut pas dire qui est le favori
   // Pour un résultat saisi : qui était le favori, qui a gagné, et ce que 1 € aurait donné de chaque côté
   function info(r) {
@@ -84,7 +85,7 @@
     }));
     return [...m.values()].filter(o => o.n >= min).map(o => Object.assign(o, { pct: o.g / o.n * 100, roi: o.profit / o.n * 100 })).sort((a, b) => b.profit - a.profit);
   }
-  const filtrer = () => S.res.filter(r => S.tour === 'all' || r.tour === S.tour);
+  const filtrer = () => S.res.filter(r => !estQualif(r.tournoi) && (S.tour === 'all' || r.tour === S.tour));
   window.__tennis = { info, stats, parTranche, parCle, cumul, matchId, parJoueur, ecartDe, jourSem, moment };
 
   /* ---------- Styles ---------- */
@@ -124,7 +125,7 @@
     const data = S.days[S.jour], cfgOk = S.robot.url && S.robot.key;
     let corps = '', resume = '';
     if (data) {
-      const ms = data.matchs.filter(m => S.tour === 'all' || m.tour === S.tour);
+      const ms = data.matchs.filter(m => !estQualif(m.tournoi) && (S.tour === 'all' || m.tour === S.tour));
       if (!ms.length) corps = `<p style="text-align:center;opacity:.7;margin-top:24px">Aucun match de tournoi du circuit ce jour-là.</p>`;
       const groupes = [], idx = {};
       ms.forEach(m => { const k = m.tour + '|' + m.tournoi; if (!(k in idx)) { idx[k] = groupes.length; groupes.push({ tour: m.tour, tournoi: m.tournoi, l: [] }); } groupes[idx[k]].l.push(m); });
@@ -186,8 +187,8 @@
       <button type="button" onclick="tennisExport()" style="margin-top:16px;min-height:44px;padding:0 14px;border-radius:12px;border:1px solid ${BD};background:transparent;color:inherit;font-weight:700;font-size:12px;cursor:pointer">Exporter les résultats (CSV)</button>`;
   }
   const sept = () => Array.from({ length: 7 }, (_, i) => decaler(auj(), -i));
-  const aValider = () => { const o = []; Object.keys(S.days).forEach(j => (S.days[j].matchs || []).forEach(m => { if ((m.w === 1 || m.w === 2) && avecCotes(m) && !S.res.some(r => r.id === matchId(j, m))) o.push({ j, m }); })); return o; };
-  const sansRes = () => sept().map(j => ({ j, l: ((S.days[j] && S.days[j].matchs) || []).filter(m => avecCotes(m) && !S.res.some(r => r.id === matchId(j, m)) && (S.tour === 'all' || m.tour === S.tour)) }));
+  const aValider = () => { const o = []; Object.keys(S.days).forEach(j => (S.days[j].matchs || []).forEach(m => { if ((m.w === 1 || m.w === 2) && !estQualif(m.tournoi) && avecCotes(m) && !S.res.some(r => r.id === matchId(j, m))) o.push({ j, m }); })); return o; };
+  const sansRes = () => sept().map(j => ({ j, l: ((S.days[j] && S.days[j].matchs) || []).filter(m => !estQualif(m.tournoi) && avecCotes(m) && !S.res.some(r => r.id === matchId(j, m)) && (S.tour === 'all' || m.tour === S.tour)) }));
   function panneauSans() {
     const v = aValider(), tot = sansRes().reduce((a, x) => a + x.l.length, 0);
     const banniere = v.length ? `<div style="margin-top:10px;border:1px solid #16a34a;border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:13px"><b>${v.length} résultat${v.length > 1 ? 's' : ''} lu${v.length > 1 ? 's' : ''} automatiquement</b> sur la page</span><button type="button" onclick="tennisValiderTout()" style="min-height:44px;padding:0 14px;border-radius:10px;font-weight:800;font-size:13px;background:#16a34a;color:#fff;border:0;cursor:pointer">Tout valider</button></div>` : '';

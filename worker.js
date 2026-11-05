@@ -375,9 +375,17 @@ function tournoisPrincipaux(html) {
 }
 function estPrincipal(nom, href, liste) {
   const n = norm(nom);
-  if (/challenger|futures|\bitf\b|utr|\b125\b|exhibition|exhibit/.test(n)) return false;
+  if (/challenger|futures|\bitf\b|utr|\b125\b|exhibition|exhibit|qualif|\bqual\b|\(q\)/.test(n) || /qualif/i.test(href || '')) return false;   // pas de petits tournois ni de qualifications
   if (liste) return [...liste].some(x => n === x || n.startsWith(x + ' ') || x.startsWith(n + ' '));
   return !/challenger|futures|itf|utr/i.test(href || '');          // secours si la liste n'a pas été trouvée
+}
+// Vainqueur d'après les sets gagnés [sets joueur 1, sets joueur 2] : seulement si net (victoire en 2 sets ou plus)
+// Abandon / forfait (ex. 1-0) : on ne devine pas, le vainqueur reste à saisir à la main.
+function vainqueur(s) {
+  if (!Array.isArray(s) || s.length < 2) return null;
+  const a = s[0], b = s[1];
+  if (a === b || Math.max(a, b) < 2 || Math.min(a, b) > 2) return null;
+  return a > b ? 1 : 2;
 }
 function lireTE(html, ymdStr, tour) {
   const [Y, M, D] = ymdStr.split('-'), cible = `${D}.${M}.${Y}`;
@@ -385,7 +393,7 @@ function lireTE(html, ymdStr, tour) {
   const sansDates = !/\b\d{2}\.\d{2}\.\d{4}\b/.test(html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ''));   // page sans aucune date : on garde tout
   const out = [];
   let date = null, tournoi = null, tHref = '', cur = null;
-  const fin = () => { if (cur && cur.p.length >= 2 && tournoi && (sansDates || date === cible || date === null) && estPrincipal(tournoi, tHref, liste)) out.push({ tour, tournoi, heure: cur.h, j1: cur.p[0], j2: cur.p[1], c1: cur.o[0] ?? null, c2: cur.o[1] ?? null }); cur = null; };
+  const fin = () => { if (cur && cur.p.length >= 2 && tournoi && (sansDates || date === cible || date === null) && estPrincipal(tournoi, tHref, liste)) out.push({ tour, tournoi, heure: cur.h, j1: cur.p[0], j2: cur.p[1], c1: cur.o[0] ?? null, c2: cur.o[1] ?? null, w: vainqueur(cur.s) }); cur = null; };
   const rows = html.match(/<tr[\s\S]*?<\/tr>/gi) || [];
   for (const r of rows) {
     const t = txt(r);
@@ -400,8 +408,8 @@ function lireTE(html, ymdStr, tour) {
       if (lk && txt(lk[2]) && !/<th[\s>]/i.test(r)) { tHref = lk[1]; tournoi = txt(lk[2]); }
       continue;
     }
-    if (heure) { fin(); cur = { h: heure, p: [], o: [] }; }
-    else if (!cur) cur = { h: '', p: [], o: [] };
+    if (heure) { fin(); cur = { h: heure, p: [], o: [], s: [] }; }
+    else if (!cur) cur = { h: '', p: [], o: [], s: [] };
     const propre = x => String(x || '').replace(/\b(info|h2h|live)\b/gi, ' ').replace(/\s*\(\d+\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
     let noms = joueurs.map(propre).filter(Boolean);
     if (noms.length < 2 && duel) { const d = txt(duel[1]); if (/\s-\s/.test(d)) noms = d.split(/\s+-\s+/).map(propre).filter(Boolean); }
@@ -415,6 +423,11 @@ function lireTE(html, ymdStr, tour) {
     for (const n of noms) if (cur.p.length < 2 && n && !cur.p.includes(n)) cur.p.push(n);
     const cotes = [...r.matchAll(/<td[^>]*class="[^"]*\bcourse[^"]*"[^>]*>([\s\S]*?)<\/td>/gi)].map(m => parseFloat(txt(m[1]))).filter(x => x > 1 && x < 200);
     for (const c of cotes) if (cur.o.length < 2) cur.o.push(c);
+    // score en sets : une case « result » par joueur (2 lignes), ou « 2 - 0 » dans une seule case
+    for (const m of r.matchAll(/<td[^>]*class="[^"]*\bresult\b[^"]*"[^>]*>([\s\S]*?)<\/td>/gi)) {
+      const v = txt(m[1]), two = v.match(/^(\d)\s*[-:]\s*(\d)$/);
+      if (two) cur.s.push(+two[1], +two[2]); else if (/^\d$/.test(v)) cur.s.push(+v);
+    }
   }
   fin();
   return out;
