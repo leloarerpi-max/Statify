@@ -390,10 +390,14 @@ function vainqueur(s) {
 function lireTE(html, ymdStr, tour) {
   const [Y, M, D] = ymdStr.split('-'), cible = `${D}.${M}.${Y}`;
   const liste = tournoisPrincipaux(html);
-  const sansDates = !/\b\d{2}\.\d{2}\.\d{4}\b/.test(html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ''));   // page sans aucune date : on garde tout
+  const pad = x => String(x).padStart(2, '0');
+  const dateDe = t => { const m = String(t).match(/(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/); return m ? `${pad(m[1])}.${pad(m[2])}.${m[3]}` : null; };
+  const tabDate = dateDe((html.match(/class="tab">\s*([\d.\s]{8,14})</i) || [])[1]);          // date de l'onglet (« 31. 10. 2026 »)
+  const sansDates = !tabDate && !/\b\d{1,2}\.\s*\d{1,2}\.\s*\d{4}\b/.test(html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ''));
   const out = [];
-  let date = null, tournoi = null, tHref = '', cur = null;
-  const fin = () => { if (cur && cur.p.length >= 2 && tournoi && (sansDates || date === cible || date === null) && estPrincipal(tournoi, tHref, liste)) out.push({ tour, tournoi, heure: cur.h, j1: cur.p[0], j2: cur.p[1], c1: cur.o[0] ?? null, c2: cur.o[1] ?? null, w: vainqueur(cur.s) }); cur = null; };
+  let date = tabDate, tournoi = null, tHref = '', cur = null, principal = false, basVu = false;
+  const vus = new Set();
+  const fin = () => { if (cur && cur.p.length >= 2 && tournoi && principal && (sansDates || date === cible || date === null)) out.push({ tour, tournoi, heure: cur.h, j1: cur.p[0], j2: cur.p[1], c1: cur.o[0] ?? null, c2: cur.o[1] ?? null, w: vainqueur(cur.s) }); cur = null; };
   const rows = html.match(/<tr[\s\S]*?<\/tr>/gi) || [];
   for (const r of rows) {
     const t = txt(r);
@@ -402,10 +406,18 @@ function lireTE(html, ymdStr, tour) {
     const heure = (r.match(/(?:class="[^"]*\btime\b[^"]*"[^>]*>|>)\s*(\d{1,2}:\d{2})\s*</i) || [])[1];
     if (!joueurs.length && !duel) {                         // ligne de titre : date ou tournoi
       fin();
-      const dm = t.match(/(\d{2}\.\d{2}\.\d{4})/);
-      if (dm && t.replace(dm[1], '').replace(/[^\p{L}\d]/gu, '').length < 12) { date = dm[1]; continue; }
+      const dm = dateDe(t);
+      if (dm && t.replace(/(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/, '').replace(/[^\p{L}\d]/gu, '').length < 12) { date = dm; basVu = false; vus.clear(); continue; }   // nouveau jour : on repart de zéro
       const lk = r.match(/<a [^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/i);
-      if (lk && txt(lk[2]) && !/<th[\s>]/i.test(r)) { tHref = lk[1]; tournoi = txt(lk[2]); }
+      if (lk && txt(lk[2]) && /^<tr[^>]*class="[^"]*\bhead\b/i.test(r) && !/<th[\s>]/i.test(r)) {   // seuls les vrais titres (class="head"), pas la liste des tournois de la semaine
+        tHref = lk[1]; tournoi = txt(lk[2]);
+        // Tennis Explorer range les qualifications sous un titre qui porte le même nom que le tournoi (« Paris »), APRÈS les petits tournois.
+        // Règle : un titre n'est « principal » que s'il est autorisé, jamais vu plus haut, et placé avant tout petit tournoi.
+        const cle = tHref || tournoi;
+        principal = estPrincipal(tournoi, tHref, liste) && !basVu && !vus.has(cle);
+        if (!estPrincipal(tournoi, tHref, liste)) basVu = true;
+        vus.add(cle);
+      }
       continue;
     }
     if (heure) { fin(); cur = { h: heure, p: [], o: [], s: [] }; }
