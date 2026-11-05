@@ -1047,24 +1047,22 @@
     function switchView(view) {
       const trackerBtn = document.getElementById('btnViewTracker');
       const analyzerBtn = document.getElementById('btnViewAnalyzer');
+      const tennisBtn = document.getElementById('btnViewTennis');
       const trackerContent = document.getElementById('trackerViewContent');
       const analyzerContent = document.getElementById('analyzerViewContent');
+      const tennisContent = document.getElementById('tennisViewContent');
 
       const activeClass = "px-4 py-2 rounded-xl transition bg-blue-600 text-white shadow-sm font-bold text-sm flex items-center gap-2";
       const inactiveClass = "px-4 py-2 rounded-xl transition text-slate-600 hover:text-slate-900 font-bold text-sm flex items-center gap-2";
 
       try { window.scrollTo({ top: 0 }); } catch (e) {}
-      if (view === 'analyzer') {
-        trackerContent.classList.add('hidden');
-        analyzerContent.classList.remove('hidden');
-        trackerBtn.className = inactiveClass;
-        analyzerBtn.className = activeClass;
-      } else {
-        trackerContent.classList.remove('hidden');
-        analyzerContent.classList.add('hidden');
-        trackerBtn.className = activeClass;
-        analyzerBtn.className = inactiveClass;
-      }
+      trackerContent.classList.toggle('hidden', view !== 'tracker' && (view === 'analyzer' || view === 'tennis'));
+      analyzerContent.classList.toggle('hidden', view !== 'analyzer');
+      if (tennisContent) tennisContent.classList.toggle('hidden', view !== 'tennis');
+      trackerBtn.className = (view === 'analyzer' || view === 'tennis') ? inactiveClass : activeClass;
+      analyzerBtn.className = view === 'analyzer' ? activeClass : inactiveClass;
+      if (tennisBtn) tennisBtn.className = view === 'tennis' ? activeClass : inactiveClass;
+      if (view === 'tennis' && typeof tennisOuvrir === 'function') tennisOuvrir();
     }
 
     // Replie / déplie le formulaire "Ajouter un Pari" (état mémorisé sur cet appareil).

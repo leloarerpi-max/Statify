@@ -61,6 +61,9 @@
       <button onclick="switchView('analyzer')" id="btnViewAnalyzer" class="px-4 py-2 rounded-xl transition text-slate-600 hover:text-slate-900 font-bold text-sm flex items-center gap-2">
         <i class="fa-solid fa-magnifying-glass-chart"></i> 🔍 Analyseur
       </button>
+      <button onclick="switchView('tennis')" id="btnViewTennis" class="px-4 py-2 rounded-xl transition text-slate-600 hover:text-slate-900 font-bold text-sm flex items-center gap-2">
+        🎾 Tennis
+      </button>
     </div>
 
     <div id="trackerViewContent" class="space-y-8" data-vue="histo">
@@ -532,6 +535,8 @@
     <!-- FIN trackerViewContent -->
 
     <!-- VUE ANALYSEUR -->
+    <div id="tennisViewContent" class="hidden"></div>
+
     <div id="analyzerViewContent" class="hidden">
       <div class="analyzer-panel">
         <h1>Analyseur de Paris Sportifs Pro</h1>
@@ -733,5 +738,6 @@
   <script src="backup.js"></script>
 <script src="xlsx.js"></script>
 <script src="prono.js"></script>
+<script src="prono-tennis.js"></script>
 </body>
 </html>

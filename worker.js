@@ -62,6 +62,10 @@ export default {
       const ok = await ntfy(env, '✅ Statify : test', 'Le robot est bien relié à ton téléphone.');
       return reply({ ok }, ok ? 200 : 502);
     }
+    if (u.pathname === '/tennis') {
+      try { return reply(await tennisDuJour(u.searchParams.get('date'), u.searchParams.get('debug') === '1')); }
+      catch (e) { return reply({ ok: false, error: String(e && e.message || e) }, 502); }
+    }
     if (u.pathname === '/status') {
       const cfg = JSON.parse((await env.STATE.get('cfg')) || 'null');
       return reply({ ok: true, configured: !!cfg, nba: cfg?.nba?.length || 0, clubs: cfg?.foot?.ids?.length || 0, majLe: cfg?.maj ? new Date(cfg.maj).toISOString() : null });
@@ -349,4 +353,81 @@ async function run(env) {
     if (Date.now() - t0 + EVERY + 4000 > BUDGET || reqs + nextCost > 48) break;   // la minute suivante reprendra
     await sleep(EVERY);
   }
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Tennis : matchs du jour + cotes (page publique de Tennis Explorer)  */
+/* Seuls les tournois du circuit (ATP / WTA, 250 et plus) sont gardés.  */
+/* Si Tennis Explorer change sa page, c'est cette partie qu'on ajuste.  */
+/* ------------------------------------------------------------------ */
+const TE = 'https://www.tennisexplorer.com';
+const txt = h => String(h || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#0?39;|&apos;/g, "'").replace(/\s+/g, ' ').trim();
+const parisYmd = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Paris' });   // AAAA-MM-JJ
+
+// Liste « Main tournaments » (colonne de droite) : sert de liste blanche (exclut Challengers, ITF, UTR…)
+function tournoisPrincipaux(html) {
+  const a = html.search(/Main tournaments/i), b = html.search(/Lower level tournaments/i);
+  if (a < 0 || b < 0 || b <= a) return null;
+  const set = new Set();
+  html.slice(a, b).replace(/<a [^>]*>([\s\S]*?)<\/a>/gi, (_m, t) => { const n = norm(txt(t)).replace(/\s+(wta|atp)$/, ''); if (n) set.add(n); return ''; });
+  return set.size ? set : null;
+}
+function estPrincipal(nom, href, liste) {
+  const n = norm(nom);
+  if (/challenger|futures|\bitf\b|utr|\b125\b|exhibition|exhibit/.test(n)) return false;
+  if (liste) return [...liste].some(x => n === x || n.startsWith(x + ' ') || x.startsWith(n + ' '));
+  return /\/(atp-men|wta-women)\//.test(href || '') || !href;   // secours si la liste n'a pas été trouvée
+}
+function lireTE(html, ymdStr, tour) {
+  const [Y, M, D] = ymdStr.split('-'), cible = `${D}.${M}.${Y}`;
+  const liste = tournoisPrincipaux(html);
+  const out = [];
+  let date = null, tournoi = null, tHref = '', cur = null;
+  const fin = () => { if (cur && cur.p.length >= 2 && date === cible && estPrincipal(tournoi, tHref, liste)) out.push({ tour, tournoi, heure: cur.h, j1: cur.p[0], j2: cur.p[1], c1: cur.o[0] ?? null, c2: cur.o[1] ?? null }); cur = null; };
+  const rows = html.match(/<tr[\s\S]*?<\/tr>/gi) || [];
+  for (const r of rows) {
+    const t = txt(r);
+    const joueurs = [...r.matchAll(/<a [^>]*href="\/player\/[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)].map(m => txt(m[1])).filter(Boolean);
+    const duel = r.match(/<a [^>]*href="\/match-detail\/[^"]*"[^>]*>([\s\S]*?)<\/a>/i);
+    const heure = (r.match(/<td[^>]*class="[^"]*\btime\b[^"]*"[^>]*>\s*(\d{1,2}:\d{2})/i) || [])[1];
+    if (!joueurs.length && !duel) {                         // ligne de titre : date ou tournoi
+      fin();
+      const dm = t.match(/(\d{2}\.\d{2}\.\d{4})/);
+      if (dm && t.replace(dm[1], '').replace(/[A-Za-z,]/g, '').trim().length < 3) { date = dm[1]; continue; }
+      const lk = r.match(/<a [^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/i);
+      if (lk && /head|flags/i.test(r.slice(0, 160))) { tHref = lk[1]; tournoi = txt(lk[2]); }
+      continue;
+    }
+    if (heure) { fin(); cur = { h: heure, p: [], o: [] }; }
+    if (!cur) continue;
+    let noms = joueurs;
+    if (noms.length < 2 && duel) noms = txt(duel[1]).split(/\s+-\s+/).map(x => x.replace(/\(\d+\)/g, '').trim());   // « A - B » dans un seul lien
+    for (const n of noms) if (cur.p.length < 2) cur.p.push(n.replace(/\s*\(\d+\)\s*/g, ' ').trim());
+    const cotes = [...r.matchAll(/<td[^>]*class="[^"]*\bcourse[^"]*"[^>]*>([\s\S]*?)<\/td>/gi)].map(m => parseFloat(txt(m[1]))).filter(x => x > 1 && x < 200);
+    for (const c of cotes) if (cur.o.length < 2) cur.o.push(c);
+  }
+  fin();
+  return out;
+}
+async function tennisDuJour(dateParam, debug) {
+  const jour = /^\d{4}-\d{2}-\d{2}$/.test(dateParam || '') ? dateParam : parisYmd();
+  const [Y, M, D] = jour.split('-');
+  const cache = caches.default, ck = new Request(`https://statify.cache/tennis/${jour}`);
+  if (!debug) { const hit = await cache.match(ck); if (hit) return await hit.json(); }
+  const heads = { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36', 'accept-language': 'en' };
+  let matchs = [], brut = {}, erreurs = [];
+  for (const [tour, type] of [['ATP', 'atp-single'], ['WTA', 'wta-single']]) {
+    const res = await fetch(`${TE}/next/?type=${type}&year=${Y}&month=${M}&day=${D}`, { headers: heads });
+    if (!res.ok) { erreurs.push(`${tour} : Tennis Explorer a répondu ${res.status}`); continue; }
+    const html = await res.text();
+    if (debug) brut[tour] = html.slice(html.search(/<table[^>]*class="result/i) >= 0 ? html.search(/<table[^>]*class="result/i) : 0).slice(0, 6000);
+    matchs = matchs.concat(lireTE(html, jour, tour));
+  }
+  if (debug) return { ok: true, debug: brut, matchs };
+  if (!matchs.length && erreurs.length) throw new Error(erreurs.join(' · '));
+  matchs.sort((a, b) => a.heure.localeCompare(b.heure) || a.tournoi.localeCompare(b.tournoi));
+  const rep = { ok: true, jour, maj: Date.now(), matchs, avertissements: erreurs };
+  await cache.put(ck, new Response(JSON.stringify(rep), { headers: { 'content-type': 'application/json', 'cache-control': 'max-age=300' } }));
+  return rep;
 }
