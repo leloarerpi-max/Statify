@@ -1147,7 +1147,10 @@
             });
           });
 
+          let infoTennis = '';
+          try { if (importedData && Array.isArray(importedData.tennis) && window.StatifyBackup) infoTennis = StatifyBackup.restoreTennis(importedData); } catch (e) {}
           saveState();
+          if (infoTennis) alert('Tennis :' + infoTennis.replace(' · Tennis :', ''));
           alert(importedData && importedData.games ? "✅ Pronos importés ! Ce fichier contient aussi tes données Statify : pour les restaurer, ouvre Statify puis « Importer »." : "✅ Importation réussie !");
         } catch (err) {
           alert("❌ Erreur : " + err.message);

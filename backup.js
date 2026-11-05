@@ -3,6 +3,8 @@
    donc les anciennes versions des deux appli savent encore le lire. Les réglages de synchro (Firebase / Supabase) n'y sont jamais mis. */
 (function () {
   const PRONO_KEY = 'prono_tracker_multisport_data';
+  const TENNIS_KEY = 'prono_tennis_results_v1';
+  const tennisBets = () => { const l = lsJ(TENNIS_KEY, []); return Array.isArray(l) ? l : []; };
   const SETTINGS_RE = /^pronotracker_(ambiance|customMarkets|compFilters|compFilterMode|formReplie)$/;
   const lsJ = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } };
   let cache = null;
@@ -17,6 +19,7 @@
     return {
       football: Array.isArray(st.football) ? st.football : [],
       combos: { football: (st.combos && Array.isArray(st.combos.football)) ? st.combos.football : [] },
+      tennis: tennisBets(),
       pronoSettings: pronoSettings()
     };
   }
@@ -56,6 +59,7 @@
     return Object.assign({ v: 4, app: 'statify+prono', date: new Date().toISOString() }, cache, {
       football: Array.isArray(ps.football) ? ps.football : [],
       combos: { football: (ps.combos && Array.isArray(ps.combos.football)) ? ps.combos.football : [] },
+      tennis: tennisBets(),
       pronoSettings: pronoSettings()
     });
   }
@@ -86,5 +90,16 @@
     for (const k of Object.keys(set)) { if (SETTINGS_RE.test(k)) { try { localStorage.setItem(k, String(set[k])); } catch (e) {} } }
     return ' · Pronos : ' + bets.added + ' ajouté(s), ' + bets.upd + ' mis à jour';
   }
-  window.StatifyBackup = { pronoPart, prepare, buildSync, build, stamp, restoreProno };
+  // restauration des résultats tennis : fusion par identifiant, on ne supprime ni ne modifie jamais un résultat déjà présent sur l'appareil
+  function restoreTennis(d) {
+    const inc = (d && Array.isArray(d.tennis) ? d.tennis : []).filter(b => b && typeof b === 'object' && b.id && (b.w === 1 || b.w === 2) && b.c1 > 1 && b.c2 > 1);
+    if (!inc.length) return '';
+    const cur = tennisBets(), ids = new Set(cur.map(b => String(b.id)));
+    let added = 0;
+    inc.forEach(b => { if (!ids.has(String(b.id))) { cur.push(b); ids.add(String(b.id)); added++; } });
+    try { localStorage.setItem(TENNIS_KEY, JSON.stringify(cur)); } catch (e) { return ' · Tennis : stockage plein, non restauré'; }
+    try { window.tennisRecharger && window.tennisRecharger(); } catch (e) {}
+    return ' · Tennis : ' + added + ' résultat(s) ajouté(s)';
+  }
+  window.StatifyBackup = { pronoPart, prepare, buildSync, build, stamp, restoreProno, restoreTennis };
 })();

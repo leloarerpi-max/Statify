@@ -2601,6 +2601,7 @@ $('#fileImport').onchange=async e=>{
   try{
     const d=JSON.parse(await e.target.files[0].text());
     let extra=''; if(d&&Array.isArray(d.football)){ try{ extra=StatifyBackup.restoreProno(d); }catch(err){ extra=' · Pronos : erreur de lecture'; } }
+    if(d&&Array.isArray(d.tennis)){ try{ extra+=StatifyBackup.restoreTennis(d); }catch(err){ extra+=' · Tennis : erreur de lecture'; } }
     if(d&&d.games){ Object.assign(games,d.games); if(d.fav){ fav.teams=[...new Set([...fav.teams,...(d.fav.teams||[])])]; Object.assign(fav.players,d.fav.players||{}); } if(d.sched&&d.sched.length) sched=d.sched; if(d.notes) Object.assign(notes,d.notes); if(d.foot&&d.foot.leagues){ foot=d.foot; foot.ph=foot.ph||{}; _fidx=null; footSave(); } if(Array.isArray(d.ffav)){ ffav=[...new Set([...ffav,...d.ffav])]; saveJ(KEYFF,ffav); } if(Array.isArray(d.ffavP)){ ffavP=[...new Set([...ffavP,...d.ffavP])]; saveJ(KEYFP,ffavP); } }
     else if(!(d&&Array.isArray(d.football))) Object.assign(games,d);
     save(); saveFav(); saveJ(KEYS,sched); saveJ(KEYN,notes); render(); say('✓ Sauvegarde importée.'+extra,'ok');
@@ -2653,7 +2654,7 @@ $('#gs').addEventListener('click',e=>{
 });
 
 /* ================= Cloud (GitHub Gist privé) ================= */
-const CLOUD_KEYS=['suivi-tennis-fav','suivi-nba-v1','suivi-nba-fav','suivi-nba-sched','suivi-nba-notes','suivi-nba-home','suivi-nba-lead','suivi-foot-v1','suivi-foot-fav','suivi-foot-favp','suivi-foot-home','suivi-multi-pick','suivi-live-fav','suivi-notif-fav'];
+const CLOUD_KEYS=['prono-tennis-robot','suivi-tennis-fav','suivi-nba-v1','suivi-nba-fav','suivi-nba-sched','suivi-nba-notes','suivi-nba-home','suivi-nba-lead','suivi-foot-v1','suivi-foot-fav','suivi-foot-favp','suivi-foot-home','suivi-multi-pick','suivi-live-fav','suivi-notif-fav'];
 const KEYC='suivi-cloud';
 let cloud=loadJ(KEYC,{tok:'',gid:'',auto:false,last:0,sig:''});
 const cloudSave=()=>{ try{ localStorage.setItem(KEYC,JSON.stringify(cloud)); }catch(e){} };
