@@ -402,9 +402,17 @@ function lireTE(html, ymdStr, tour) {
     }
     if (heure) { fin(); cur = { h: heure, p: [], o: [] }; }
     else if (!cur) cur = { h: '', p: [], o: [] };
-    let noms = joueurs;
-    if (noms.length < 2 && duel) noms = txt(duel[1]).split(/\s+-\s+/);
-    for (const n of noms) if (cur.p.length < 2) cur.p.push(n.replace(/\s*\(\d+\)\s*/g, ' ').replace(/\s+/g, ' ').trim());
+    const propre = x => String(x || '').replace(/\b(info|h2h|live)\b/gi, ' ').replace(/\s*\(\d+\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+    let noms = joueurs.map(propre).filter(Boolean);
+    if (noms.length < 2 && duel) { const d = txt(duel[1]); if (/\s-\s/.test(d)) noms = d.split(/\s+-\s+/).map(propre).filter(Boolean); }
+    if (noms.length < 2) {                                   // nom en simple texte (sans lien) dans la case « t-name »
+      for (const m of r.matchAll(/<td[^>]*class="[^"]*\bt-name\b[^"]*"[^>]*>([\s\S]*?)<\/td>/gi)) {
+        const c = propre(txt(m[1]).replace(/^\d{1,2}:\d{2}\s*/, ''));
+        const parts = /\s-\s/.test(c) ? c.split(/\s+-\s+/).map(propre) : [c];
+        for (const x of parts) if (x && !noms.includes(x)) noms.push(x);
+      }
+    }
+    for (const n of noms) if (cur.p.length < 2 && n && !cur.p.includes(n)) cur.p.push(n);
     const cotes = [...r.matchAll(/<td[^>]*class="[^"]*\bcourse[^"]*"[^>]*>([\s\S]*?)<\/td>/gi)].map(m => parseFloat(txt(m[1]))).filter(x => x > 1 && x < 200);
     for (const c of cotes) if (cur.o.length < 2) cur.o.push(c);
   }
