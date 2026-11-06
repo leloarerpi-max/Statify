@@ -85,8 +85,8 @@
     }));
     return [...m.values()].filter(o => o.n >= min).map(o => Object.assign(o, { pct: o.g / o.n * 100, roi: o.profit / o.n * 100 })).sort((a, b) => b.profit - a.profit);
   }
-  const filtrer = () => S.res.filter(r => r.w !== 0 && !estQualif(r.tournoi) && (S.tour === 'all' || r.tour === S.tour));
-  const tousSaisis = () => S.res.filter(r => !estQualif(r.tournoi) && (S.tour === 'all' || r.tour === S.tour));
+  const filtrer = () => S.res.filter(r => r.w !== 0 && !estQualif(r.tournoi) && r.tour === 'ATP');
+  const tousSaisis = () => S.res.filter(r => !estQualif(r.tournoi) && r.tour === 'ATP');
   window.__tennis = { info, stats, parTranche, parCle, cumul, matchId, parJoueur, ecartDe, jourSem, moment };
 
   /* ---------- Styles ---------- */
@@ -128,13 +128,15 @@
     const data = S.days[S.jour], cfgOk = S.robot.url && S.robot.key;
     let corps = '', resume = '';
     if (data) {
-      const ms = data.matchs.filter(m => !estQualif(m.tournoi) && (S.tour === 'all' || m.tour === S.tour));
-      if (!ms.length) corps = `<p style="text-align:center;opacity:.7;margin-top:24px">Aucun match de tournoi du circuit ce jour-là.</p>`;
+      const ms = data.matchs.filter(m => !estQualif(m.tournoi) && m.tour === 'ATP');
+      if (!data.local && data.v !== 4) corps += `<div style="margin-top:12px;border:2px solid #dc2626;border-radius:12px;padding:10px 12px;font-size:13px;font-weight:700">⚠️ Ton robot Cloudflare n'est pas à jour (ancienne version de worker.js). Colle le dernier worker.js dans le Worker dont l'adresse est dans le réglage ci-dessous, clique sur Deploy, puis sur Actualiser.</div>`;
+      if (data.perime) corps += `<div style="margin-top:12px;border:1px solid #d97706;border-radius:12px;padding:8px 12px;font-size:12px;font-weight:700">⚠️ Calendrier mémorisé${data.maj ? ' (' + new Date(data.maj).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + ')' : ''} : Tennis Explorer ne répond pas bien en ce moment. Les cotes peuvent avoir changé. <button type="button" onclick="tennisCharger(true)" style="margin-left:6px;font-weight:800;text-decoration:underline;background:none;border:0;color:inherit;cursor:pointer">Réessayer</button></div>`;
+      if (!ms.length) corps += `<p style="text-align:center;opacity:.7;margin-top:24px">Aucun match de tournoi du circuit ${data.raison ? 'trouvé pour ce jour.</p><p style="text-align:center;font-size:11px;opacity:.6">' + esc(data.raison) + '</p><p style="text-align:center"><button type="button" onclick="tennisCharger(true)" style="min-height:44px;padding:0 16px;border-radius:12px;font-weight:800;background:#2563eb;color:#fff;border:0;cursor:pointer">Réessayer</button></p>' : 'ce jour-là.</p>'}`;
       const groupes = [], idx = {};
       ms.forEach(m => { const k = m.tour + '|' + m.tournoi; if (!(k in idx)) { idx[k] = groupes.length; groupes.push({ tour: m.tour, tournoi: m.tournoi, l: [] }); } groupes[idx[k]].l.push(m); });
       corps += groupes.map(g => `<div style="display:flex;align-items:center;gap:8px;margin-top:18px"><span style="font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px;background:rgba(128,128,128,.28)">${esc(g.tour)}</span><span style="font-size:14px;font-weight:800">${esc(g.tournoi)}</span></div>${g.l.map(m => carte(m, S.jour)).join('')}`).join('');
       const jouables = ms.filter(avecCotes).length, saisis = ms.filter(m => S.res.some(r => r.id === matchId(S.jour, m))).length;
-      const duJour = S.res.filter(r => r.w !== 0 && r.date === S.jour && (S.tour === 'all' || r.tour === S.tour));
+      const duJour = S.res.filter(r => r.w !== 0 && r.date === S.jour && r.tour === 'ATP');
       const sj = stats(duJour);
       resume = `<div style="margin-top:14px;border:1px solid #2563eb;border-radius:12px;padding:10px 12px;font-size:13px"><b>${saisis} résultat${saisis > 1 ? 's' : ''} saisi${saisis > 1 ? 's' : ''} sur ${jouables}</b>${duJour.length ? ` · sur ces matchs, 1 € sur chaque cote basse : <b style="color:${col(sj.pB)}">${signe(sj.pB)}</b> · sur chaque cote haute : <b style="color:${col(sj.pH)}">${signe(sj.pH)}</b>` : ' · touche le vainqueur de chaque match'}</div>`;
     } else if (cfgOk && !S.err) corps = '<p style="text-align:center;opacity:.7;margin-top:24px">Chargement…</p>';
@@ -191,7 +193,7 @@
   }
   const sept = () => Array.from({ length: 7 }, (_, i) => decaler(auj(), -i));
   const aValider = () => { const o = []; Object.keys(S.days).forEach(j => (S.days[j].matchs || []).forEach(m => { if ((m.w === 1 || m.w === 2) && !estQualif(m.tournoi) && avecCotes(m) && !S.res.some(r => r.id === matchId(j, m))) o.push({ j, m }); })); return o; };
-  const sansRes = () => sept().map(j => ({ j, l: ((S.days[j] && S.days[j].matchs) || []).filter(m => !estQualif(m.tournoi) && avecCotes(m) && !S.res.some(r => r.id === matchId(j, m)) && (S.tour === 'all' || m.tour === S.tour)) }));
+  const sansRes = () => sept().map(j => ({ j, l: ((S.days[j] && S.days[j].matchs) || []).filter(m => !estQualif(m.tournoi) && avecCotes(m) && !S.res.some(r => r.id === matchId(j, m)) && m.tour === 'ATP') }));
   function panneauSans() {
     const v = aValider(), tot = sansRes().reduce((a, x) => a + x.l.length, 0);
     const banniere = v.length ? `<div style="margin-top:10px;border:1px solid #16a34a;border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:13px"><b>${v.length} résultat${v.length > 1 ? 's' : ''} lu${v.length > 1 ? 's' : ''} automatiquement</b> sur la page</span><button type="button" onclick="tennisValiderTout()" style="min-height:44px;padding:0 14px;border-radius:10px;font-weight:800;font-size:13px;background:#16a34a;color:#fff;border:0;cursor:pointer">Tout valider</button></div>` : '';
@@ -221,7 +223,6 @@
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between">
         <div><h2 style="margin:0;font-size:20px;font-weight:800">Tennis</h2><p style="margin:2px 0 0;font-size:12px;opacity:.7">Touche le vainqueur de chaque match · bilan sur ${n} match${n > 1 ? 's' : ''} saisi${n > 1 ? 's' : ''}</p></div>
         <button type="button" onclick="tennisCharger(true)" ${S.busy ? 'disabled' : ''} style="min-height:44px;padding:0 14px;border-radius:12px;font-weight:800;font-size:13px;background:#2563eb;color:#fff;border:0;cursor:pointer">${S.busy ? '…' : 'Actualiser'}</button></div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">${bt('Tous', S.tour === 'all', "tennisSet('tour','all')")}${bt('ATP', S.tour === 'ATP', "tennisSet('tour','ATP')")}${bt('WTA', S.tour === 'WTA', "tennisSet('tour','WTA')")}</div>
       ${S.err ? `<p style="margin:10px 0 0;font-size:13px;color:#dc2626;font-weight:700">${esc(S.err)}</p>` : ''}
       ${data && data.avertissements && data.avertissements.length ? `<p style="margin:8px 0 0;font-size:12px;color:#d97706">${esc(data.avertissements.join(' · '))}</p>` : ''}
       ${titreSect('Bilan')}${bilanHaut()}
@@ -248,6 +249,15 @@
   }
 
   /* ---------- Chargement des matchs ---------- */
+  const KEY_DAYS = 'prono_tennis_days_v1';
+  const lireMem = () => { try { const o = JSON.parse(localStorage.getItem(KEY_DAYS) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } };
+  const ecrireMem = (jour, j) => {
+    try {
+      const o = lireMem(); o[jour] = { jour, maj: j.maj, matchs: j.matchs };
+      Object.keys(o).sort().slice(0, -12).forEach(k => delete o[k]);   // on ne garde que les 12 derniers jours
+      localStorage.setItem(KEY_DAYS, JSON.stringify(o));
+    } catch (e) {}
+  };
   async function charger(force) {
     if (!S.robot.url || !S.robot.key) { S.err = ''; render(); return; }
     if (S.busy) return;
@@ -261,7 +271,13 @@
       if (r.status === 401) throw new Error('Clé refusée : vérifie la SYNC_KEY.');
       if (!r.ok || !j.ok) throw new Error(j.error || ('Le robot a répondu ' + r.status + (r.status === 404 ? ' : colle la nouvelle version de worker.js dans Cloudflare puis Deploy.' : '')));
       S.days[jour] = j;
-    } catch (e) { S.err = e.message === 'Failed to fetch' ? "Robot injoignable : vérifie l'adresse et ta connexion." : e.message; }
+      if (j.matchs && j.matchs.length && !j.perime) ecrireMem(jour, j);
+    } catch (e) {
+      S.err = e.message === 'Failed to fetch' ? "Robot injoignable : vérifie l'adresse et ta connexion." : e.message;
+      // le calendrier ne disparaît pas : on réaffiche le dernier connu sur cet appareil
+      const m = lireMem()[jour];
+      if (m && m.matchs && m.matchs.length && !(S.days[jour] && S.days[jour].matchs && S.days[jour].matchs.length)) S.days[jour] = Object.assign({ ok: true }, m, { perime: true, local: true });
+    }
     S.busy = false; render();
   }
 

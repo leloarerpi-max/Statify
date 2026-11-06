@@ -399,8 +399,16 @@ function lireTE(html, ymdStr, tour) {
   const vus = new Set();
   const jourPasse = ymdStr < parisYmd();
   const fin = () => { if (cur && cur.p.length >= 2 && tournoi && principal && (sansDates || date === cible || date === null)) out.push({ tour, tournoi, heure: cur.h, j1: cur.p[0], j2: cur.p[1], c1: cur.o[0] ?? null, c2: cur.o[1] ?? null, w: vainqueur(cur.s) }); cur = null; };
-  const rows = html.match(/<tr[\s\S]*?<\/tr>/gi) || [];
-  for (const r of rows) {
+  // Sur la page du jour, Tennis Explorer empile plusieurs jours (hier, aujourd'hui) : chaque jour a son propre onglet de date
+  // placé AVANT son tableau, en dehors des lignes <tr>. On suit donc ces onglets au fil de la page.
+  const onglets = [...html.matchAll(/class="tab">\s*([\d.\s]{8,14})</gi)].map(m => ({ i: m.index, d: dateDe(m[1]) })).filter(o => o.d);
+  let oi = 0;
+  for (const rm of html.matchAll(/<tr[\s\S]*?<\/tr>/gi)) {
+    const r = rm[0];
+    while (oi < onglets.length && onglets[oi].i < rm.index) {
+      if (onglets[oi].d !== date) { fin(); date = onglets[oi].d; basVu = false; vus.clear(); tournoi = null; principal = false; }
+      oi++;
+    }
     const t = txt(r);
     const joueurs = [...r.matchAll(/<a [^>]*href="[^"]*\/player\/[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)].map(m => txt(m[1])).filter(Boolean);
     const duel = r.match(/<a [^>]*href="[^"]*\/match-detail\/[^"]*"[^>]*>([\s\S]*?)<\/a>/i);
@@ -448,6 +456,7 @@ function lireTE(html, ymdStr, tour) {
   return out;
 }
 // Lecture d'une page Tennis Explorer, avec une 2e tentative si le site répond 429/5xx ou une page de blocage.
+const CIRCUITS_TENNIS = [['ATP', 'atp-single']];
 async function pageTE(page, type, Y, M, D, heads) {
   let dernier = { status: 0, html: '' };
   for (let essai = 0; essai < 2; essai++) {
@@ -477,7 +486,8 @@ async function tennisDuJour(dateParam, debug, env) {
   // Si la page principale ne donne rien, on essaie l'autre page possible avant de conclure.
   const aujd = parisYmd();
   const essais = jour === aujd ? ['matches', 'next'] : jour < aujd ? ['results'] : ['next'];
-  for (const [tour, type] of [['ATP', 'atp-single'], ['WTA', 'wta-single']]) {
+  // Circuits suivis : ATP seulement (le WTA est volontairement ignoré). Pour le réactiver : ajouter ['WTA', 'wta-single'].
+  for (const [tour, type] of CIRCUITS_TENNIS) {
     let lus = [], htmlDiag = '', dernierStatut = '';
     for (const page of essais) {
       const { status, html } = await pageTE(page, type, Y, M, D, heads);
@@ -505,9 +515,9 @@ async function tennisDuJour(dateParam, debug, env) {
   // doublons éventuels (la même page servie pour les deux circuits)
   const vu = new Set();
   matchs = matchs.filter(m => { const k = [m.tournoi, m.heure, m.j1, m.j2].join('|'); if (vu.has(k)) return false; vu.add(k); return true; });
-  if (debug) return { ok: true, debug: brut, pages, matchs };
+  if (debug) return { ok: true, v: 4, debug: brut, pages, matchs };
   matchs.sort((a, b) => a.heure.localeCompare(b.heure) || a.tournoi.localeCompare(b.tournoi));
-  const rep = { ok: true, jour, maj: Date.now(), matchs, avertissements: erreurs, pages };
+  const rep = { ok: true, v: 4, jour, maj: Date.now(), matchs, avertissements: erreurs, pages };
   if (matchs.length) {
     await cache.put(ck, new Response(JSON.stringify(rep), { headers: { 'content-type': 'application/json', 'cache-control': 'max-age=300' } }));
     if (kv) { try { await kv.put(kvKey, JSON.stringify(rep), { expirationTtl: 14 * 86400 }); } catch (e) {} }
@@ -517,7 +527,7 @@ async function tennisDuJour(dateParam, debug, env) {
   if (kv) {
     try {
       const vieux = JSON.parse((await kv.get(kvKey)) || 'null');
-      if (vieux && Array.isArray(vieux.matchs) && vieux.matchs.length) return Object.assign(vieux, { perime: true, avertissements: erreurs.length ? erreurs : ['Tennis Explorer n\'a rien renvoyé de lisible : dernier calendrier connu.'], pages });
+      if (vieux && Array.isArray(vieux.matchs) && vieux.matchs.length) return Object.assign(vieux, { v: 4, perime: true, avertissements: erreurs.length ? erreurs : ['Tennis Explorer n\'a rien renvoyé de lisible : dernier calendrier connu.'], pages });
     } catch (e) {}
   }
   if (erreurs.length) throw new Error(erreurs.join(' · '));
