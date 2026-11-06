@@ -2400,7 +2400,7 @@
     const SC_JETONS_IGNORES = new Set(['fc', 'cf', 'ac', 'as', 'sc', 'us', 'ssc', 'afc', 'rc', 'rcd', 'sv', 'vfb', 'vfl', 'fsv', 'tsg', 'og', 'ogc', 'ca', 'cd', 'ud', 'sd', 'de', 'la', 'le', 'the', 'el', 'club', 'calcio', 'fk']);
     function scJetons(nom) {
       const n = (nom || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
-      const alias = { psg: ['paris', 'saint', 'germain'], om: ['marseille'], ol: ['lyon'], utd: ['united'], spurs: ['tottenham'], barca: ['barcelona'], atleti: ['atletico'], praha: ['prague'], prag: ['prague'], olympiakos: ['olympiacos'], bruges: ['brugge'], club: ['club'], kiev: ['kyiv'], wien: ['vienna'], koln: ['cologne'], dynamo: ['dinamo'], lisboa: ['lisbon'], gladbach: ['monchengladbach'], man: ['manchester'], mnchen: ['munich'], munchen: ['munich'], muenchen: ['munich'], monaco: ['monaco'], 'bodoglimt': ['bodo', 'glimt'], barca: ['barcelona'], 'sporting': ['sporting'], 'psv': ['psv'], 'leverkusen': ['leverkusen'], 'dortmund': ['dortmund'], 'bvb': ['dortmund'], 'juve': ['juventus'], 'atm': ['atletico', 'madrid'], 'real': ['real'] };
+      const alias = { psg: ['paris', 'saint', 'germain'], om: ['marseille'], ol: ['lyon'], utd: ['united'], spurs: ['tottenham'], barca: ['barcelona'], atleti: ['atletico'], praha: ['prague'], prag: ['prague'], hambourg: ['hamburg'], hamburger: ['hamburg'], valence: ['valencia'], olympiakos: ['olympiacos'], bruges: ['brugge'], club: ['club'], kiev: ['kyiv'], wien: ['vienna'], koln: ['cologne'], dynamo: ['dinamo'], lisboa: ['lisbon'], gladbach: ['monchengladbach'], man: ['manchester'], mnchen: ['munich'], munchen: ['munich'], muenchen: ['munich'], monaco: ['monaco'], 'bodoglimt': ['bodo', 'glimt'], barca: ['barcelona'], 'sporting': ['sporting'], 'psv': ['psv'], 'leverkusen': ['leverkusen'], 'dortmund': ['dortmund'], 'bvb': ['dortmund'], 'juve': ['juventus'], 'atm': ['atletico', 'madrid'], 'real': ['real'] };
       return n.split(' ').filter(t => t && !SC_JETONS_IGNORES.has(t)).flatMap(t => alias[t] || [t]);
     }
     function scJetonEgal(x, y) { return x === y || (Math.min(x.length, y.length) >= 3 && (x.startsWith(y) || y.startsWith(x))); }
@@ -2647,7 +2647,7 @@
       if (/^ligue 1\b/.test(c)) return 'fra.1';
       if (/^ligue 2\b/.test(c)) return 'fra.2';
       if (/^premier league\b/.test(c) && !/ecosse|scot|russ|ukrain|egypt|kazakh|maroc|ghana|nigeria|singap|armen|malt|bosn|hongr|hungar|irland|ireland/.test(c)) return 'eng.1';
-      if (/^(la ?liga|liga espagnole|primera division)\b/.test(c)) return 'esp.1';
+      if (/^(la ?liga|liga espagnole|liga espagne|primera division)\b/.test(c) || c === 'liga' || c === 'espagne') return 'esp.1';
       if (/^serie a\b/.test(c) && !/bresil|brazil|equateur/.test(c)) return 'ita.1';
       if (/^bundesliga\b/.test(c) && !/2|autrich|austria/.test(c)) return 'ger.1';
       return null;
@@ -5972,7 +5972,8 @@ function rgReglerAuto(liste) {
   if (l.length) rgChanger(l, l.length + ' pari(s) réglé(s) automatiquement d\'après les scores', true);
 }
 const RG_DELAI = 'pronotracker_auto_delai', RG_SIG = 'pronotracker_auto_sig', RG_PAIR = 'pronotracker_pairage';
-function rgPairage() { try { const v = localStorage.getItem(RG_PAIR); return v === 'extremes' ? 'extremes' : (v === 'cotes' && window.__combosAuto) ? 'cotes' : 'ordre'; } catch (e) { return 'ordre'; } }
+// Mode unique : paires selon les cotes (prono-combos-auto.js). Repli sur l'ordre de dépôt si ce fichier n'est pas chargé.
+function rgPairage() { return window.__combosAuto ? 'cotes' : 'ordre'; }
 function rgDelaiMin() { try { const s = localStorage.getItem(RG_DELAI); if (s === null) return rgPairage() === 'ordre' ? 0 : 5; const v = parseInt(s, 10); return v >= 0 ? v : 5; } catch (e) { return 5; } }
 function rgPairesAuto() {
   const auj = rgJourLocal(), refus = rgRefusLire();
