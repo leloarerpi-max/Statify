@@ -112,7 +112,7 @@
         <div class="flex items-center gap-3"><button type="button" id="qsRefresh" onclick="rgRafraichirTermines(true)" title="Actualiser les scores" class="text-[13px]" style="color:var(--mut)"><i class="fa-solid fa-rotate"></i></button><button type="button" onclick="scAllerVoirTout()" class="text-[11px] font-bold underline" style="color:var(--acc)">Tout voir dans l'historique</button></div>
       </div>
       <button type="button" id="qsTout" class="qs-tout hidden" onclick="rgToutAppliquer()"></button>
-      <div class="qs-opts"><label><input type="checkbox" id="optAutoRegler"> Régler automatiquement</label><label><input type="checkbox" id="optAutoCombos" checked> Combinés automatiques : <select id="optPairage" class="input-field" style="padding:1px 4px;font-size:11px"><option value="ordre">1+2, 3+4…</option><option value="extremes">1er+dernier…</option></select> après <select id="optDelai" class="input-field" style="padding:1px 4px;font-size:11px"><option value="0">tout de suite</option><option value="1">1 min</option><option value="2">2 min</option><option value="5">5 min</option><option value="10">10 min</option><option value="30">30 min</option></select> </label></div>
+      <div class="qs-opts"><label><input type="checkbox" id="optAutoRegler"> Régler automatiquement</label><label><input type="checkbox" id="optAutoCombos" checked> Combinés automatiques : <select id="optPairage" class="input-field" style="padding:1px 4px;font-size:11px"><option value="ordre">1+2, 3+4…</option><option value="extremes">1er+dernier…</option><option value="cotes">Cotes ≈ 2,00–2,40</option></select> après <select id="optDelai" class="input-field" style="padding:1px 4px;font-size:11px"><option value="0">tout de suite</option><option value="1">1 min</option><option value="2">2 min</option><option value="5">5 min</option><option value="10">10 min</option><option value="30">30 min</option></select> </label></div>
       <div id="qsAuto" class="text-[11px]" style="color:var(--warn)"></div>
       <div id="qsDiag" class="text-[11px]" style="color:var(--mut)"></div>
       <div id="qsList"></div>
@@ -738,6 +738,7 @@
   <script src="backup.js"></script>
 <script src="xlsx.js"></script>
 <script src="prono.js"></script>
+<script src="prono-combos-auto.js"></script>
 <script src="prono-tennis.js"></script>
 </body>
 </html>

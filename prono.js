@@ -2868,7 +2868,14 @@
         .slice()
         .sort((a, b) => (Number(a.id) - Number(b.id)));
       const paires = [], restes = [];
-      if (rgPairage() === 'ordre') {
+      if (rgPairage() === 'cotes') {
+        // Selon les cotes : paires de 2 dont la cote combinée vise 2,00–2,40 (voir prono-combos-auto.js)
+        let r = [];
+        try { r = window.__combosAuto.paires(eligibles.filter(b => b.status === 'Pending' || libres.has(String(b.id)))); } catch (e) { r = []; }
+        const pris = new Set();
+        r.forEach(q => { paires.push([q.a, q.b]); pris.add(q.a.id); pris.add(q.b.id); });
+        eligibles.forEach(b => { if (!pris.has(b.id)) restes.push(b); });
+      } else if (rgPairage() === 'ordre') {
         // Dans l'ordre de dépôt : 1er + 2e, 3e + 4e, etc. (un pari restant reste seul)
         let i = 0;
         while (i < eligibles.length) {
@@ -3103,7 +3110,7 @@
         <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[88vh] flex flex-col">
           <div class="p-4 border-b border-slate-100">
             <h3 class="font-extrabold text-sm text-slate-800"><i class="fa-solid fa-wand-magic-sparkles text-violet-600 mr-1"></i> Générer les combinés</h3>
-            <p class="text-[11px] text-slate-500 mt-1">${rgPairage() === 'ordre' ? 'Les paris sont associés dans l\'ordre de dépôt : 1er + 2e, 3e + 4e, et ainsi de suite.' : '1er pari ajouté + dernier, 2e + avant-dernier, et ainsi de suite.'} Chaque combiné reprend la mise du 1er pari. Seuls les paris de la date choisie (aujourd'hui par défaut) sont utilisés.</p>
+            <p class="text-[11px] text-slate-500 mt-1">${rgPairage() === 'cotes' ? 'Les paris sont associés par 2 pour que la cote du combiné tombe autour de 2,00 à 2,40 (jamais sous 2,00).' : rgPairage() === 'ordre' ? 'Les paris sont associés dans l\'ordre de dépôt : 1er + 2e, 3e + 4e, et ainsi de suite.' : '1er pari ajouté + dernier, 2e + avant-dernier, et ainsi de suite.'} Chaque combiné reprend la mise du 1er pari. Seuls les paris de la date choisie (aujourd'hui par défaut) sont utilisés.</p>
             <label class="block text-[11px] font-bold text-slate-600 mt-3">Paris du jour :
               <input type="date" id="genJour" value="${genJour}" onchange="genJour = this.value; majApercuGenerateur()" class="input-field w-full text-xs mt-1">
             </label>
@@ -5965,7 +5972,7 @@ function rgReglerAuto(liste) {
   if (l.length) rgChanger(l, l.length + ' pari(s) réglé(s) automatiquement d\'après les scores', true);
 }
 const RG_DELAI = 'pronotracker_auto_delai', RG_SIG = 'pronotracker_auto_sig', RG_PAIR = 'pronotracker_pairage';
-function rgPairage() { try { return localStorage.getItem(RG_PAIR) === 'extremes' ? 'extremes' : 'ordre'; } catch (e) { return 'ordre'; } }
+function rgPairage() { try { const v = localStorage.getItem(RG_PAIR); return v === 'extremes' ? 'extremes' : (v === 'cotes' && window.__combosAuto) ? 'cotes' : 'ordre'; } catch (e) { return 'ordre'; } }
 function rgDelaiMin() { try { const s = localStorage.getItem(RG_DELAI); if (s === null) return rgPairage() === 'ordre' ? 0 : 5; const v = parseInt(s, 10); return v >= 0 ? v : 5; } catch (e) { return 5; } }
 function rgPairesAuto() {
   const auj = rgJourLocal(), refus = rgRefusLire();
