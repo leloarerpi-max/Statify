@@ -557,7 +557,7 @@
     try {
       const r1 = await fetch(base + '/rdj?debug=1&a=' + encodeURIComponent(nomFamille(m.j1)) + '&b=' + encodeURIComponent(nomFamille(m.j2)), H), t1 = await r1.text();
       let t2 = '';
-      try { const o = JSON.parse(t1); if (o.url) { const r2 = await fetch(base + '/rdj-diag?grep=unibet&p=' + encodeURIComponent(o.url.replace('https://www.ruedesjoueurs.com', '')), H); t2 = '\n\n--- Page du match (recherche « unibet ») ---\n' + (await r2.text()); } } catch (e) {}
+      try { const o = JSON.parse(t1); if (o.url) { const r2 = await fetch(base + '/rdj-diag?grep=logo%20Unibet&first=1&w=1600&p=' + encodeURIComponent(o.url.replace('https://www.ruedesjoueurs.com', '')), H); t2 = '\n\n--- Page du match (bloc des cotes Unibet) ---\n' + (await r2.text()); } } catch (e) {}
       S.diag = ('Match : ' + m.j1 + ' / ' + m.j2 + '\n' + t1 + t2).slice(0, 14000);
     } catch (e) { S.diag = 'Erreur : ' + e.message; }
     render();
