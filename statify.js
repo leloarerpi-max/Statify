@@ -1687,12 +1687,17 @@ function footRails(){
     r:`<div class="card"><h2>${live.length?'<span class="livedot"></span> ':'🔴 '}En direct</h2>${live.length?live.map(sc).join(''):'<p class="mut">Aucun match en cours.</p>'}</div>${res.length?`<div class="card"><h2>🏁 Derniers résultats</h2>${res.map(sc).join('')}</div>`:''}`
   };
 }
-function railsRender(FT){
-  const on=FT&&['home','matches','multi'].includes(ui.ftab), L=$('#railL'), R=$('#railR');
-  document.body.classList.toggle('rails',!!on);
+function nbaRails(S){
+  const lg='<div class="legend" style="font-size:11px"><span><i class="z1" style="background:#3ecf8e"></i>1-6</span><span><i style="background:#f5a524"></i>7-8 play-in</span><span><i style="background:#ff8a4f"></i>9-10</span></div>';
+  const box=(t,c)=>`<div class="card"><h2>${t}</h2>${lg}${standTable(S,c,true)}</div>`;
+  return {l:box('Conférence Ouest','W'), r:box('Conférence Est','E')};
+}
+function railsRender(FT,S){
+  const on=FT?['home','matches','multi'].includes(ui.ftab):['home','games'].includes(ui.tab), L=$('#railL'), R=$('#railR');
+  document.body.classList.toggle('rails',!!on&&FT); document.body.classList.toggle('rails-nba',!!on&&!FT);
   if(!L||!R) return;
   if(!on){ L.innerHTML=R.innerHTML=''; return; }
-  const h=footRails(); L.innerHTML=h.l; R.innerHTML=h.r;
+  const h=FT?footRails():nbaRails(S); L.innerHTML=h.l; R.innerHTML=h.r;
 }
 function footScorersTable(pl,key,lab,n=8){
   const top=pl.filter(p=>p[key]>0).sort((a,b)=>b[key]-a[key]||b.gp-a.gp).slice(0,n);
@@ -2440,7 +2445,7 @@ function render(){
       $('#tabs').innerHTML=pri.map(tb).join('')+`<button data-act="pronos"><i>🎯</i><span>Pronos</span></button><button data-act="tabmore" class="${inRest||ui.tabMore?'on':''}"><i>⋯</i><span>Plus</span></button>`+(ui.tabMore?`<div class="tabsheet">${rest.map(tb).join('')}</div>`:''); }
     const v={home:viewHome,games:viewGames,players:viewPlayers,teams:viewTeams,standings:viewStandings,race:viewRace,records:viewRecords,compare:viewCompare,rest:viewRest,cal:viewCal,studio:()=>viewStudio('nba')}[ui.tab];
     $('#view').innerHTML=FT?viewFoot():v(S);
-    try{ railsRender(FT); }catch(e){ console.error(e); }
+    try{ railsRender(FT,S); }catch(e){ console.error(e); }
     const M=$('#modal'), mb=M.firstElementChild, keep=M.classList.contains('on')?M.scrollTop:0;
     let mh='';
     if(FT) mh=footModalHtml();
