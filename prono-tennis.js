@@ -11,12 +11,14 @@
   const KEY_RES = 'prono_tennis_results_v1';
   const KEY_DET = 'prono_tennis_det_v1';      // détails de match lus (classement, face-à-face, saison)
   const KEY_RDJ = 'prono_tennis_rdj_v1';      // pronostics d'experts RueDesJoueurs lus par le robot
+  const KEY_HISTO = 'prono_tennis_histo_v1';  // jours déjà importés dans l'historique (reprise possible)
   const KEY_AUTO = 'prono_tennis_auto_v1';    // pronos auto figés avant le match
-  const S = { robot: { url: '', key: '' }, vue: 'cal', tour: 'all', jour: '', days: {}, busy: false, err: '', res: [], strat: 'bas', diag: '', sans: false, sansBusy: false, det: {}, auto: [], detBusy: false, rdj: {}, rdjBusy: false };
+  const S = { robot: { url: '', key: '' }, vue: 'cal', tour: 'all', jour: '', days: {}, busy: false, err: '', res: [], strat: 'bas', diag: '', sans: false, sansBusy: false, det: {}, auto: [], detBusy: false, rdj: {}, rdjBusy: false, histo: { done: {}, busy: false, stop: false, i: 0, total: 0, ajoutes: 0, err: '' } };
   try { Object.assign(S.robot, JSON.parse(localStorage.getItem(KEY_ROBOT) || '{}')); } catch (e) {}
   try { const b = JSON.parse(localStorage.getItem(KEY_RES) || '[]'); if (Array.isArray(b)) S.res = b; } catch (e) {}
   try { const d = JSON.parse(localStorage.getItem(KEY_DET) || '{}'); if (d && typeof d === 'object') S.det = d; } catch (e) {}
   try { const d = JSON.parse(localStorage.getItem(KEY_RDJ) || '{}'); if (d && typeof d === 'object') S.rdj = d; } catch (e) {}
+  try { const d = JSON.parse(localStorage.getItem(KEY_HISTO) || '{}'); if (d && typeof d === 'object') S.histo.done = d; } catch (e) {}
   try { const a = JSON.parse(localStorage.getItem(KEY_AUTO) || '[]'); if (Array.isArray(a)) S.auto = a; } catch (e) {}
 
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -250,15 +252,18 @@
   }
   // Bande des jours : 6 jours passés, aujourd'hui, demain ; deux points = bilan du jour sur la cote basse / la cote haute
   function bandeJours() {
-    const jours = Array.from({ length: 8 }, (_, i) => decaler(auj(), i - 6));
+    const fin = S.fin && S.fin <= decaler(auj(), 1) ? S.fin : decaler(auj(), 1), deb = auj().slice(0, 4) + '-01-01';
+    const jours = Array.from({ length: 8 }, (_, i) => decaler(fin, i - 7));
+    const nav = (txt, on, off, label) => `<button type="button" aria-label="${label}" onclick="${off ? '' : on}" style="flex:0 0 auto;min-width:40px;min-height:58px;border-radius:14px;font-size:18px;font-weight:800;cursor:${off ? 'default' : 'pointer'};pointer-events:${off ? 'none' : 'auto'};opacity:${off ? .3 : 1};background:transparent;color:inherit;border:1px solid ${BD}">${txt}</button>`;
     const pt = (v, nom) => `<span title="${nom}" style="width:7px;height:7px;border-radius:50%;display:inline-block;background:${v == null ? 'rgba(128,128,128,.35)' : v > 0 ? '#16a34a' : v < 0 ? '#dc2626' : '#9ca3af'}"></span>`;
-    return `<div id="tnBande" role="tablist" style="display:flex;gap:6px;overflow-x:auto;margin-top:10px;padding-bottom:4px">${jours.map(j => {
+    return `<div id="tnBande" role="tablist" style="display:flex;gap:6px;overflow-x:auto;margin-top:10px;padding-bottom:4px">${nav('‹', 'tennisSemaine(-1)', decaler(jours[0], -1) < deb, 'Semaine précédente')}${jours.map(j => {
       const l = S.res.filter(r => r.w !== 0 && r.date === j && r.tour === 'ATP'), sj = l.length ? stats(l) : null, actif = j === S.jour;
       const d = new Date(j + 'T12:00:00Z'), sem = d.toLocaleDateString('fr-FR', { weekday: 'short', timeZone: 'UTC' }).replace('.', '');
       return `<button type="button" role="tab" aria-selected="${actif}" onclick="tennisJourDate('${j}')" style="flex:0 0 auto;min-width:54px;min-height:58px;border-radius:14px;padding:6px 8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;${actif ? 'background:#1d4ed8;color:#fff;border:1px solid #3b82f6' : 'background:transparent;color:inherit;border:1px solid ' + BD}">
         <span style="font-size:11px;font-weight:700;opacity:.8;text-transform:capitalize">${j === auj() ? 'auj.' : esc(sem)}</span><span style="font-size:17px;font-weight:800">${d.getUTCDate()}</span>
         <span style="display:flex;gap:3px;height:8px">${pt(sj && sj.pB, 'Cote basse du jour')}${pt(sj && sj.pH, 'Cote haute du jour')}</span></button>`;
-    }).join('')}</div>`;
+    }).join('')}${nav('›', 'tennisSemaine(1)', fin >= decaler(auj(), 1), 'Semaine suivante')}</div>
+    <div style="margin-top:6px;display:flex;align-items:center;gap:8px;font-size:12px"><label for="tnDate" style="opacity:.75;font-weight:700">Aller à une date :</label><input id="tnDate" type="date" min="${deb}" max="${decaler(auj(), 1)}" value="${S.jour}" onchange="tennisDate(this.value)" style="min-height:40px;border-radius:10px;border:1px solid ${BD};background:transparent;color:inherit;padding:0 8px;font-size:13px"></div>`;
   }
   function vueCalendrier() {
     const data = S.days[S.jour], cfgOk = S.robot.url && S.robot.key;
@@ -389,6 +394,21 @@
   const sept = () => Array.from({ length: 7 }, (_, i) => decaler(auj(), -i));
   const aValider = () => { const o = []; Object.keys(S.days).forEach(j => (S.days[j].matchs || []).forEach(m => { if ((m.w === 1 || m.w === 2) && !estQualif(m.tournoi) && avecCotes(m) && !S.res.some(r => r.id === matchId(j, m))) o.push({ j, m }); })); return o; };
   const sansRes = () => sept().map(j => ({ j, l: ((S.days[j] && S.days[j].matchs) || []).filter(m => !estQualif(m.tournoi) && avecCotes(m) && !S.res.some(r => r.id === matchId(j, m)) && m.tour === 'ATP') }));
+  // Historique : relit les résultats de Tennis Explorer jour par jour depuis le 1er janvier de l'année (ATP, tournois principaux, avec cotes)
+  const DEBUT_HISTO = () => auj().slice(0, 4) + '-01-01';
+  function blocHisto() {
+    const h = S.histo, deb = DEBUT_HISTO(), hier = decaler(auj(), -1), tousJours = []; for (let j = deb; j <= hier; j = decaler(j, 1)) tousJours.push(j);
+    const faits = tousJours.filter(j => h.done[j]).length, reste = tousJours.length - faits, pc = tousJours.length ? Math.round(faits / tousJours.length * 100) : 0;
+    const cfg = S.robot.url && S.robot.key;
+    const btn = (txt, on, c) => `<button type="button" onclick="${on}" style="min-height:44px;padding:0 14px;border-radius:10px;font-weight:800;font-size:13px;background:${c};color:#fff;border:0;cursor:pointer">${txt}</button>`;
+    return `<div style="${card};border-left:5px solid #16a34a"><div style="font-size:13px;font-weight:800">📚 Historique depuis le 1er janvier ${deb.slice(0, 4)}</div>
+      <p style="margin:6px 0 0;font-size:12px;opacity:.85">${reste <= 0 ? 'Tous les jours jusqu\'à hier sont importés.' : 'Relit les résultats ATP jour par jour (matchs des tournois principaux avec cotes) pour remplir les statistiques de l\'année. Ça prend quelques minutes ; tu peux arrêter et reprendre : ce qui est fait est gardé.'}</p>
+      <div style="height:6px;border-radius:999px;background:rgba(128,128,128,.25);margin-top:8px;overflow:hidden"><div style="height:100%;width:${pc}%;background:${pc === 100 ? '#16a34a' : '#2563eb'};transition:width .3s"></div></div>
+      <div style="font-size:11px;opacity:.75;margin-top:4px">${faits} jour${faits > 1 ? 's' : ''} sur ${tousJours.length} importés${h.ajoutes ? ' · ' + h.ajoutes + ' matchs ajoutés cette fois' : ''}${h.busy ? ' · en cours…' : ''}</div>
+      ${h.err ? `<div style="font-size:12px;font-weight:700;margin-top:6px;color:#dc2626">${esc(h.err)}</div>` : ''}
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${h.busy ? btn('Arrêter', 'tennisHistoStop()', '#6b7280') : reste > 0 ? btn(faits ? 'Reprendre l\'import' : 'Importer depuis janvier', 'tennisHisto()', cfg ? '#16a34a' : '#6b7280') : ''}</div>
+      ${cfg ? '' : '<div style="font-size:11px;opacity:.7;margin-top:6px">Renseigne d\'abord le robot (réglage en bas de page).</div>'}</div>`;
+  }
   function panneauSans() {
     const v = aValider(), tot = sansRes().reduce((a, x) => a + x.l.length, 0);
     const banniere = v.length && !S.days[S.jour] ? `<div style="margin-top:10px;border:1px solid #16a34a;border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:13px"><b>${v.length} résultat${v.length > 1 ? 's' : ''} lu${v.length > 1 ? 's' : ''} automatiquement</b> sur la page</span><button type="button" onclick="tennisValiderTout()" style="min-height:44px;padding:0 14px;border-radius:10px;font-weight:800;font-size:13px;background:#16a34a;color:#fff;border:0;cursor:pointer">Tout valider</button></div>` : '';
@@ -396,7 +416,7 @@
     if (S.sans) {
       corps = S.sansBusy ? '<p style="text-align:center;opacity:.7;margin-top:14px">Chargement des 7 derniers jours…</p>' : sansRes().filter(x => x.l.length).map(x => `<div style="font-size:13px;font-weight:800;margin-top:16px">${esc(joliJour(x.j))} · ${x.l.length} à saisir</div>${x.l.map(m => carte(m, x.j)).join('')}`).join('') || '<p style="text-align:center;opacity:.7;margin-top:14px">Rien à saisir : tous les matchs des 7 derniers jours ont un résultat (ou pas de cotes).</p>';
     }
-    return `${banniere}<div style="margin-top:10px">${bt(S.sans ? 'Masquer les matchs sans résultat' : 'Matchs sans résultat (7 derniers jours)', S.sans, "tennisSans()")}</div>${corps}`;
+    return `${blocHisto()}${banniere}<div style="margin-top:10px">${bt(S.sans ? 'Masquer les matchs sans résultat' : 'Matchs sans résultat (7 derniers jours)', S.sans, "tennisSans()")}</div>${corps}`;
   }
   const titreSect = t => `<div style="font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.65;margin:22px 0 4px">${t}</div>`;
 
@@ -538,6 +558,8 @@
   window.tennisOuvrir = () => charger(false);
   window.tennisRecharger = () => { try { const b = JSON.parse(localStorage.getItem(KEY_RES) || '[]'); if (Array.isArray(b)) S.res = b; } catch (e) {} render(); };
   window.tennisSet = (k, v) => { S[k] = v; render(); };
+  window.tennisSemaine = n => { const max = decaler(auj(), 1), fin = S.fin && S.fin <= max ? S.fin : max; S.fin = decaler(fin, 7 * n); if (S.fin > max) S.fin = max; render(); };
+  window.tennisDate = j => { if (!/^\d{4}-\d{2}-\d{2}$/.test(j || '')) return; const max = decaler(auj(), 1); if (j > max) j = max; S.fin = j >= decaler(auj(), -3) ? max : decaler(j, 3); if (S.fin > max) S.fin = max; window.tennisJourDate(j); };
   window.tennisJourDate = j => { S.jour = j; S.err = ''; render(); charger(false); };
   window.tennisSon = () => { try { localStorage.setItem(KEY_SON, sonOn() ? '0' : '1'); } catch (e) {} render(); };
   window.tennisJour = n => { S.jour = n === 0 ? auj() : decaler(S.jour, n); S.err = ''; render(); charger(false); };
@@ -601,6 +623,38 @@
     S.sansBusy = true; render();
     for (const j of sept()) await chargerJour(j);
     S.sansBusy = false; render();
+  };
+  window.tennisHistoStop = () => { S.histo.stop = true; render(); };
+  window.tennisHisto = async () => {
+    const h = S.histo; if (h.busy || !S.robot.url || !S.robot.key) return;
+    const deb = DEBUT_HISTO(), hier = decaler(auj(), -1), jours = []; for (let j = deb; j <= hier; j = decaler(j, 1)) if (!h.done[j]) jours.push(j);
+    if (!jours.length) return;
+    h.busy = true; h.stop = false; h.err = ''; h.ajoutes = 0; render();
+    const base = S.robot.url.replace(/\/+$/, ''); let i = 0, echecs = 0, fini = 0;
+    const sauverH = () => { try { localStorage.setItem(KEY_HISTO, JSON.stringify(h.done)); } catch (e) {} sauver(); };
+    const un = async () => {
+      while (i < jours.length && !h.stop && echecs < 6) {
+        const j = jours[i++];
+        try {
+          const r = await fetch(base + '/tennis?date=' + j, { headers: { 'x-key': S.robot.key }, cache: 'no-store' });
+          if (r.status === 401 || r.status === 404) { h.err = r.status === 401 ? 'Clé du robot refusée : vérifie le réglage en bas de page.' : 'Le robot ne répond pas à cette adresse.'; h.stop = true; break; }
+          const o = await r.json().catch(() => ({}));
+          if (r.ok && o.ok && !o.perime) {
+            (o.matchs || []).forEach(m => {
+              if ((m.w !== 1 && m.w !== 2) || m.tour !== 'ATP' || estQualif(m.tournoi) || !avecCotes(m)) return;
+              const id = matchId(j, m); if (S.res.some(x => x.id === id)) return;
+              S.res.push({ id, date: j, heure: m.heure, tour: m.tour, tournoi: m.tournoi, j1: m.j1, j2: m.j2, c1: m.c1, c2: m.c2, w: m.w, auto: true, histo: true }); h.ajoutes++;
+            });
+            h.done[j] = 1; echecs = 0;
+          } else echecs++;
+        } catch (e) { echecs++; }
+        if (++fini % 8 === 0) { sauverH(); render(); }
+        await new Promise(res => setTimeout(res, 700));
+      }
+    };
+    try { await Promise.all([un(), un()]); } catch (e) {}
+    if (echecs >= 6 && !h.err) h.err = 'Tennis Explorer ne répond pas bien en ce moment : réessaie plus tard, ce qui est fait est gardé.';
+    h.busy = false; sauverH(); render();
   };
   window.tennisValiderTout = () => {
     aValider().forEach(({ j, m }) => S.res.push({ id: matchId(j, m), date: j, heure: m.heure, tour: m.tour, tournoi: m.tournoi, j1: m.j1, j2: m.j2, c1: m.c1, c2: m.c2, w: m.w, auto: true }));
