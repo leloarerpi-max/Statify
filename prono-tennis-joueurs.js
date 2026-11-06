@@ -51,6 +51,21 @@
     });
     return { L, liste, joueurs: P, tournois: [...T.values()].sort((a, b) => b.n - a.n), parJour, parMois, parSem, parMoment };
   }
+  // Faits marquants : quelques records de l'année, calculés sur les matchs enregistrés
+  function faits(C) {
+    if (!C.L.length) return [];
+    const out = [], l = C.liste;
+    const meilleur = (f, min) => l.filter(p => p.n >= (min || 1)).sort((a, b) => f(b) - f(a) || b.n - a.n)[0];
+    const s1 = meilleur(p => p.plusLongueV), v1 = meilleur(p => p.v), a1 = meilleur(p => p.n), pc = meilleur(p => p.pct, 10), d1 = meilleur(p => p.d);
+    const jour = [...C.parJour.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (s1 && s1.plusLongueV >= 3) out.push(['🔥', 'Plus longue série', s1.nom, s1.plusLongueV + ' victoires d\'affilée']);
+    if (v1) out.push(['🏆', 'Plus de victoires', v1.nom, v1.v + ' victoires']);
+    if (pc) out.push(['🎯', 'Meilleur % (10 matchs min.)', pc.nom, Math.round(pc.pct) + ' % · ' + pc.v + '–' + pc.d]);
+    if (a1) out.push(['🏃', 'Le plus actif', a1.nom, a1.n + ' matchs']);
+    if (d1 && d1.d >= 3) out.push(['🧱', 'Plus de défaites', d1.nom, d1.d + ' défaites']);
+    if (jour) out.push(['📅', 'Jour le plus chargé', jour[0].slice(8, 10) + '/' + jour[0].slice(5, 7), jour[1] + ' matchs']);
+    return out;
+  }
   function duel(C, a, b) {
     const pa = C.joueurs.get(a); if (!pa || !C.joueurs.get(b)) return null;
     const l = pa.duels.filter(x => x.adv === b);
@@ -67,15 +82,32 @@
   const bouton = (txt, actif, on, BD) => `<button type="button" onclick="${on}" style="min-height:40px;padding:0 12px;border-radius:10px;font-weight:700;font-size:12px;cursor:pointer;${actif ? 'background:#1d4ed8;color:#fff;border:1px solid #3b82f6' : `background:transparent;color:inherit;border:1px solid ${BD}`}">${txt}</button>`;
   const champ = (id, val, ph, noms, on, BD) => `<input id="${id}" list="${id}L" value="${esc(val)}" placeholder="${ph}" onchange="${on}(this.value)" style="min-height:44px;border-radius:10px;border:1px solid ${BD};background:transparent;color:inherit;padding:0 10px;font-size:14px;width:100%;box-sizing:border-box"><datalist id="${id}L">${noms.map(n => `<option value="${esc(n)}"></option>`).join('')}</datalist>`;
 
+  function faitsHtml(res, BD) {
+    try {
+      const f = faits(getC(res || []));
+      if (!f.length) return '';
+      return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px">${f.map(x => `<div style="border:1px solid ${BD};border-radius:12px;padding:9px 10px"><div style="font-size:11px;opacity:.7">${x[0]} ${esc(x[1])}</div><div style="font-size:14px;font-weight:800;margin-top:2px">${esc(x[2])}</div><div style="font-size:11px;opacity:.75">${esc(x[3])}</div></div>`).join('')}</div>`;
+    } catch (e) { return ''; }
+  }
   function palmares(C, BD) {
     const defs = { v: ['Victoires', p => p.v, p => p.v + ' V'], d: ['Défaites', p => p.d, p => p.d + ' D'], n: ['Matchs joués', p => p.n, p => p.n + ' matchs'], pct: ['% de victoires (10 matchs min.)', p => p.pct, p => fr(p.pct, 0) + ' %'], s: ['Plus longue série de victoires', p => p.plusLongueV, p => p.plusLongueV + ' d\'affilée'] };
     const [titre, val, aff] = defs[st.tri] || defs.v;
     let l = C.liste.slice(); if (st.tri === 'pct') l = l.filter(p => p.n >= 10);
     l.sort((a, b) => val(b) - val(a) || b.n - a.n); l = l.slice(0, 15);
     const max = l.length ? val(l[0]) : 0;
-    return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${Object.keys(defs).map(k => bouton(defs[k][0].replace(' (10 matchs min.)', ''), st.tri === k, `tnJx('tri','${k}')`, BD)).join('')}</div>
+    return `${faitsHtml(C.L, BD)}<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${Object.keys(defs).map(k => bouton(defs[k][0].replace(' (10 matchs min.)', ''), st.tri === k, `tnJx('tri','${k}')`, BD)).join('')}</div>
       <div style="font-size:13px;font-weight:800;margin-top:12px">${esc(titre)}</div>
-      ${l.length ? l.map((p, i) => `<div style="margin-top:8px"><div style="display:flex;justify-content:space-between;gap:8px;font-size:13px"><span>${i + 1}. ${lien(p.nom)}</span><span style="font-weight:800">${esc(aff(p))} <span style="opacity:.6;font-weight:600">· ${p.v}–${p.d}</span></span></div>${barre(val(p), max, st.tri === 'd' ? ROUGE : BLEU)}</div>`).join('') : '<p style="font-size:12px;opacity:.7">Pas encore assez de matchs.</p>'}`;
+      ${l.length >= 3 ? `<div style="display:flex;align-items:flex-end;gap:8px;margin-top:10px">${[1, 0, 2].map(i => { const p = l[i], h = [92, 70, 56][i], c = ['#f59e0b', '#94a3b8', '#b45309'][i]; return `<div style="flex:1;min-width:0;text-align:center"><div style="font-size:22px">${['🥇', '🥈', '🥉'][i]}</div><div style="font-size:12px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lien(p.nom)}</div><div style="margin-top:4px;height:${h}px;border-radius:10px 10px 0 0;background:color-mix(in srgb,${c} 30%,transparent);border:1px solid color-mix(in srgb,${c} 60%,transparent);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px">${esc(aff(p))}</div></div>`; }).join('')}</div>` : ''}
+      ${l.length ? l.slice(l.length >= 3 ? 3 : 0).map((p, i) => `<div style="margin-top:8px"><div style="display:flex;justify-content:space-between;gap:8px;font-size:13px"><span>${i + 1 + (l.length >= 3 ? 3 : 0)}. ${lien(p.nom)}</span><span style="font-weight:800">${esc(aff(p))} <span style="opacity:.6;font-weight:600">· ${p.v}–${p.d}</span></span></div>${barre(val(p), max, st.tri === 'd' ? ROUGE : BLEU)}</div>`).join('') : '<p style="font-size:12px;opacity:.7">Pas encore assez de matchs.</p>'}`;
+  }
+  // Courbe de progression : victoires moins défaites, match après match
+  function courbe(p) {
+    if (p.suite.length < 3) return '';
+    let c = 0; const pts = [0].concat(p.suite.map(x => (c += x ? 1 : -1))), mx = Math.max(1, ...pts.map(Math.abs)), W = 300, H = 90, n = pts.length - 1;
+    const X = i => 4 + i / n * (W - 8), Y = v => H / 2 - v / mx * (H / 2 - 8);
+    const d = pts.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' '), fin = pts[pts.length - 1];
+    return `<div style="margin-top:12px"><div style="font-size:11px;opacity:.7;display:flex;justify-content:space-between"><span>Progression (victoires − défaites)</span><b style="color:${fin >= 0 ? VERT : ROUGE}">${fin > 0 ? '+' : ''}${fin}</b></div>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" height="90" preserveAspectRatio="none" role="img" aria-label="Courbe de progression de ${esc(p.nom)}"><line x1="0" y1="${H / 2}" x2="${W}" y2="${H / 2}" stroke="rgba(128,128,128,.4)" stroke-dasharray="3 3"/><path d="${d}" fill="none" stroke="${fin >= 0 ? VERT : ROUGE}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></svg></div>`;
   }
   function fiche(C, BD) {
     const noms = C.liste.slice().sort((a, b) => b.n - a.n).map(p => p.nom), p = C.joueurs.get(st.joueur);
@@ -89,6 +121,7 @@
           <div style="flex:1;min-width:110px"><div style="font-size:11px;opacity:.7">Série en cours</div><div style="font-size:22px;font-weight:800;color:${p.serie > 0 ? VERT : p.serie < 0 ? ROUGE : 'inherit'}">${p.serie > 0 ? p.serie + ' V' : p.serie < 0 ? -p.serie + ' D' : '—'}</div><div style="font-size:11px;opacity:.75">record : ${p.plusLongueV} V d'affilée</div></div>
           <div style="flex:1;min-width:110px"><div style="font-size:11px;opacity:.7">Matchs joués</div><div style="font-size:22px;font-weight:800">${p.n}</div><div style="font-size:11px;opacity:.75">${p.tournois.size} tournoi${p.tournois.size > 1 ? 's' : ''}</div></div></div>
         <div style="margin-top:10px;font-size:12px;font-weight:700">Forme (10 derniers) ${forme(p.forme)}</div>
+        ${courbe(p)}
         <div style="font-size:13px;font-weight:800;margin-top:14px">Par tournoi</div>${tr.map(t => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-top:1px solid ${BD}"><span>${esc(t.nom)}</span><b>${g(t.v, t.d)}</b></div>`).join('')}
         ${mo.length ? `<div style="font-size:13px;font-weight:800;margin-top:14px">Selon le moment de la journée</div>${mo.map(m => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-top:1px solid ${BD}"><span>${m}</span><b>${g(p.moments[m].v, p.moments[m].d)}</b></div>`).join('')}` : ''}
         <div style="font-size:13px;font-weight:800;margin-top:14px">Derniers matchs</div>${p.duels.slice(-10).reverse().map(x => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:5px 0;border-top:1px solid ${BD}"><span style="opacity:.75">${esc(x.date.slice(8, 10) + '/' + x.date.slice(5, 7))} · ${esc(x.tournoi)}</span><span>contre ${lien(x.adv)} <b style="color:${x.gagne ? VERT : ROUGE}">${x.gagne ? 'V' : 'D'}</b></span></div>`).join('')}</div>`;
@@ -110,9 +143,28 @@
     return `${liste}<div style="margin-top:14px"><div style="font-size:15px;font-weight:800">${esc(t.nom)}</div><div style="font-size:12px;opacity:.75">${t.n} matchs · ${t.j.size} joueurs · du ${esc(t.debut.slice(8, 10) + '/' + t.debut.slice(5, 7))} au ${esc(t.fin.slice(8, 10) + '/' + t.fin.slice(5, 7))}</div>
       <div style="font-size:13px;font-weight:800;margin-top:10px">Qui va le plus loin (le plus de victoires)</div>${top.map(j => `<div style="margin-top:7px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${lien(j.nom)}</span><b>${j.v}–${j.d}</b></div>${barre(j.v, max, BLEU)}</div>`).join('')}</div>`;
   }
+  // Grille de la saison (façon contributions GitHub) : une case par jour, plus ou moins foncée selon le nombre de matchs
+  function grilleSaison(C, BD) {
+    const jours = [...C.parJour.keys()].sort(); if (!jours.length) return '';
+    const annee = jours[0].slice(0, 4), debut = new Date(annee + '-01-01T12:00:00Z'), fin = new Date(annee + '-12-31T12:00:00Z');
+    const dec = (debut.getUTCDay() + 6) % 7, mx = Math.max(1, ...C.parJour.values()), cols = Math.ceil((dec + Math.round((fin - debut) / 864e5) + 1) / 7);
+    let cells = '', mois = '';
+    for (let c = 0; c < cols; c++) {
+      let col = '';
+      for (let r = 0; r < 7; r++) {
+        const k = c * 7 + r - dec; if (k < 0 || k > 365) { col += '<span style="width:11px;height:11px"></span>'; continue; }
+        const d = new Date(debut.getTime() + k * 864e5), iso = d.toISOString().slice(0, 10), n = C.parJour.get(iso) || 0;
+        if (r === 0 && d.getUTCDate() <= 7) mois += `<span style="position:absolute;left:${c * 14}px;font-size:10px;opacity:.7">${MOIS[d.getUTCMonth()].replace('.', '')}</span>`;
+        col += `<span title="${esc(iso.slice(8, 10) + '/' + iso.slice(5, 7))} : ${n} match${n > 1 ? 's' : ''}" style="width:11px;height:11px;border-radius:3px;background:${n ? `color-mix(in srgb,#16a34a ${Math.round(25 + n / mx * 75)}%,transparent)` : 'rgba(128,128,128,.18)'}"></span>`;
+      }
+      cells += `<div style="display:flex;flex-direction:column;gap:3px">${col}</div>`;
+    }
+    return `<div style="font-size:13px;font-weight:800;margin-top:12px">Ta saison jour par jour (${esc(annee)})</div><div style="overflow-x:auto;padding-bottom:6px"><div style="position:relative;height:14px;margin-top:6px;width:${cols * 14}px">${mois}</div><div style="display:flex;gap:3px;width:${cols * 14}px">${cells}</div></div>
+      <div style="font-size:10px;opacity:.65;display:flex;align-items:center;gap:4px">Moins <span style="width:11px;height:11px;border-radius:3px;background:rgba(128,128,128,.18)"></span><span style="width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,#16a34a 40%,transparent)"></span><span style="width:11px;height:11px;border-radius:3px;background:#16a34a"></span> Plus de matchs</div>`;
+  }
   function calendrierVue(C, BD) {
     const mx = Math.max(1, ...C.parMois), top = [...C.parJour.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5), ms = Math.max(1, ...Object.values(C.parSem), 1), mm = Math.max(1, ...Object.values(C.parMoment), 1);
-    return `<div style="font-size:13px;font-weight:800;margin-top:12px">Matchs par mois</div><div style="display:flex;align-items:flex-end;gap:4px;height:90px;margin-top:6px">${C.parMois.map((n, i) => `<div style="flex:1;text-align:center;font-size:10px"><div title="${n} matchs" style="height:${Math.round(n / mx * 60)}px;background:${BLEU};border-radius:4px 4px 0 0;min-height:${n ? 2 : 0}px"></div><div style="opacity:.7;margin-top:2px">${MOIS[i].replace('.', '')}</div><div style="font-weight:800">${n || ''}</div></div>`).join('')}</div>
+    return `${grilleSaison(C, BD)}<div style="font-size:13px;font-weight:800;margin-top:12px">Matchs par mois</div><div style="display:flex;align-items:flex-end;gap:4px;height:90px;margin-top:6px">${C.parMois.map((n, i) => `<div style="flex:1;text-align:center;font-size:10px"><div title="${n} matchs" style="height:${Math.round(n / mx * 60)}px;background:${BLEU};border-radius:4px 4px 0 0;min-height:${n ? 2 : 0}px"></div><div style="opacity:.7;margin-top:2px">${MOIS[i].replace('.', '')}</div><div style="font-weight:800">${n || ''}</div></div>`).join('')}</div>
       <div style="font-size:13px;font-weight:800;margin-top:14px">Jours les plus chargés</div>${top.map(([d, n]) => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-top:1px solid ${BD}"><span>${esc(d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4))}</span><b>${n} matchs</b></div>`).join('')}
       <div style="font-size:13px;font-weight:800;margin-top:14px">Par jour de la semaine</div>${ORDRE_J.filter(j => C.parSem[j]).map(j => `<div style="margin-top:6px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${j}</span><b>${C.parSem[j]}</b></div>${barre(C.parSem[j], ms, BLEU)}</div>`).join('')}
       <div style="font-size:13px;font-weight:800;margin-top:14px">Par moment de la journée</div>${MOMENTS.filter(m => C.parMoment[m]).map(m => `<div style="margin-top:6px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${m}</span><b>${C.parMoment[m]}</b></div>${barre(C.parMoment[m], mm, BLEU)}</div>`).join('')}`;
@@ -136,5 +188,5 @@
   window.tnJoueur1 = n => { st.joueur = String(n || '').trim(); redraw(); };
   window.tnJoueur2 = n => { st.j2 = String(n || '').trim(); redraw(); };
   window.tnTournoi = n => { st.tournoi = st.tournoi === n ? '' : String(n || ''); redraw(); };
-  window.__tennisJoueurs = { calculer, duel, bloc, etat: st };
+  window.__tennisJoueurs = { calculer, duel, bloc, faits, faitsHtml, etat: st };
 })();

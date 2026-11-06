@@ -13,7 +13,7 @@
   const KEY_HISTO = 'prono_tennis_histo_v3';       // jours déjà importés dans l'historique (reprise possible)
   const KEY_DAYS = 'prono_tennis_days_v1';
   const KEY_CL = 'prono_tennis_cl_v1';              // dernier classement ATP en direct lu (affiché même hors ligne)
-  const S = { robot: { url: '', key: '' }, jour: '', fin: '', days: {}, busy: false, err: '', res: [], diag: '', majBusy: false, cl: { l: [], maj: 0, busy: false, err: '', n: 20, q: '' }, histo: { done: {}, busy: false, stop: false, ajoutes: 0, err: '' } };
+  const S = { onglet: 'cal', robot: { url: '', key: '' }, jour: '', fin: '', days: {}, busy: false, err: '', res: [], diag: '', majBusy: false, cl: { l: [], maj: 0, busy: false, err: '', n: 20, q: '' }, histo: { done: {}, busy: false, stop: false, ajoutes: 0, err: '' } };
   try { Object.assign(S.robot, JSON.parse(localStorage.getItem(KEY_ROBOT) || '{}')); } catch (e) {}
   try { const b = JSON.parse(localStorage.getItem(KEY_RES) || '[]'); if (Array.isArray(b)) S.res = b; } catch (e) {}
   try { const c = JSON.parse(localStorage.getItem(KEY_CL) || 'null'); if (c && Array.isArray(c.l)) { S.cl.l = c.l; S.cl.maj = c.maj || 0; } } catch (e) {}
@@ -66,11 +66,25 @@
     return { k: 'inconnu', t: 'Terminé · résultat pas encore lu', c: '#d97706' };
   }
 
+  /* ---------- Rang ATP et pays d'un joueur (rapprochés du classement en direct) ---------- */
+  const sansAccent = x => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  let idxCl = { maj: -1, t: [] };
+  // « Sinner J. » → cherche « Jannik Sinner » : même nom de famille (en fin de nom) et même initiale du prénom
+  function trouverCl(nomTE) {
+    if (idxCl.maj !== S.cl.maj) idxCl = { maj: S.cl.maj, t: S.cl.l.map(x => ({ x, n: ' ' + sansAccent(x.nom), i: sansAccent(x.nom)[0] })) };
+    const parts = String(nomTE || '').trim().split(/\s+/); let ini = '';
+    while (parts.length > 1 && /^[A-Za-z]\.?(-[A-Za-z]\.?)?$/.test(parts[parts.length - 1])) ini = ini || sansAccent(parts.pop())[0];
+    const fam = sansAccent(parts.join(' ')); if (!fam) return null;
+    const c = idxCl.t.filter(o => o.n.endsWith(' ' + fam) && (!ini || o.i === ini));
+    return c.length === 1 ? c[0].x : null;
+  }
+  const pastilles = nom => { const x = trouverCl(nom); return x ? `<span title="Classement ATP en direct" style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:6px;background:rgba(37,99,235,.16);color:#2563eb;border:1px solid rgba(37,99,235,.4)">#${esc(x.rang)}</span>${x.pays ? `<span title="Pays" style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:6px;background:rgba(128,128,128,.2)">${esc(x.pays)}</span>` : ''}` : ''; };
+
   /* ---------- Calendrier ---------- */
   function carte(m, jour) {
     const stt = statutMatch(m, jour), ligne = (nom, n) => {
       const gagne = m.w === n, perd = (m.w === 1 || m.w === 2) && !gagne;
-      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;margin-top:6px;${gagne ? 'background:color-mix(in srgb,#16a34a 16%,transparent);border:1px solid color-mix(in srgb,#16a34a 50%,transparent)' : 'border:1px solid ' + BD}${perd ? ';opacity:.6' : ''}"><span style="font-size:15px;font-weight:${gagne ? 800 : 600}">${esc(nom)}</span>${gagne ? '<span style="margin-left:auto;font-size:12px;font-weight:800;color:' + VERT + '">🏆 Vainqueur</span>' : ''}</div>`;
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;margin-top:6px;${gagne ? 'background:color-mix(in srgb,#16a34a 16%,transparent);border:1px solid color-mix(in srgb,#16a34a 50%,transparent)' : 'border:1px solid ' + BD}${perd ? ';opacity:.6' : ''}"><span style="font-size:15px;font-weight:${gagne ? 800 : 600}">${esc(nom)}</span>${pastilles(nom)}${gagne ? '<span style="margin-left:auto;font-size:12px;font-weight:800;color:' + VERT + '">🏆 Vainqueur</span>' : ''}</div>`;
     };
     return `<div style="${card}"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;opacity:.85">${esc(m.heure) || '—'}</span>${puce(stt.t, stt.c)}</div>${ligne(m.j1, 1)}${ligne(m.j2, 2)}</div>`;
   }
@@ -110,10 +124,10 @@
   }
 
   /* ---------- Classement ATP en direct (live-tennis.eu, lu par le robot) ---------- */
-  function blocClassement() {
+  function blocClassement(compact) {
     const c = S.cl, cfg = S.robot.url && S.robot.key, q = (c.q || '').trim().toLowerCase();
     let l = c.l; if (q) l = l.filter(x => String(x.nom).toLowerCase().includes(q) || String(x.pays || '').toLowerCase() === q);
-    const vu = l.slice(0, q ? 30 : c.n);
+    const vu = l.slice(0, compact ? 10 : q ? 30 : c.n);
     const ligne = x => `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid ${BD};font-size:13px"><span style="min-width:30px;font-weight:800">${esc(x.rang)}</span>
       <span style="min-width:0;flex:1"><span style="font-weight:700">${esc(x.nom)}</span> <span style="opacity:.6;font-size:11px">${esc(x.pays || '')}${x.age ? ' · ' + esc(x.age) + ' ans' : ''}</span>${x.resultat ? `<div style="font-size:11px;opacity:.65">${esc(x.resultat)}</div>` : ''}</span>
       <span style="text-align:right;white-space:nowrap"><b>${x.points != null ? esc(x.points) : '—'}</b>${x.variation ? `<div style="font-size:11px;font-weight:800;color:${x.variation > 0 ? VERT : '#dc2626'}">${x.variation > 0 ? '▲ +' : '▼ '}${esc(x.variation)}</div>` : ''}</span></div>`;
@@ -121,8 +135,9 @@
         <button type="button" onclick="tennisClassement(true)" style="min-height:40px;padding:0 12px;border-radius:10px;font-weight:700;font-size:12px;cursor:pointer;background:transparent;color:inherit;border:1px solid ${BD}">${c.busy ? '…' : 'Actualiser'}</button></div>
       <div style="font-size:11px;opacity:.7;margin-top:2px">Points en direct pendant les tournois · source : <a href="https://live-tennis.eu/fr/classement-atp-live" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">live-tennis.eu</a>${c.maj ? ' · lu à ' + new Date(c.maj).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
       ${c.err ? `<div style="font-size:12px;font-weight:700;margin-top:6px;color:#dc2626">${esc(c.err)}</div>` : ''}
-      ${c.l.length ? `<input type="search" value="${esc(c.q)}" placeholder="Chercher un joueur ou un pays (ex. Sinner, FRA)" onchange="tennisClFiltre(this.value)" style="margin-top:8px;width:100%;box-sizing:border-box;min-height:44px;border-radius:10px;border:1px solid ${BD};background:transparent;color:inherit;padding:0 10px;font-size:14px"><div style="margin-top:6px">${vu.map(ligne).join('') || '<p style="font-size:12px;opacity:.7">Aucun joueur trouvé.</p>'}</div>
-        ${!q && c.n < l.length ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${[50, 100, 150].filter(n => n > c.n && n <= Math.max(50, l.length)).map(n => `<button type="button" onclick="tennisClPlus(${n})" style="min-height:40px;padding:0 12px;border-radius:10px;font-weight:700;font-size:12px;cursor:pointer;background:transparent;color:inherit;border:1px solid ${BD}">Afficher le top ${n}</button>`).join('')}</div>` : ''}`
+ ${c.l.length ? `${compact ? '' : `<input type="search" value="${esc(c.q)}" placeholder="Chercher un joueur ou un pays (ex. Sinner, FRA)" onchange="tennisClFiltre(this.value)" style="margin-top:8px;width:100%;box-sizing:border-box;min-height:44px;border-radius:10px;border:1px solid ${BD};background:transparent;color:inherit;padding:0 10px;font-size:14px">`}<div style="margin-top:6px">${vu.map(ligne).join('') || '<p style="font-size:12px;opacity:.7">Aucun joueur trouvé.</p>'}</div>
+        ${compact ? `<button type="button" onclick="tennisOnglet('cl')" style="margin-top:8px;min-height:40px;padding:0 12px;border-radius:10px;font-weight:700;font-size:12px;cursor:pointer;background:transparent;color:inherit;border:1px solid ${BD}">Voir tout le classement</button>` : ''}
+        ${!compact && !q && c.n < l.length ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${[50, 100, 150].filter(n => n > c.n && n <= Math.max(50, l.length)).map(n => `<button type="button" onclick="tennisClPlus(${n})" style="min-height:40px;padding:0 12px;border-radius:10px;font-weight:700;font-size:12px;cursor:pointer;background:transparent;color:inherit;border:1px solid ${BD}">Afficher le top ${n}</button>`).join('')}</div>` : ''}`
         : (cfg ? '<p style="font-size:12px;opacity:.75;margin:8px 0 0">' + (c.busy ? 'Chargement…' : 'Appuie sur Actualiser pour lire le classement.') + '</p>' : '<p style="font-size:12px;opacity:.75;margin:8px 0 0">Renseigne d\'abord le robot (réglage en bas de page).</p>')}</div>`;
   }
   async function chargerClassement(force) {
@@ -171,19 +186,33 @@
   }
 
   /* ---------- Affichage général ---------- */
+  const ONGLETS = [['cal', '📅 Calendrier'], ['cl', '🌍 Classement'], ['jou', '👥 Joueurs'], ['his', '📚 Historique']];
+  const barreOnglets = () => `<div role="tablist" style="display:flex;gap:6px;overflow-x:auto;margin-top:12px;padding-bottom:2px">${ONGLETS.map(([k, t]) => `<button type="button" role="tab" aria-selected="${S.onglet === k}" onclick="tennisOnglet('${k}')" style="flex:1 0 auto;min-height:46px;padding:0 14px;border-radius:12px;font-weight:800;font-size:13px;cursor:pointer;white-space:nowrap;${S.onglet === k ? 'background:#1d4ed8;color:#fff;border:1px solid #3b82f6;box-shadow:0 4px 14px rgba(29,78,216,.3)' : 'background:transparent;color:inherit;border:1px solid ' + BD}">${t}</button>`).join('')}</div>`;
+  function contenuOnglet() {
+    const J = window.__tennisJoueurs;
+    if (S.onglet === 'cl') return blocClassement();
+    if (S.onglet === 'jou') return J ? J.bloc(filtrer(), BD, card) : '';
+    if (S.onglet === 'his') return blocHisto();
+    // Calendrier : sur grand écran, les matchs à gauche et, à droite, les faits marquants et le début du classement
+    return `<div class="tnG"><div style="min-width:0">${vueCalendrier()}</div><div style="min-width:0"><div style="font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.65;margin:14px 0 0">En ce moment</div>${J ? J.faitsHtml(filtrer(), BD) : ''}${blocClassement(true)}</div></div>`;
+  }
+  // Le tennis occupe presque toute la largeur de l'écran (le reste de l'appli garde sa largeur d'origine)
+  function elargir(el) {
+    try { const grand = window.innerWidth >= 1100; el.style.width = grand ? 'min(calc(100vw - 48px), 1700px)' : ''; el.style.position = grand ? 'relative' : ''; el.style.left = grand ? '50%' : ''; el.style.transform = grand ? 'translateX(-50%)' : ''; } catch (e) {}
+  }
   function render() {
     const el = root(); if (!el) return;
+    elargir(el);
     const data = S.days[S.jour];
-    el.innerHTML = `<div class="surface" style="border:1px solid ${BD};border-radius:16px;padding:14px">
+    el.innerHTML = `<style>.tnG{display:grid;gap:14px}@media (min-width:1100px){.tnG{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}}</style><div class="surface" style="border:1px solid ${BD};border-radius:16px;padding:14px">
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;border-radius:14px;padding:14px;color:#fff;background:linear-gradient(135deg,#14532d,#166534 55%,#a3e635 220%)">
         <div style="display:flex;align-items:center;gap:10px"><span style="font-size:30px" aria-hidden="true">🎾</span><div><h2 style="margin:0;font-size:20px;font-weight:800">Tennis</h2><p style="margin:2px 0 0;font-size:12px;opacity:.9">Matchs ATP, résultats et statistiques · ${filtrer().length} match${filtrer().length > 1 ? 's' : ''} enregistré${filtrer().length > 1 ? 's' : ''}</p></div></div>
         <button type="button" onclick="tennisCharger(true)" ${S.busy ? 'disabled' : ''} style="min-height:44px;padding:0 14px;border-radius:12px;font-weight:800;font-size:13px;background:#fff;color:#14532d;border:0;cursor:pointer">${S.busy ? '…' : 'Actualiser'}</button></div>
       ${S.err ? `<p style="margin:10px 0 0;font-size:13px;color:#dc2626;font-weight:700">${esc(S.err)}</p>` : ''}
       ${data && data.avertissements && data.avertissements.length ? `<p style="margin:8px 0 0;font-size:12px;color:#d97706">${esc(data.avertissements.join(' · '))}</p>` : ''}
-      ${titreSect('Calendrier du jour')}${vueCalendrier()}
-      ${titreSect('Statistiques')}${blocClassement()}${window.__tennisJoueurs ? window.__tennisJoueurs.bloc(filtrer(), BD, card) : ''}
-      ${titreSect('Historique')}${blocHisto()}
-      ${S.res.length ? `<button type="button" onclick="tennisExport()" style="margin-top:16px;min-height:44px;padding:0 14px;border-radius:12px;border:1px solid ${BD};background:transparent;color:inherit;font-weight:700;font-size:12px;cursor:pointer">Exporter les matchs (CSV)</button>` : ''}
+      ${barreOnglets()}
+      ${contenuOnglet()}
+      ${S.onglet === 'his' && S.res.length ? `<button type="button" onclick="tennisExport()" style="margin-top:16px;min-height:44px;padding:0 14px;border-radius:12px;border:1px solid ${BD};background:transparent;color:inherit;font-weight:700;font-size:12px;cursor:pointer">Exporter les matchs (CSV)</button>` : ''}
       ${reglage()}
       <p style="font-size:11px;opacity:.55;margin-top:10px">Les matchs et résultats viennent de Tennis Explorer. Les matchs terminés sont enregistrés automatiquement sur cet appareil.</p></div>`;
     try { const b = document.getElementById('tnBande'), a = b && b.querySelector('[aria-selected="true"]'); if (a) b.scrollLeft = a.offsetLeft - (b.clientWidth - a.clientWidth) / 2; } catch (e) {}   // le jour choisi reste visible dans la bande
@@ -224,6 +253,7 @@
 
   /* ---------- Actions (appelées par les boutons) ---------- */
   window.tennisCharger = charger;
+  window.tennisOnglet = k => { if (ONGLETS.some(o => o[0] === k)) { S.onglet = k; render(); try { window.scrollTo && window.scrollTo(0, 0); } catch (e) {} } };
   window.tennisOuvrir = () => charger(false);
   window.tennisRecharger = () => { try { const b = JSON.parse(localStorage.getItem(KEY_RES) || '[]'); if (Array.isArray(b)) S.res = b; } catch (e) {} render(); };
   window.tennisSemaine = n => { const max = decaler(auj(), 1), fin = S.fin && S.fin <= max ? S.fin : max; S.fin = decaler(fin, 7 * n); if (S.fin > max) S.fin = max; render(); };
