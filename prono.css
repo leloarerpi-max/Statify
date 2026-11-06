@@ -448,3 +448,13 @@ select option{background-color:var(--card);color:var(--txt)}
 @media (max-width:600px){.l-lg{display:none}.l-sm{display:inline}}
 
 @media (max-width:639px){#filtresRow{flex-wrap:wrap}#filtresRow>*{min-width:0}#filtresRow>.relative{flex:1 1 100%}#filtresRow select{flex:1 1 40%;max-width:none!important}}
+
+/* Maquette « Mes Paris » : page plus large sur grand écran + bilan en grosses tuiles (le reste de l'appli ne change pas) */
+@media (min-width:1100px){
+  #appRoot:has(#trackerViewContent:not(.hidden)){max-width:min(calc(100vw - 48px),1560px)}
+  #impactBar{gap:10px;padding:10px}
+  #impactBar .ib-cell{padding:10px 14px;background:var(--field);border:1px solid var(--line);border-radius:14px}
+  #impactBar .ib-cell span{font-size:11px}
+  #impactBar .ib-cell b{font-size:24px;line-height:1.2}
+  #impactBar .ib-add{min-width:110px;font-size:15px}
+}
