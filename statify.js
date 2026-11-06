@@ -1667,6 +1667,33 @@ function footFavCards(){
     const st=t.st, ms=footIdx().mt.filter(m=>m.hid===id||m.aid===id).sort((a,b)=>Date.parse(a.d)-Date.parse(b.d)), nx=ms.find(m=>!m.done), last=[...ms].reverse().find(m=>m.done), c=fcol(t.co||(st&&st.zone&&st.zone.c));
     return `<div class="mini" style="border-left:4px solid ${c}"><div class="row between"><b>${footLogo(t.lo,26)}${tlink(id,t.n)}</b>${fstar(id)}</div><div class="mut">${esc(footLgName(t.lg))}</div>${st?`<div class="big">${st.rank}<sup>e</sup> · ${st.pts} pts</div><div class="mut">${st.w}V ${st.d}N ${st.l}D · diff. ${st.gd>0?'+':''}${st.gd}</div>`:''}<div style="margin:6px 0">${fdots(id)}</div>${last?`<div class="mut">Dernier : ${mlink(last,`${esc(last.hn)} ${last.hs}-${last.as} ${esc(last.an)}`)}</div>`:''}${nx?`<div class="mut">Prochain : ${mlink(nx,`${esc(nx.hn)} - ${esc(nx.an)}`)} · ${esc(fmtDT(nx.d))}</div>`:''}</div>`; }).join('')}</div>`;
 }
+
+/* ---- Colonnes latérales (écrans larges, onglets Accueil / Multiplex / Matchs du foot) ---- */
+function footRails(){
+  const {T,mt}=footIdx(), now=Date.now();
+  const lg=(row)=>`<span class="rl">${footLogo(row.lo,20)||''}</span>`;
+  const favs=ffav.map(id=>{ const t=T[id]; if(!t) return '';
+    const ms=mt.filter(m=>m.hid===id||m.aid===id).sort((a,b)=>Date.parse(a.d)-Date.parse(b.d)), nx=ms.find(m=>!m.done), last=[...ms].reverse().find(m=>m.done);
+    const info=nx?mlink(nx,`${esc(nx.hid===id?nx.an:nx.hn)} · ${esc(fmtDT(nx.d))}`):last?mlink(last,`${esc(last.hn)} ${last.hs}-${last.as} ${esc(last.an)}`):'';
+    return `<div class="rr">${lg(t)}<div class="rt"><b>${tlink(id,t.n)}</b><small class="mut">${info}</small></div></div>`; }).join('');
+  const fav0=ffav.length&&T[ffav[0]]?T[ffav[0]].lg:'fra.1', L=foot.leagues[fav0]||foot.leagues['fra.1'];
+  const top=L&&L.standings?[...L.standings].sort((a,b)=>a.rank-b.rank).slice(0,8):[];
+  const stand=top.map(r=>`<div class="rr"><span class="rk">${r.rank}</span>${lg({lo:r.logo})}<div class="rt"><b>${tlink(r.id,r.name)}</b></div><b class="rp">${r.pts}</b></div>`).join('');
+  const live=mt.filter(m=>m.st==='in'), res=mt.filter(m=>m.done).sort((a,b)=>Date.parse(b.d)-Date.parse(a.d)).slice(0,8);
+  const sc=m=>`<div class="rr"><div class="rt"><b>${mlink(m,`${esc(m.hn)} ${m.hs}-${m.as} ${esc(m.an)}`)}</b>${m.txt&&m.st==='in'?`<small class="mut">${esc(m.txt)}</small>`:''}</div></div>`;
+  const lgn=L?esc(footLgName(fav0)):'';
+  return {
+    l:`<div class="card"><h2>⭐ Mes clubs</h2>${favs||'<p class="mut">Aucun club favori : touche ☆ à côté d\'un club dans un classement.</p>'}</div>${stand?`<div class="card"><h2>📊 ${lgn}</h2>${stand}</div>`:''}`,
+    r:`<div class="card"><h2>${live.length?'<span class="livedot"></span> ':'🔴 '}En direct</h2>${live.length?live.map(sc).join(''):'<p class="mut">Aucun match en cours.</p>'}</div>${res.length?`<div class="card"><h2>🏁 Derniers résultats</h2>${res.map(sc).join('')}</div>`:''}`
+  };
+}
+function railsRender(FT){
+  const on=FT&&['home','matches','multi'].includes(ui.ftab), L=$('#railL'), R=$('#railR');
+  document.body.classList.toggle('rails',!!on);
+  if(!L||!R) return;
+  if(!on){ L.innerHTML=R.innerHTML=''; return; }
+  const h=footRails(); L.innerHTML=h.l; R.innerHTML=h.r;
+}
 function footScorersTable(pl,key,lab,n=8){
   const top=pl.filter(p=>p[key]>0).sort((a,b)=>b[key]-a[key]||b.gp-a.gp).slice(0,n);
   const mx=top.length?top[0][key]:1;
@@ -2276,10 +2303,10 @@ function footMultiView(){
     return `<div class="mxc mxp2${fv?' fv':''}${bg?' big':''}" style="${tcStyle(m.hc)}" data-act="fmatch" data-id="${esc(m.id)}">${bg?`<div class="bigtag">🔥 ${esc(bg)}</div>`:''}<div class="mxa"><div class="mxt">${lo(m.hl,m.hn)}<b>${esc(m.hn)}</b></div><div class="mxvs">VS${mixed?`<small>${esc(footLgName(m.lg))}</small>`:''}</div><div class="mxt r"><b>${esc(m.an)}</b>${lo(m.al,m.an)}</div><span class="mxs">${mpickStar(m)}</span></div></div>`; };
   // matchs à venir : un en-tête par horaire (heure en grand, compte à rebours, nombre de matchs), puis les cartes
   const preGroups=L=>{ const g=new Map(); for(const m of L){ const k=Date.parse(m.d)||0; if(!g.has(k)) g.set(k,[]); g.get(k).push(m); }
-    return [...g].map(([t,ms])=>`<div class="mxgh"><span class="t">${esc(parisT(ms[0].d))}</span>${t?`<span class="c${t-now<=15*6e4?' soon':''}" data-cd="${t}">${esc(mxCd(t))}</span>`:''}<span class="n">${ms.length} match${ms.length>1?'s':''}</span></div>`+ms.map(cardPre).join('')).join(''); };
+    return [...g].map(([t,ms])=>`<div class="mxgh"><span class="t">${esc(parisT(ms[0].d))}</span>${t?`<span class="c${t-now<=15*6e4?' soon':''}" data-cd="${t}">${esc(mxCd(t))}</span>`:''}<span class="n">${ms.length} match${ms.length>1?'s':''}</span></div>`+'<div class="mgrid">'+ms.map(cardPre).join('')+'</div>').join(''); };
   const SEC=[[0,'⚡ Ça vient de bouger'],[1,'🔴 En cours'],[2,'⏰ À venir'],[3,'🏁 Terminés']];
   const onlyLive=live>0&&!ui.mxAll, hid=onlyLive?sorted.filter(m=>rank(m)>=2).length:0;
-  const secHtml=SEC.filter(([r])=>!onlyLive||r<=1).map(([r,t])=>{ const L=sorted.filter(m=>rank(m)===r); return L.length?`<div class="mxl">${t}</div>${r===2?preGroups(L):L.map(card).join('')}`:''; }).join('')
+  const secHtml=SEC.filter(([r])=>!onlyLive||r<=1).map(([r,t])=>{ const L=sorted.filter(m=>rank(m)===r); return L.length?`<div class="mxl">${t}</div>${r===2?preGroups(L):'<div class="mgrid">'+L.map(card).join('')+'</div>'}`:''; }).join('')
     +(live>0&&(hid||ui.mxAll)?`<div style="text-align:center;margin:8px 0"><button class="sec" data-act="mxall">${ui.mxAll?'Masquer les matchs à venir et terminés':'Voir aussi les '+hid+' autre'+(hid>1?'s':'')+' match'+(hid>1?'s':'')+' (à venir / terminés)'}</button></div>`:'');
   const first=ms.length?ms[0]:null, title=lg==='all'?'🌍 Multiplex tous championnats':lg==='pick'?'⭐ Mon multiplex':`🔥 ${isMx?'Multiplex':'Soirée'} ${esc(footLgName(lg))}`;
   const empty=lg==='all'?`<p class="mut">Aucun match ${day===todayDK()?'aujourd\'hui':'ce jour-là'}.${(()=>{ const nx=M.filter(m=>m.st==='pre'&&Date.parse(m.d)>now).sort((a,b)=>Date.parse(a.d)-Date.parse(b.d))[0]; return nx?' Prochain match : '+esc(parisD(nx.d))+' à '+esc(parisT(nx.d))+'.':''; })()}</p>`:lg==='pick'?'<p class="mut">Aucun match de ta sélection ce jour-là. Choisis « 🌍 Tous les championnats » et touche ☆ sur les matchs que tu veux suivre (les matchs de tes clubs à étoile dorée y sont ajoutés d\'office).</p>':'<p class="mut">Aucun match.</p>';
@@ -2413,6 +2440,7 @@ function render(){
       $('#tabs').innerHTML=pri.map(tb).join('')+`<button data-act="pronos"><i>🎯</i><span>Pronos</span></button><button data-act="tabmore" class="${inRest||ui.tabMore?'on':''}"><i>⋯</i><span>Plus</span></button>`+(ui.tabMore?`<div class="tabsheet">${rest.map(tb).join('')}</div>`:''); }
     const v={home:viewHome,games:viewGames,players:viewPlayers,teams:viewTeams,standings:viewStandings,race:viewRace,records:viewRecords,compare:viewCompare,rest:viewRest,cal:viewCal,studio:()=>viewStudio('nba')}[ui.tab];
     $('#view').innerHTML=FT?viewFoot():v(S);
+    try{ railsRender(FT); }catch(e){ console.error(e); }
     const M=$('#modal'), mb=M.firstElementChild, keep=M.classList.contains('on')?M.scrollTop:0;
     let mh='';
     if(FT) mh=footModalHtml();
