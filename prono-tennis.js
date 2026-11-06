@@ -10,11 +10,13 @@
   const KEY_ROBOT = 'prono-tennis-robot';
   const KEY_RES = 'prono_tennis_results_v1';
   const KEY_DET = 'prono_tennis_det_v1';      // détails de match lus (classement, face-à-face, saison)
+  const KEY_RDJ = 'prono_tennis_rdj_v1';      // pronostics d'experts RueDesJoueurs lus par le robot
   const KEY_AUTO = 'prono_tennis_auto_v1';    // pronos auto figés avant le match
-  const S = { robot: { url: '', key: '' }, vue: 'cal', tour: 'all', jour: '', days: {}, busy: false, err: '', res: [], strat: 'bas', diag: '', sans: false, sansBusy: false, det: {}, auto: [], detBusy: false };
+  const S = { robot: { url: '', key: '' }, vue: 'cal', tour: 'all', jour: '', days: {}, busy: false, err: '', res: [], strat: 'bas', diag: '', sans: false, sansBusy: false, det: {}, auto: [], detBusy: false, rdj: {}, rdjBusy: false };
   try { Object.assign(S.robot, JSON.parse(localStorage.getItem(KEY_ROBOT) || '{}')); } catch (e) {}
   try { const b = JSON.parse(localStorage.getItem(KEY_RES) || '[]'); if (Array.isArray(b)) S.res = b; } catch (e) {}
   try { const d = JSON.parse(localStorage.getItem(KEY_DET) || '{}'); if (d && typeof d === 'object') S.det = d; } catch (e) {}
+  try { const d = JSON.parse(localStorage.getItem(KEY_RDJ) || '{}'); if (d && typeof d === 'object') S.rdj = d; } catch (e) {}
   try { const a = JSON.parse(localStorage.getItem(KEY_AUTO) || '[]'); if (Array.isArray(a)) S.auto = a; } catch (e) {}
 
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -52,6 +54,8 @@
     } catch (e) {}
   }
   const sauverAuto = () => { try { localStorage.setItem(KEY_AUTO, JSON.stringify(S.auto.slice(-1500))); } catch (e) {} };
+  const sauverRdj = () => { try { const k = Object.keys(S.rdj); if (k.length > 400) k.sort((a, b) => (S.rdj[a].t || 0) - (S.rdj[b].t || 0)).slice(0, k.length - 400).forEach(x => delete S.rdj[x]); localStorage.setItem(KEY_RDJ, JSON.stringify(S.rdj)); } catch (e) {} };
+  const detDe = m => { const x = S.rdj[m.id]; return x && x.trouve && (x.pick === 1 || x.pick === 2) ? Object.assign({}, S.det[m.id], { x }) : S.det[m.id]; };
   const sauverDet = () => { try { const k = Object.keys(S.det); if (k.length > 600) k.sort((a, b) => (S.det[a].t || 0) - (S.det[b].t || 0)).slice(0, k.length - 600).forEach(x => delete S.det[x]); localStorage.setItem(KEY_DET, JSON.stringify(S.det)); } catch (e) {} };
   const sauver = () => { try { localStorage.setItem(KEY_RES, JSON.stringify(S.res)); } catch (e) {} };
   const ymdLocal = d => d.toLocaleDateString('en-CA', { timeZone: 'Europe/Paris' });
@@ -122,7 +126,7 @@
   /* ---------- Prono auto : un choix calculé par l'appli, figé avant le match, puis réglé avec tes saisies ---------- */
   // Score = écart de probabilité des cotes (en log) + petits bonus : classement, face-à-face, bilan de la saison.
   // Les poids sont volontairement faibles : la cote reste le signal principal. Les stats diront si les bonus servent à quelque chose.
-  const POIDS = { rang: 0.12, h2h: 0.25, saison: 0.8 };
+  const POIDS = { rang: 0.12, h2h: 0.25, saison: 0.8, expert: 0.35 };
   function pronoAuto(m, d) {
     const ln = Math.log, R = [], fav = m.c1 < m.c2 ? 1 : 2, nom = k => k === 1 ? m.j1 : m.j2;
     let sc = ln(m.c2 / m.c1);                                     // > 0 : le joueur 1 est favori des cotes
@@ -133,10 +137,11 @@
       const f1 = d.w1 / (d.w1 + d.l1), f2 = d.w2 / (d.w2 + d.l2), x = POIDS.saison * (f1 - f2);
       if (Math.abs(f1 - f2) >= 0.03) { sc += x; bonus.push([x, `meilleur bilan de la saison : ${fr(Math.max(f1, f2) * 100, 0)} % contre ${fr(Math.min(f1, f2) * 100, 0)} %`, f1 > f2 ? 1 : 2]); }
     }
+    if (d && d.x && (d.x.pick === 1 || d.x.pick === 2)) { const x = d.x.pick === 1 ? POIDS.expert : -POIDS.expert; sc += x; bonus.push([x, 'pronostic de l\'expert RueDesJoueurs', d.x.pick]); }
     const p1 = 1 / (1 + Math.exp(-sc)), n = p1 >= 0.5 ? 1 : 2, conf = Math.max(p1, 1 - p1) * 100;
     const [pc1] = probas(m); R.push(`cotes : ${nom(fav)} favori (${fr(fav === 1 ? pc1 : 100 - pc1, 0)} %)`);
     bonus.forEach(b => { if (b[2] === n) R.push(b[1]); });
-    return { n, conf, c: n === 1 ? m.c1 : m.c2, raisons: R, contreFavori: n !== fav, avecDetail: !!(d && (d.r1 != null || d.h1 != null || d.w1 != null)) };
+    return { n, conf, c: n === 1 ? m.c1 : m.c2, raisons: R, contreFavori: n !== fav, avecDetail: !!(d && (d.r1 != null || d.h1 != null || d.w1 != null || d.x)) };
   }
   const NIVEAUX = [['55 % ou moins', 0, 55.0001], ['55 à 65 %', 55.0001, 65], ['65 à 75 %', 65, 75], ['plus de 75 %', 75, 101]];
   const niveauDe = c => (NIVEAUX.find(x => c > x[1] && c <= x[2]) || NIVEAUX.find(x => c <= x[2]) || NIVEAUX[0])[0];
@@ -160,8 +165,8 @@
       const id = matchId(jour, m); if (S.auto.some(a => a.id === id)) return;
       if (S.res.some(r => r.id === id) || m.w === 1 || m.w === 2) return;
       const stt = statutMatch(m, jour, null); if (stt.k !== 'avenir') return;
-      const pa = pronoAuto(m, S.det[m.id]);
-      S.auto.push({ id, date: jour, heure: m.heure, tournoi: m.tournoi, j1: m.j1, j2: m.j2, c1: m.c1, c2: m.c2, n: pa.n, conf: r2(pa.conf), c: pa.c, contreFavori: pa.contreFavori, avecDetail: pa.avecDetail, t: Date.now() }); ajout++;
+      const pa = pronoAuto(m, detDe(m)), xr = S.rdj[m.id], xp = xr && xr.trouve && (xr.pick === 1 || xr.pick === 2) ? xr.pick : 0;
+      S.auto.push({ id, date: jour, heure: m.heure, tournoi: m.tournoi, j1: m.j1, j2: m.j2, c1: m.c1, c2: m.c2, x: xp || undefined, n: pa.n, conf: r2(pa.conf), c: pa.c, contreFavori: pa.contreFavori, avecDetail: pa.avecDetail, t: Date.now() }); ajout++;
     });
     if (ajout) sauverAuto();
   }
@@ -212,7 +217,7 @@
   }
   // Ligne d'infos (classement, face-à-face, saison), prono auto et lien vers la page du match
   function infosMatch(m, jour, fav) {
-    const d = S.det[m.id], sw = (a, b) => fav === 1 ? [a, b] : [b, a], morceaux = [];
+    const d = detDe(m), sw = (a, b) => fav === 1 ? [a, b] : [b, a], morceaux = [];
     if (d && d.r1 > 0 && d.r2 > 0) { const [a, b] = sw(d.r1, d.r2); morceaux.push(`#${a} contre #${b}`); }
     if (d && d.h1 != null && d.h2 != null) { const [a, b] = sw(d.h1, d.h2); morceaux.push(`face-à-face ${a}–${b}`); }
     if (d && d.w1 != null && d.w2 != null) { const [a, b] = sw(d.w1 + '/' + d.l1, d.w2 + '/' + d.l2); morceaux.push(`saison ${a} contre ${b}`); }
@@ -220,9 +225,11 @@
     let auto = '';
     if (pa) auto = `<div style="margin-top:8px;font-size:12px"><span style="font-weight:800">🤖 Prono auto : ${esc(pa.n === 1 ? m.j1 : m.j2)}</span> · confiance ${fr(pa.conf, 0)} %${pa.contreFavori ? ' · ' + puce('contre le favori', '#a855f7') : ''}</div>`;
     else if (jour >= auj()) { const x = pronoAuto(m, d); auto = `<div style="margin-top:8px;font-size:12px;opacity:.85"><span style="font-weight:800">🤖 Prono auto : ${esc(x.n === 1 ? m.j1 : m.j2)}</span> · confiance ${fr(x.conf, 0)} %${x.contreFavori ? ' · ' + puce('contre le favori', '#a855f7') : ''}</div>`; }
+    const xr = S.rdj[m.id];
+    const expert = xr && xr.trouve ? `<div style="margin-top:8px;font-size:12px"><span style="font-weight:800">🎓 Expert RueDesJoueurs : ${xr.pick === 1 || xr.pick === 2 ? esc(xr.pick === 1 ? m.j1 : m.j2) : 'pas de choix clair'}</span> · cotes RDJ ${fr(xr.c1)} / ${fr(xr.c2)} · <a href="${esc(xr.url)}" target="_blank" rel="noopener" style="color:inherit;font-weight:700;text-decoration:underline">analyse ↗</a></div>` : '';
     const lien = m.id ? `<a href="https://www.tennisexplorer.com/match-detail/?id=${esc(m.id)}" target="_blank" rel="noopener" style="font-size:12px;font-weight:700;color:inherit;opacity:.8;text-decoration:underline">Détail du match ↗</a>` : '';
-    if (!morceaux.length && !auto && !lien) return '';
-    return `<div style="margin-top:8px;font-size:12px;opacity:.9">${morceaux.length ? '📊 ' + esc(morceaux.join(' · ')) : ''}</div>${auto}${lien ? `<div style="margin-top:6px">${lien}</div>` : ''}`;
+    if (!morceaux.length && !auto && !lien && !expert) return '';
+    return `<div style="margin-top:8px;font-size:12px;opacity:.9">${morceaux.length ? '📊 ' + esc(morceaux.join(' · ')) : ''}</div>${expert}${auto}${lien ? `<div style="margin-top:6px">${lien}</div>` : ''}`;
   }
   function carte(m, jour) {
     const id = matchId(jour, m), saisi = S.res.find(r => r.id === id), stt = statutMatch(m, jour, saisi);
@@ -321,7 +328,18 @@
       <div style="${card}"><div style="font-size:13px;font-weight:800">Bénéfice cumulé</div><div style="position:relative;height:190px;margin-top:6px"><canvas id="tnChart" aria-label="Courbes du bénéfice cumulé"></canvas></div>
         <div style="font-size:11px;margin-top:6px;display:flex;gap:14px"><span><b style="color:${BLEU}">━</b> toujours cote basse</span><span><b style="color:${AMBRE}">━</b> toujours cote haute</span></div></div>`;
   }
-  function blocAuto() {
+  // « Suivre l'expert » : 1 € sur le choix de l'expert RueDesJoueurs, à la cote de Tennis Explorer, pour les matchs réglés
+  function blocExpert() {
+    const L = S.auto.filter(a => a.x === 1 || a.x === 2).map(a => ({ a, r: S.res.find(x => x.id === a.id) })).filter(o => o.r && o.r.w !== 0 && !estQualif(o.r.tournoi));
+    if (!L.length) return '';
+    const g = L.filter(o => o.r.w === o.a.x), profit = r2(L.reduce((t, o) => t + (o.r.w === o.a.x ? (o.a.x === 1 ? o.a.c1 : o.a.c2) - 1 : -1), 0)), bas = r2(L.reduce((t, o) => t + info(o.r).gainB, 0));
+    return `<div style="${card};border-left:5px solid #0ea5e9"><div style="font-size:13px;font-weight:800">🎓 Suivre l'expert RueDesJoueurs · 1 € sur son choix</div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><div style="flex:1;min-width:130px"><div style="font-size:11px;opacity:.7">Expert (${L.length} matchs)</div><div style="font-size:26px;font-weight:800;color:${col(profit)}">${signe(profit)}</div><div style="font-size:11px;opacity:.75">gagne ${pct(g.length / L.length * 100)}</div></div>
+      <div style="flex:1;min-width:130px"><div style="font-size:11px;opacity:.7">Cote basse, mêmes matchs</div><div style="font-size:26px;font-weight:800;color:${col(bas)}">${signe(bas)}</div></div></div>
+      ${L.length < 50 ? '<p style="font-size:11px;opacity:.65;margin:8px 0 0">Trop peu de matchs pour conclure : attends au moins 50 pronos réglés.</p>' : ''}</div>`;
+  }
+  function blocAuto() { return blocAutoBase() + blocExpert(); }
+  function blocAutoBase() {
     if (!S.auto.length) return '';
     const st = statsAuto();
     if (!st.n) return `<div style="${card};border-left:5px solid #a855f7"><div style="font-size:13px;font-weight:800">🤖 Prono auto</div><p style="margin:6px 0 0;font-size:12px;opacity:.8">${S.auto.length} prono${S.auto.length > 1 ? 's' : ''} figé${S.auto.length > 1 ? 's' : ''} avant match. Ils seront réglés quand tu auras saisi les vainqueurs.</p></div>`;
@@ -463,9 +481,35 @@
   }
 
   // Détails des matchs du jour (classement, face-à-face, saison) : lus un par un par le robot, gardés sur l'appareil
+  // Pronostics d'experts (RueDesJoueurs) : une demande par match, gardée 2 h sur l'appareil. Une erreur ici ne bloque jamais le reste.
+  const nomFamille = n => { const t = String(n || '').trim().split(/\s+/); while (t.length > 1 && /^[A-Za-z]\.?(-[A-Za-z]\.?)?$/.test(t[t.length - 1])) t.pop(); return t.join(' '); };
+  async function chargerExperts(jour) {
+    const data = S.days[jour];
+    if (!data || !data.matchs || !S.robot.url || !S.robot.key || S.rdjBusy || S.rdjOff) return;
+    const now = Date.now();
+    const l = data.matchs.filter(m => m.tour === 'ATP' && !estQualif(m.tournoi) && avecCotes(m) && m.id && !/\//.test(m.j1 + m.j2) && statutMatch(m, jour, null).k === 'avenir')
+      .filter(m => { const x = S.rdj[m.id]; return !x || now - (x.t || 0) > (x.trouve && x.pick ? 6 : 1.5) * 3600e3; }).slice(0, 24);
+    if (!l.length) return;
+    S.rdjBusy = true; let i = 0;
+    const base = S.robot.url.replace(/\/+$/, '');
+    const un = async () => {
+      while (i < l.length && !S.rdjOff) {
+        const m = l[i++];
+        try {
+          const r = await fetch(base + '/rdj?a=' + encodeURIComponent(nomFamille(m.j1)) + '&b=' + encodeURIComponent(nomFamille(m.j2)), { headers: { 'x-key': S.robot.key }, cache: 'no-store' });
+          if (r.status === 404 || r.status === 401) { S.rdjOff = true; break; }     // robot sans cette fonction : on s'en passe
+          const o = await r.json().catch(() => ({}));
+          if (r.ok && o.ok) S.rdj[m.id] = { t: Date.now(), trouve: !!o.trouve, pick: o.pick || 0, c1: o.c1, c2: o.c2, url: o.url || '' };
+        } catch (e) {}
+      }
+    };
+    try { await Promise.all([un(), un(), un()]); } catch (e) {}
+    S.rdjBusy = false; sauverRdj();
+  }
   async function chargerDetails(jour) {
     const data = S.days[jour];
     if (!data || !data.matchs) return;
+    try { await chargerExperts(jour); } catch (e) { S.rdjBusy = false; }
     if (!S.robot.url || !S.robot.key || S.detBusy) { figerAuto(jour); render(); return; }
     const now = Date.now();
     const aLire = [...new Set(data.matchs.filter(m => m.tour === 'ATP' && !estQualif(m.tournoi) && avecCotes(m) && m.id).map(m => m.id))]

@@ -39,7 +39,26 @@ export default {
   async fetch(req, env) {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
     const u = new URL(req.url);
-    if (u.pathname === '/') return new Response('Statify robot : en marche ✓', { headers: { 'content-type': 'text/plain; charset=utf-8', ...CORS } });
+    if (u.pathname === '/') return new Response('Statify robot : en marche ✓ (version 5, tennis ATP + détails)', { headers: { 'content-type': 'text/plain; charset=utf-8', ...CORS } });
+    const p0 = t => t.slice(2200, 3200);
+    if (u.pathname === '/rdj-diag') {                      // diagnostic RueDesJoueurs (lecture seule, isolé ; clé en ?key=)
+      if (!env.SYNC_KEY || u.searchParams.get('key') !== env.SYNC_KEY) return reply({ ok: false, error: 'Clé refusée' }, 401);
+      try {
+        const chemin = (u.searchParams.get('p') || '/').replace(/[^\w\-./?=&%]/g, '');
+        const r = await fetch('https://www.ruedesjoueurs.com' + (chemin.startsWith('/') ? chemin : '/' + chemin), { headers: { 'user-agent': 'Mozilla/5.0 (compatible; Statify)', 'accept-language': 'fr-FR,fr;q=0.9' } });
+        const html = await r.text();
+        const liens = [...new Set([...html.matchAll(/href="([^"#]*(?:tennis|pronostic)[^"#]*)"/gi)].map(m => m[1]))].slice(0, 60);
+        const texte = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+        const autour = []; for (const m of texte.matchAll(/(pronostic|cote|favori|conseil|notre avis|mise)/gi)) { if (autour.length >= 14) break; const i = m.index; if (autour.some(a => Math.abs(a.i - i) < 500)) continue; autour.push({ i, t: texte.slice(Math.max(0, i - 150), i + 350) }); }
+        const jsonld = [...html.matchAll(/<script[^>]*ld\+json[^>]*>([\s\S]*?)<\/script>/gi)].map(m => m[1].slice(0, 800)).slice(0, 3);
+        const ctx = (u.searchParams.get('ctx') || '').replace(/[^\w\s\-éèàç]/g, '').slice(0, 30);
+        const motif = ctx ? html.split(ctx).slice(1, 4).map(x => x.slice(0, 700)) : [];
+        const g = (u.searchParams.get('grep') || '').replace(/[^\w\s\-éèàç]/g, '').slice(0, 30);
+        const trouves = []; if (g) { const re = new RegExp(g, 'gi'); let mm; while ((mm = re.exec(html)) && trouves.length < 400) trouves.push(mm.index); }
+        const extraits = trouves.slice(-8).map(i => html.slice(Math.max(0, i - 300), i + 400));
+        return reply({ ok: r.ok, status: r.status, taille: html.length, titre: (html.match(/<title>([^<]*)/i) || [])[1] || '', grep: g, nbTrouves: trouves.length, extraits });
+      } catch (e) { return reply({ ok: false, error: String(e && e.message || e) }, 502); }
+    }
     if (!env.SYNC_KEY || req.headers.get('x-key') !== env.SYNC_KEY) return reply({ ok: false, error: 'Clé refusée' }, 401);
     if (u.pathname === '/sync' && req.method === 'POST') {
       let b; try { b = await req.json(); } catch { return reply({ ok: false, error: 'Données illisibles' }, 400); }
@@ -61,6 +80,10 @@ export default {
     if (u.pathname === '/test') {
       const ok = await ntfy(env, '✅ Statify : test', 'Le robot est bien relié à ton téléphone.');
       return reply({ ok }, ok ? 200 : 502);
+    }
+    if (u.pathname === '/rdj') {                           // pronostic d'expert RueDesJoueurs pour un match (lecture seule, isolé)
+      try { return reply(await rdjMatch(u.searchParams.get('a'), u.searchParams.get('b'), u.searchParams.get('debug') === '1')); }
+      catch (e) { return reply({ ok: false, error: String(e && e.message || e) }, 502); }
     }
     if (u.pathname === '/tennis-detail') {
       try { return reply(await tennisDetail(u.searchParams.get('id'), u.searchParams.get('debug') === '1')); }
@@ -482,7 +505,7 @@ async function pageTE(page, type, Y, M, D, heads) {
 async function tennisDuJour(dateParam, debug, env) {
   const jour = /^\d{4}-\d{2}-\d{2}$/.test(dateParam || '') ? dateParam : parisYmd();
   const [Y, M, D] = jour.split('-');
-  const cache = caches.default, ck = new Request(`https://statify.cache/tennis-v2/${jour}`);
+  const cache = caches.default, ck = new Request(`https://statify.cache/tennis-v3/${jour}`);
   if (!debug) { const hit = await cache.match(ck); if (hit) return await hit.json(); }
   const kv = env && env.STATE, kvKey = `tennis:dernier:${jour}`;
   const heads = { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36', 'accept-language': 'en' };
@@ -569,4 +592,63 @@ async function tennisDetail(id, debug) {
   const rep = { ok: true, v: 5, id, ...d };
   if (d.r1 != null || d.h1 != null || d.w1 != null) await cache.put(ck, new Response(JSON.stringify(rep), { headers: { 'content-type': 'application/json', 'cache-control': 'max-age=21600' } }));
   return rep;
+}
+
+/* ------------------------------------------------------------------ */
+/* RueDesJoueurs : pronostic d'expert d'un match de tennis             */
+/* On ne garde que : qui l'expert voit gagnant, les cotes, le lien.     */
+/* Aucun texte d'analyse n'est copié.                                   */
+/* ------------------------------------------------------------------ */
+const RDJ = 'https://www.ruedesjoueurs.com';
+const ENT = { nbsp: ' ', amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', eacute: 'é', egrave: 'è', ecirc: 'ê', agrave: 'à', acirc: 'â', ocirc: 'ô', ccedil: 'ç', icirc: 'î', iuml: 'ï', ugrave: 'ù', ucirc: 'û', euro: '€', rsaquo: '›', rArr: '⇒' };
+const rdjTexte = h => h.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ')
+  .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/&([a-z]+);/gi, (_, n) => ENT[n] != null ? ENT[n] : ' ').replace(/\s+/g, ' ');
+const rdjNom = s => norm(s).replace(/[^a-z0-9]+/g, ' ').trim();
+const rdjA = (txt, nom) => (' ' + rdjNom(txt) + ' ').includes(' ' + nom + ' ');
+// Lit le texte d'une page de match : { c1, c2 (dans l'ordre a, b), pick (1 = a, 2 = b, 0 = inconnu), heure }
+function rdjLire(html, a, b) {
+  const i = html.indexOf('Meilleure cote');
+  if (i < 0) return { ok: false, raison: 'pas de cotes sur la page' };
+  const txt = rdjTexte(html);
+  const m = txt.match(/Meilleure cote\s*:\s*([\d.,]+)\s*vs\s*(.{0,90}?)\s*à\s*(\d{1,2})[:h](\d{2})\s*(?:favori\s*)?(.{0,70}?)\s*Meilleure cote\s*:\s*([\d.,]+)/i);
+  if (!m) return { ok: false, raison: 'cotes illisibles' };
+  const s1 = txt.slice(Math.max(0, m.index - 70), m.index), s2 = m[5];
+  const cA = parseFloat(m[1].replace(',', '.')), cB = parseFloat(m[6].replace(',', '.'));
+  let ordre;                                               // 1 : joueur de gauche = a ; 2 : inversé
+  if (rdjA(s1, a) && rdjA(s2, b)) ordre = 1; else if (rdjA(s1, b) && rdjA(s2, a)) ordre = 2; else return { ok: false, raison: 'joueurs non reconnus' };
+  const [c1, c2] = ordre === 1 ? [cA, cB] : [cB, cA];
+  let nomPick = '';
+  const h = txt.search(/Pronostics 1-2 du match/i);
+  if (h >= 0) { const v = txt.slice(h, h + 1800).match(/Victoire\s+(?:de\s+)?(.{1,40})/i); if (v) nomPick = v[1]; }
+  if (!nomPick) { const v = txt.match(/Pronostic de nos experts\s+(.{1,40}?)\s+\d\s*-\s*\d/i); if (v) nomPick = v[1]; }
+  const np = ' ' + rdjNom(nomPick);
+  let pick = 0;
+  if (np.trim()) { const pa = np.startsWith(' ' + a + ' ') || np === ' ' + a, pb = np.startsWith(' ' + b + ' ') || np === ' ' + b; pick = pa && !pb ? 1 : pb && !pa ? 2 : 0; }
+  return { ok: true, c1, c2, pick, heure: `${m[3].padStart(2, '0')}:${m[4]}` };
+}
+async function rdjMatch(a0, b0, debug) {
+  const a = rdjNom(a0), b = rdjNom(b0);
+  if (!a || !b) return { ok: false, error: 'noms manquants' };
+  const cache = caches.default, ck = new Request('https://statify.cache/rdj-v1/' + encodeURIComponent(a + '|' + b));
+  if (!debug) { const hit = await cache.match(ck); if (hit) return await hit.json(); }
+  const H = { headers: { 'user-agent': 'Mozilla/5.0 (compatible; Statify)', 'accept-language': 'fr-FR,fr;q=0.9' } };
+  const ckL = new Request('https://statify.cache/rdj-liste-v1');
+  let liens; const hl = await cache.match(ckL);
+  if (hl) liens = await hl.json(); else {
+    const r = await fetch(RDJ + '/pronostics/tennis.html', H);
+    if (!r.ok) return { ok: false, error: 'RueDesJoueurs ' + r.status };
+    const h = await r.text();
+    liens = [...new Set([...h.matchAll(/\/pronostic\/([a-z0-9-]+-\d+)\.html/g)].map(x => x[1]))];
+    await cache.put(ckL, new Response(JSON.stringify(liens), { headers: { 'content-type': 'application/json', 'cache-control': 'max-age=600' } }));
+  }
+  const slug = liens.find(l => { const t = ' ' + l.replace(/-\d+$/, '').replace(/-/g, ' ') + ' '; return t.includes(' ' + a + ' ') && t.includes(' ' + b + ' '); });
+  let out;
+  if (!slug) out = { ok: true, trouve: false };
+  else {
+    const url = `${RDJ}/pronostic/${slug}.html`, r = await fetch(url, H);
+    if (!r.ok) out = { ok: false, error: 'page match ' + r.status };
+    else { const x = rdjLire(await r.text(), a, b); out = x.ok ? { ok: true, trouve: true, url, c1: x.c1, c2: x.c2, pick: x.pick, heure: x.heure } : { ok: true, trouve: false, raison: x.raison, url }; }
+  }
+  if (!debug && out.ok) await cache.put(ck, new Response(JSON.stringify(out), { headers: { 'content-type': 'application/json', 'cache-control': 'max-age=' + (out.trouve ? 1800 : 600) } }));
+  return out;
 }
