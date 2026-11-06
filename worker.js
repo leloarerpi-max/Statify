@@ -422,6 +422,11 @@ function vainqueur(s) {
   if (a === b || Math.max(a, b) < 2 || Math.max(a, b) > 3 || Math.min(a, b) > 2) return null;   // 3 sets gagnants au maximum : au-delà, la lecture est douteuse
   return a > b ? 1 : 2;
 }
+// Jeux par set (« 6-4 », « 7-5 ») d'après les cases « score » des deux lignes du match. Rien si les deux lignes ne concordent pas.
+function jeuxDe(g) {
+  if (!Array.isArray(g) || !g[0] || !g[1] || g[0].length !== g[1].length || !g[0].length || g[0].length > 5) return null;
+  return g[0].map((x, i) => x + '-' + g[1][i]);
+}
 function lireTE(html, ymdStr, tour) {
   const [Y, M, D] = ymdStr.split('-'), cible = `${D}.${M}.${Y}`;
   const liste = tournoisPrincipaux(html);
@@ -433,7 +438,7 @@ function lireTE(html, ymdStr, tour) {
   let date = tabDate, tournoi = null, tHref = '', cur = null, principal = false, basVu = false;
   const vus = new Set();
   const jourPasse = ymdStr < parisYmd();
-  const fin = () => { if (cur && cur.p.length >= 2 && tournoi && principal && (sansDates || date === cible || date === null)) out.push({ tour, tournoi, heure: cur.h, id: cur.id || null, j1: cur.p[0], j2: cur.p[1], c1: cur.o[0] ?? null, c2: cur.o[1] ?? null, w: vainqueur(cur.s) }); cur = null; };
+  const fin = () => { if (cur && cur.p.length >= 2 && tournoi && principal && (sansDates || date === cible || date === null)) out.push({ tour, tournoi, heure: cur.h, id: cur.id || null, j1: cur.p[0], j2: cur.p[1], c1: cur.o[0] ?? null, c2: cur.o[1] ?? null, w: vainqueur(cur.s), sets: cur.s.length >= 2 ? cur.s.slice(0, 2) : null, jeux: jeuxDe(cur.g) }); cur = null; };
   // Sur la page du jour, Tennis Explorer empile plusieurs jours (hier, aujourd'hui) : chaque jour a son propre onglet de date
   // placé AVANT son tableau, en dehors des lignes <tr>. On suit donc ces onglets au fil de la page.
   const onglets = [...html.matchAll(/class="tab">\s*([\d.\s]{8,14})</gi)].map(m => ({ i: m.index, d: dateDe(m[1]) })).filter(o => o.d);
@@ -466,8 +471,8 @@ function lireTE(html, ymdStr, tour) {
       }
       continue;
     }
-    if (heure) { fin(); cur = { h: heure, p: [], o: [], s: [] }; }
-    else if (!cur) cur = { h: '', p: [], o: [], s: [] };
+    if (heure) { fin(); cur = { h: heure, p: [], o: [], s: [], g: [], n: 0 }; }
+    else if (!cur) cur = { h: '', p: [], o: [], s: [], g: [], n: 0 };
     { const di = (r.match(/\/match-detail\/\?id=(\d+)/i) || [])[1]; if (di && !cur.id) cur.id = di; }
     const propre = x => String(x || '').replace(/\b(info|h2h|live)\b/gi, ' ').replace(/\s*\(\d+\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
     let noms = joueurs.map(propre).filter(Boolean);
@@ -483,6 +488,10 @@ function lireTE(html, ymdStr, tour) {
     const cotes = [...r.matchAll(/<td[^>]*class="[^"]*\bcourse[^"]*"[^>]*>([\s\S]*?)<\/td>/gi)].map(m => parseFloat(txt(m[1]))).filter(x => x > 1 && x < 200);
     for (const c of cotes) if (cur.o.length < 2) cur.o.push(c);
     // score en sets : une case « result » par joueur (2 lignes), ou « 2 - 0 » dans une seule case
+    if (joueurs.length === 1) {                              // ligne d'un seul joueur : ses jeux set par set (le petit exposant du tie-break est ignoré)
+      const k = cur.n++, gc = [...r.matchAll(/<td[^>]*class="[^"]*\bscore\b[^"]*"[^>]*>([\s\S]*?)<\/td>/gi)].map(m => txt(m[1].replace(/<sup[^>]*>[\s\S]*?<\/sup>/gi, '')).trim()).filter(v => /^\d{1,2}$/.test(v)).map(Number);
+      if (k < 2 && gc.length) cur.g[k] = gc;
+    }
     for (const m of r.matchAll(/<td[^>]*class="[^"]*\bresult\b[^"]*"[^>]*>([\s\S]*?)<\/td>/gi)) {
       const v = txt(m[1]), two = v.match(/^(\d)\s*[-:]\s*(\d)$/);
       if (two) cur.s.push(+two[1], +two[2]); else if (/^\d$/.test(v)) cur.s.push(+v);
@@ -513,7 +522,7 @@ async function pageTE(page, type, Y, M, D, heads) {
 async function tennisDuJour(dateParam, debug, env) {
   const jour = /^\d{4}-\d{2}-\d{2}$/.test(dateParam || '') ? dateParam : parisYmd();
   const [Y, M, D] = jour.split('-');
-  const cache = caches.default, ck = new Request(`https://statify.cache/tennis-v3/${jour}`);
+  const cache = caches.default, ck = new Request(`https://statify.cache/tennis-v4/${jour}`);
   if (!debug) { const hit = await cache.match(ck); if (hit) return await hit.json(); }
   const kv = env && env.STATE, kvKey = `tennis:dernier:${jour}`;
   const heads = { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36', 'accept-language': 'en' };

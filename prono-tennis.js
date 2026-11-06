@@ -35,13 +35,22 @@
   const estQualif = t => /qualif|\bqual\b|\(q\)/i.test(String(t || ''));
   const filtrer = () => S.res.filter(r => (r.w === 1 || r.w === 2) && !estQualif(r.tournoi) && r.tour === 'ATP');
   // Enregistre les matchs terminés d'une journée (vainqueur lu sur la page). Retourne le nombre de nouveaux matchs.
+  // Score final lu par le robot : sets gagnés [2,1] et jeux par set ["6-4","6-7","7-5"] (absents si la page ne les donne pas)
+  function scoreDe(m) {
+    const o = {};
+    if (Array.isArray(m.sets) && m.sets.length === 2 && m.sets.every(x => Number.isInteger(x) && x >= 0 && x <= 3)) o.sets = m.sets.slice();
+    if (o.sets && Array.isArray(m.jeux) && m.jeux.length && m.jeux.length <= 5 && m.jeux.every(x => /^\d{1,2}-\d{1,2}$/.test(x))) o.jeux = m.jeux.slice();
+    return o;
+  }
   function enregistrer(jour, data) {
-    let n = 0;
+    let n = 0, maj = false;
     ((data && data.matchs) || []).forEach(m => {
       if ((m.w !== 1 && m.w !== 2) || m.tour !== 'ATP' || estQualif(m.tournoi) || !m.j1 || !m.j2) return;
-      const id = matchId(jour, m); if (S.res.some(r => r.id === id)) return;
-      S.res.push({ id, date: jour, heure: m.heure, tour: m.tour, tournoi: m.tournoi, j1: m.j1, j2: m.j2, w: m.w, auto: true }); n++;
+      const id = matchId(jour, m), sc = scoreDe(m), ex = S.res.find(r => r.id === id);
+      if (ex) { if (sc.sets && !ex.sets) { ex.sets = sc.sets; if (sc.jeux) ex.jeux = sc.jeux; maj = true; } return; }   // match déjà connu : on lui ajoute son score s'il n'en avait pas
+      S.res.push(Object.assign({ id, date: jour, heure: m.heure, tour: m.tour, tournoi: m.tournoi, j1: m.j1, j2: m.j2, w: m.w, auto: true }, sc)); n++;
     });
+    if (maj) { try { sauver(); } catch (e) {} }
     return n;
   }
 
@@ -81,10 +90,16 @@
   const pastilles = nom => { const x = trouverCl(nom); return x ? `<span title="Classement ATP en direct" style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:6px;background:rgba(37,99,235,.16);color:#2563eb;border:1px solid rgba(37,99,235,.4)">#${esc(x.rang)}</span>${x.pays ? `<span title="Pays" style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:6px;background:rgba(128,128,128,.2)">${esc(x.pays)}</span>` : ''}` : ''; };
 
   /* ---------- Calendrier ---------- */
+  // Score d'un joueur sur sa ligne : sets gagnés (gras) puis jeux de chaque set
+  function scoreLigne(m, n, gagne, extra) {
+    const s = scoreDe(m); if (!s.sets) return '';
+    const jeux = (s.jeux || []).map(x => x.split('-')[n - 1]);
+    return `<span style="${extra || ''}display:inline-flex;align-items:center;gap:8px;font-variant-numeric:tabular-nums;font-size:14px"><b style="font-size:16px;font-weight:800">${s.sets[n - 1]}</b>${jeux.map(j => `<span style="opacity:${gagne ? 1 : .75};min-width:12px;text-align:center">${j}</span>`).join('')}</span>`;
+  }
   function carte(m, jour) {
     const stt = statutMatch(m, jour), ligne = (nom, n) => {
       const gagne = m.w === n, perd = (m.w === 1 || m.w === 2) && !gagne;
-      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;margin-top:6px;${gagne ? 'background:color-mix(in srgb,#16a34a 16%,transparent);border:1px solid color-mix(in srgb,#16a34a 50%,transparent)' : 'border:1px solid ' + BD}${perd ? ';opacity:.6' : ''}"><span style="font-size:15px;font-weight:${gagne ? 800 : 600}">${esc(nom)}</span>${pastilles(nom)}${gagne ? '<span style="margin-left:auto;font-size:12px;font-weight:800;color:' + VERT + '">🏆 Vainqueur</span>' : ''}</div>`;
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;margin-top:6px;${gagne ? 'background:color-mix(in srgb,#16a34a 16%,transparent);border:1px solid color-mix(in srgb,#16a34a 50%,transparent)' : 'border:1px solid ' + BD}${perd ? ';opacity:.6' : ''}"><span style="font-size:15px;font-weight:${gagne ? 800 : 600}">${esc(nom)}</span>${pastilles(nom)}${gagne ? '<span style="margin-left:auto;font-size:12px;font-weight:800;color:' + VERT + '">🏆 Vainqueur</span>' : ''}${scoreLigne(m, n, gagne, gagne ? '' : 'margin-left:auto;')}</div>`;
     };
     return `<div style="${card}"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;opacity:.85">${esc(m.heure) || '—'}</span>${puce(stt.t, stt.c)}</div>${ligne(m.j1, 1)}${ligne(m.j2, 2)}</div>`;
   }
@@ -161,14 +176,14 @@
   function blocHisto() {
     const h = S.histo, deb = DEBUT_HISTO(), hier = decaler(auj(), -1), tousJours = []; for (let j = deb; j <= hier; j = decaler(j, 1)) tousJours.push(j);
     const faits = tousJours.filter(j => h.done[j]).length, vides = tousJours.filter(j => h.done[j] === 2).length, reste = tousJours.length - faits, pc = tousJours.length ? Math.round(faits / tousJours.length * 100) : 0;
-    const cfg = S.robot.url && S.robot.key;
+    const cfg = S.robot.url && S.robot.key, sansScore = S.res.filter(r => (r.w === 1 || r.w === 2) && r.tour === 'ATP' && !r.sets).length;
     const btn = (txt, on, c) => `<button type="button" onclick="${on}" style="min-height:44px;padding:0 14px;border-radius:10px;font-weight:800;font-size:13px;background:${c};color:#fff;border:0;cursor:pointer">${txt}</button>`;
     return `<div style="${card};border-left:5px solid #16a34a"><div style="font-size:13px;font-weight:800">📚 Historique depuis le 1er janvier ${deb.slice(0, 4)}</div>
       <p style="margin:6px 0 0;font-size:12px;opacity:.85">${reste <= 0 ? 'Tous les jours jusqu\'à hier sont importés.' : 'Relit les résultats ATP jour par jour (tournois principaux) pour remplir les statistiques de l\'année. Ça prend quelques minutes ; tu peux arrêter et reprendre : ce qui est fait est gardé.'}</p>
       <div style="height:6px;border-radius:999px;background:rgba(128,128,128,.25);margin-top:8px;overflow:hidden"><div style="height:100%;width:${pc}%;background:${pc === 100 ? '#16a34a' : '#2563eb'};transition:width .3s"></div></div>
       <div style="font-size:11px;opacity:.75;margin-top:4px">${faits} jour${faits > 1 ? 's' : ''} sur ${tousJours.length} traités · ${filtrer().length} matchs enregistrés${vides ? ' · ' + vides + ' jour' + (vides > 1 ? 's' : '') + ' sans match lu' : ''}${h.busy ? ' · en cours…' : ''}</div>
       ${h.err ? `<div style="font-size:12px;font-weight:700;margin-top:6px;color:#dc2626">${esc(h.err)}</div>` : ''}
-      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${h.busy ? btn('Arrêter', 'tennisHistoStop()', '#6b7280') : vides ? btn('Refaire les jours sans match', 'tennisHistoVides()', '#d97706') : ''}${h.busy ? '' : reste > 0 ? btn(faits ? 'Reprendre l\'import' : 'Importer depuis janvier', 'tennisHisto()', cfg ? '#16a34a' : '#6b7280') : ''}${h.busy ? '' : btn(S.majBusy ? '…' : 'Relire les 7 derniers jours', 'tennisSept()', cfg ? '#2563eb' : '#6b7280')}</div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${h.busy ? btn('Arrêter', 'tennisHistoStop()', '#6b7280') : vides ? btn('Refaire les jours sans match', 'tennisHistoVides()', '#d97706') : ''}${!h.busy && sansScore && cfg ? btn('Ajouter les scores (' + sansScore + ' matchs)', 'tennisHistoScores()', '#7c3aed') : ''}${h.busy ? '' : reste > 0 ? btn(faits ? 'Reprendre l\'import' : 'Importer depuis janvier', 'tennisHisto()', cfg ? '#16a34a' : '#6b7280') : ''}${h.busy ? '' : btn(S.majBusy ? '…' : 'Relire les 7 derniers jours', 'tennisSept()', cfg ? '#2563eb' : '#6b7280')}</div>
       ${cfg ? '' : '<div style="font-size:11px;opacity:.7;margin-top:6px">Renseigne d\'abord le robot (réglage en bas de page).</div>'}</div>`;
   }
 
@@ -285,6 +300,13 @@
       try { const r = await fetch(dBase() + '/tennis?date=' + j, dHead()); const o = await r.json().catch(() => ({})); if (r.ok && o.ok) { S.days[j] = o; if (!o.perime) n += enregistrer(j, o); } } catch (e) {}
     }
     if (n) sauver(); S.majBusy = false; render();
+  };
+  // Redonne leur score aux matchs importés avant : on repasse seulement les jours qui contiennent un match sans score
+  window.tennisHistoScores = () => {
+    const jours = new Set(S.res.filter(r => (r.w === 1 || r.w === 2) && !r.sets).map(r => r.date));
+    jours.forEach(j => { delete S.histo.done[j]; });
+    try { localStorage.setItem(KEY_HISTO, JSON.stringify(S.histo.done)); } catch (e) {}
+    window.tennisHisto();
   };
   window.tennisHistoVides = () => { Object.keys(S.histo.done).forEach(j => { if (S.histo.done[j] === 2) delete S.histo.done[j]; }); try { localStorage.setItem(KEY_HISTO, JSON.stringify(S.histo.done)); } catch (e) {} window.tennisHisto(); };
   window.tennisClassement = f => chargerClassement(f !== false);
