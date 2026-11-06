@@ -96,6 +96,8 @@
     }
     let currentMarketFilter = null;
     let currentOddsFilter = null;
+    // Date locale AAAA-MM-JJ (et non UTC : entre minuit et 1h/2h du matin, toISOString() donne encore la veille).
+    function jourLocalISO(d) { d = d || new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
     let currentSort = { field: 'date', dir: 'desc' };
     let lastDeletedBet = null;
     let undoTimeout = null;
@@ -217,7 +219,7 @@
       render();
     }
 
-    document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+    document.getElementById('dateInput').value = jourLocalISO();
 
     function getOddsBracket(odds) {
       if (odds < 1.50) return '1.00 – 1.49';
@@ -770,14 +772,14 @@
     // Convertit une date extraite du texte (formats variés) vers le format YYYY-MM-DD attendu
     // par le tracker. Repli sur la date du jour si le format n'est pas reconnu.
     function normalizeDateAnalyseur(str) {
-        if (!str) return new Date().toISOString().split('T')[0];
+        if (!str) return jourLocalISO();
         if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
         const m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
         if (m) {
             const [, d, mo, y] = m;
             return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
         }
-        return new Date().toISOString().split('T')[0];
+        return jourLocalISO();
     }
 
     function analyserEtGenerer() {
@@ -1047,22 +1049,24 @@
     function switchView(view) {
       const trackerBtn = document.getElementById('btnViewTracker');
       const analyzerBtn = document.getElementById('btnViewAnalyzer');
-      const tennisBtn = document.getElementById('btnViewTennis');
       const trackerContent = document.getElementById('trackerViewContent');
       const analyzerContent = document.getElementById('analyzerViewContent');
-      const tennisContent = document.getElementById('tennisViewContent');
 
       const activeClass = "px-4 py-2 rounded-xl transition bg-blue-600 text-white shadow-sm font-bold text-sm flex items-center gap-2";
       const inactiveClass = "px-4 py-2 rounded-xl transition text-slate-600 hover:text-slate-900 font-bold text-sm flex items-center gap-2";
 
       try { window.scrollTo({ top: 0 }); } catch (e) {}
-      trackerContent.classList.toggle('hidden', view !== 'tracker' && (view === 'analyzer' || view === 'tennis'));
-      analyzerContent.classList.toggle('hidden', view !== 'analyzer');
-      if (tennisContent) tennisContent.classList.toggle('hidden', view !== 'tennis');
-      trackerBtn.className = (view === 'analyzer' || view === 'tennis') ? inactiveClass : activeClass;
-      analyzerBtn.className = view === 'analyzer' ? activeClass : inactiveClass;
-      if (tennisBtn) tennisBtn.className = view === 'tennis' ? activeClass : inactiveClass;
-      if (view === 'tennis' && typeof tennisOuvrir === 'function') tennisOuvrir();
+      if (view === 'analyzer') {
+        trackerContent.classList.add('hidden');
+        analyzerContent.classList.remove('hidden');
+        trackerBtn.className = inactiveClass;
+        analyzerBtn.className = activeClass;
+      } else {
+        trackerContent.classList.remove('hidden');
+        analyzerContent.classList.add('hidden');
+        trackerBtn.className = activeClass;
+        analyzerBtn.className = inactiveClass;
+      }
     }
 
     // Replie / déplie le formulaire "Ajouter un Pari" (état mémorisé sur cet appareil).
@@ -1169,7 +1173,7 @@
     }
 
     function exportJSONdata(full) {
-      const day = new Date().toISOString().split('T')[0];
+      const day = jourLocalISO();
       const filename = full ? `statify-sauvegarde-${day}.json` : `pronotracker_${day}.json`;
       const dataStr = JSON.stringify(full || state, null, full ? 0 : 2);
       const blob = new Blob([dataStr], { type: 'application/json' });
@@ -1278,7 +1282,7 @@
           csv += `"${sp}","${combo.id}","","Combiné","","","","",${odds.toFixed(2)},${combo.stake},"${comboStatus(sp, combo)}","${combo.legIds.length} sélections"\n`;
         });
       });
-      const filename = `pronotracker_${new Date().toISOString().split('T')[0]}.csv`;
+      const filename = `pronotracker_${jourLocalISO()}.csv`;
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
 
       let file = null;
@@ -1356,7 +1360,7 @@
         str = str.replace(/(\d-\d)(\d)/g, '$1 $2');
 
         // 1. Extraction de la date (JJ/MM/AAAA)
-        let formattedDate = new Date().toISOString().split('T')[0];
+        let formattedDate = jourLocalISO();
         const dateMatch = str.match(/^(\d{2}[\/\.-]\d{2}[\/\.-]\d{4})/);
         if (dateMatch) {
           const parts = dateMatch[1].split(/[\/\.-]/);
@@ -1690,7 +1694,7 @@
       document.getElementById('addBetForm').reset();
       document.getElementById('typeInput').value = 'Single';
       document.getElementById('stakeInput').value = currentStake || 1;
-      document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+      document.getElementById('dateInput').value = jourLocalISO();
       
       document.getElementById('matchInput').value = currentMatch;
       document.getElementById('compInput').value = currentComp;
@@ -1722,7 +1726,7 @@
       document.getElementById('matchInput').value = '';
       document.getElementById('pronoInput').value = '';
       document.getElementById('oddsInput').value = '';
-      document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+      document.getElementById('dateInput').value = jourLocalISO();
 
       updatePronoSuggestions();
 
@@ -2004,13 +2008,13 @@
       const dateTo = document.getElementById('filterDateTo')?.value || '';
 
       const now = new Date();
-      const todayStr = now.toISOString().slice(0, 10);
+      const todayStr = jourLocalISO(now);
 
       const tomorrowObj = new Date(now);
       tomorrowObj.setDate(now.getDate() + 1);
-      const tomorrowStr = tomorrowObj.toISOString().slice(0, 10);
+      const tomorrowStr = jourLocalISO(tomorrowObj);
 
-      const currentMonthStr = now.toISOString().slice(0, 7);
+      const currentMonthStr = jourLocalISO(now).slice(0, 7);
 
       return currentList.filter(b => {
         const matchSearch = searchIsNumber

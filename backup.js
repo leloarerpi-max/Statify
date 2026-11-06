@@ -4,7 +4,7 @@
 (function () {
   const PRONO_KEY = 'prono_tracker_multisport_data';
   const TENNIS_KEY = 'prono_tennis_results_v1';
-  const tennisBets = () => { const l = lsJ(TENNIS_KEY, []); return Array.isArray(l) ? l : []; };
+  const tennisBets = () => { try { const l = lsJ(TENNIS_KEY, []); return Array.isArray(l) ? l : []; } catch (e) { return []; } };
   const SETTINGS_RE = /^pronotracker_(ambiance|customMarkets|compFilters|compFilterMode|formReplie)$/;
   const lsJ = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } };
   let cache = null;

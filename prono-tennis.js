@@ -334,3 +334,30 @@
     a.download = 'tennis-resultats-' + auj() + '.csv'; document.body.appendChild(a); a.click(); a.remove();
   };
 })();
+
+// ── Branchement de l'onglet 🎾 Tennis : tout est ici, le code du foot (prono.js) n'est pas modifié.
+// Si quoi que ce soit échoue, le foot continue de fonctionner comme avant.
+(function () {
+  try {
+    const suivantFoot = window.switchView;
+    if (typeof suivantFoot !== 'function') return;
+    const ACTIF = 'px-4 py-2 rounded-xl transition bg-blue-600 text-white shadow-sm font-bold text-sm flex items-center gap-2';
+    const INACTIF = 'px-4 py-2 rounded-xl transition text-slate-600 hover:text-slate-900 font-bold text-sm flex items-center gap-2';
+    const $ = id => document.getElementById(id);
+    window.switchView = function (view) {
+      const tn = $('tennisViewContent'), tb = $('btnViewTennis');
+      if (view !== 'tennis') {
+        try { if (tn) tn.classList.add('hidden'); if (tb) tb.className = INACTIF; } catch (e) {}
+        return suivantFoot.apply(this, arguments);
+      }
+      try {
+        suivantFoot('analyzer');                          // laisse le foot gérer son propre état…
+        $('analyzerViewContent').classList.add('hidden'); // …puis on masque ses deux écrans
+        $('trackerViewContent').classList.add('hidden');
+        $('btnViewAnalyzer').className = INACTIF; $('btnViewTracker').className = INACTIF;
+        if (tn) tn.classList.remove('hidden'); if (tb) tb.className = ACTIF;
+        if (typeof window.tennisOuvrir === 'function') window.tennisOuvrir();
+      } catch (e) { console.error('Onglet tennis :', e); suivantFoot('tracker'); }
+    };
+  } catch (e) { console.error(e); }
+})();
