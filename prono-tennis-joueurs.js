@@ -1,6 +1,6 @@
 /* Statify · Tennis · onglet « Joueurs »
    Statistiques sportives calculées uniquement à partir des matchs enregistrés (aucune cote utilisée) :
-   palmarès, classement Elo de l'année, fiche joueur, duel, tournois, calendrier.
+   palmarès, fiche joueur, duel, tournois, calendrier.
    Fichier isolé : s'il plante, le reste de l'appli n'est pas touché. */
 (function () {
   'use strict';
@@ -18,11 +18,9 @@
   function calculer(res) {
     const L = (res || []).filter(r => (r.w === 1 || r.w === 2) && r.j1 && r.j2).slice().sort((a, b) => cle(a).localeCompare(cle(b)));
     const P = new Map();
-    const joueur = nom => { let p = P.get(nom); if (!p) { p = { nom, v: 0, d: 0, n: 0, elo: 1500, suite: [], tournois: new Map(), moments: {}, duels: [], serieV: 0, plusLongueV: 0 }; P.set(nom, p); } return p; };
+    const joueur = nom => { let p = P.get(nom); if (!p) { p = { nom, v: 0, d: 0, n: 0, suite: [], tournois: new Map(), moments: {}, duels: [], serieV: 0, plusLongueV: 0 }; P.set(nom, p); } return p; };
     L.forEach(r => {
       const g = r.w === 1 ? r.j1 : r.j2, l = r.w === 1 ? r.j2 : r.j1, a = joueur(g), b = joueur(l);
-      const ea = 1 / (1 + Math.pow(10, (b.elo - a.elo) / 400)), K = 32;
-      a.elo += K * (1 - ea); b.elo -= K * (1 - ea);
       a.v++; b.d++; a.n++; b.n++;
       a.suite.push(1); b.suite.push(0);
       a.serieV++; a.plusLongueV = Math.max(a.plusLongueV, a.serieV); b.serieV = 0;
@@ -38,8 +36,6 @@
       const sens = p.suite.length ? (p.suite[p.suite.length - 1] ? 1 : -1) : 0;
       return Object.assign(p, { pct: p.n ? p.v / p.n * 100 : 0, forme: p.suite.slice(-10), serie: sens * serie });
     });
-    const parElo = liste.filter(p => p.n >= 5).sort((a, b) => b.elo - a.elo);
-    parElo.forEach((p, i) => { p.rangElo = i + 1; });
     // tournois
     const T = new Map();
     L.forEach(r => { const t = T.get(r.tournoi) || { nom: r.tournoi, n: 0, j: new Map(), debut: r.date, fin: r.date }; t.n++; t.fin = r.date; t.debut = t.debut < r.date ? t.debut : r.date;
@@ -53,7 +49,7 @@
       parMois[d.getUTCMonth()]++; const js = JOURS[d.getUTCDay()]; parSem[js] = (parSem[js] || 0) + 1;
       const mo = momentDe(r.heure); if (mo) parMoment[mo] = (parMoment[mo] || 0) + 1;
     });
-    return { L, liste, parElo, joueurs: P, tournois: [...T.values()].sort((a, b) => b.n - a.n), parJour, parMois, parSem, parMoment };
+    return { L, liste, joueurs: P, tournois: [...T.values()].sort((a, b) => b.n - a.n), parJour, parMois, parSem, parMoment };
   }
   function duel(C, a, b) {
     const pa = C.joueurs.get(a); if (!pa || !C.joueurs.get(b)) return null;
@@ -81,11 +77,6 @@
       <div style="font-size:13px;font-weight:800;margin-top:12px">${esc(titre)}</div>
       ${l.length ? l.map((p, i) => `<div style="margin-top:8px"><div style="display:flex;justify-content:space-between;gap:8px;font-size:13px"><span>${i + 1}. ${lien(p.nom)}</span><span style="font-weight:800">${esc(aff(p))} <span style="opacity:.6;font-weight:600">· ${p.v}–${p.d}</span></span></div>${barre(val(p), max, st.tri === 'd' ? ROUGE : BLEU)}</div>`).join('') : '<p style="font-size:12px;opacity:.7">Pas encore assez de matchs.</p>'}`;
   }
-  function classementElo(C, BD) {
-    const l = C.parElo.slice(0, 30);
-    return `<p style="font-size:12px;opacity:.8;margin:10px 0 0">Classement calculé uniquement avec les résultats enregistrés : gagner contre un adversaire fort rapporte plus. Tout le monde part de 1 500. Il faut 5 matchs minimum. Il peut différer du classement ATP.</p>
-      ${l.length ? `<div style="margin-top:8px">${l.map(p => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-top:1px solid ${BD};font-size:13px"><span style="min-width:0">${p.rangElo}. ${lien(p.nom)} <span style="opacity:.6">· ${p.v}–${p.d}</span></span><span style="display:flex;align-items:center;gap:8px;white-space:nowrap">${forme(p.forme)}<b>${fr(p.elo)}</b></span></div>`).join('')}</div>` : '<p style="font-size:12px;opacity:.7">Pas encore assez de matchs.</p>'}`;
-  }
   function fiche(C, BD) {
     const noms = C.liste.slice().sort((a, b) => b.n - a.n).map(p => p.nom), p = C.joueurs.get(st.joueur);
     let corps = '<p style="font-size:12px;opacity:.7;margin:10px 0 0">Tape un nom, ou touche un joueur dans le palmarès.</p>';
@@ -96,7 +87,7 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
           <div style="flex:1;min-width:110px"><div style="font-size:11px;opacity:.7">Bilan</div><div style="font-size:22px;font-weight:800">${p.v}–${p.d}</div><div style="font-size:11px;opacity:.75">${fr(p.pct, 0)} % de victoires</div></div>
           <div style="flex:1;min-width:110px"><div style="font-size:11px;opacity:.7">Série en cours</div><div style="font-size:22px;font-weight:800;color:${p.serie > 0 ? VERT : p.serie < 0 ? ROUGE : 'inherit'}">${p.serie > 0 ? p.serie + ' V' : p.serie < 0 ? -p.serie + ' D' : '—'}</div><div style="font-size:11px;opacity:.75">record : ${p.plusLongueV} V d'affilée</div></div>
-          <div style="flex:1;min-width:110px"><div style="font-size:11px;opacity:.7">Elo de l'année</div><div style="font-size:22px;font-weight:800">${fr(p.elo)}</div><div style="font-size:11px;opacity:.75">${p.rangElo ? p.rangElo + (p.rangElo === 1 ? 'er' : 'e') + ' sur ' + C.parElo.length : 'moins de 5 matchs'}</div></div></div>
+          <div style="flex:1;min-width:110px"><div style="font-size:11px;opacity:.7">Matchs joués</div><div style="font-size:22px;font-weight:800">${p.n}</div><div style="font-size:11px;opacity:.75">${p.tournois.size} tournoi${p.tournois.size > 1 ? 's' : ''}</div></div></div>
         <div style="margin-top:10px;font-size:12px;font-weight:700">Forme (10 derniers) ${forme(p.forme)}</div>
         <div style="font-size:13px;font-weight:800;margin-top:14px">Par tournoi</div>${tr.map(t => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-top:1px solid ${BD}"><span>${esc(t.nom)}</span><b>${g(t.v, t.d)}</b></div>`).join('')}
         ${mo.length ? `<div style="font-size:13px;font-weight:800;margin-top:14px">Selon le moment de la journée</div>${mo.map(m => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-top:1px solid ${BD}"><span>${m}</span><b>${g(p.moments[m].v, p.moments[m].d)}</b></div>`).join('')}` : ''}
@@ -131,8 +122,8 @@
       BD = BD || 'rgba(128,128,128,.32)'; card = card || `border:1px solid ${BD};border-radius:14px;padding:12px;margin-top:10px`;
       const C = getC(res || []);
       if (!C.L.length) return `<div style="${card}"><div style="font-size:13px;font-weight:800">👥 Joueurs</div><p style="margin:6px 0 0;font-size:12px;opacity:.8">Les stats des joueurs apparaîtront quand des matchs seront enregistrés (saisis ou importés depuis janvier).</p></div>`;
-      const vues = [['pal', 'Palmarès'], ['elo', 'Classement Elo'], ['fiche', 'Fiche joueur'], ['duel', 'Duel'], ['tour', 'Tournois'], ['cal', 'Calendrier']];
-      const corps = { pal: palmares, elo: classementElo, fiche, duel: duelVue, tour: tournoisVue, cal: calendrierVue }[st.vue] || palmares;
+      const vues = [['pal', 'Palmarès'], ['fiche', 'Fiche joueur'], ['duel', 'Duel'], ['tour', 'Tournois'], ['cal', 'Calendrier']];
+      const corps = { pal: palmares, fiche, duel: duelVue, tour: tournoisVue, cal: calendrierVue }[st.vue] || palmares;
       return `<div style="${card};border-left:5px solid #f59e0b"><div style="font-size:13px;font-weight:800">👥 Joueurs · ${C.L.length} matchs, ${C.liste.length} joueurs</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${vues.map(([k, t]) => bouton(t, st.vue === k, `tnJx('vue','${k}')`, BD)).join('')}</div>${corps(C, BD)}</div>`;
     } catch (e) { return ''; }
