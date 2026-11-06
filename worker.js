@@ -45,7 +45,8 @@ export default {
       if (!env.SYNC_KEY || (u.searchParams.get('key') !== env.SYNC_KEY && req.headers.get('x-key') !== env.SYNC_KEY)) { const k = u.searchParams.get('key') || ''; return reply({ ok: false, error: 'Clé refusée', longueurRecue: k.length, longueurAttendue: (env.SYNC_KEY || '').length, premiereLettreIdentique: !!k && !!env.SYNC_KEY && k[0] === env.SYNC_KEY[0], derniereLettreIdentique: !!k && !!env.SYNC_KEY && k[k.length - 1] === env.SYNC_KEY[env.SYNC_KEY.length - 1] }, 401); }
       try {
         const chemin = (u.searchParams.get('p') || '/').replace(/[^\w\-./?=&%]/g, '');
-        const r = await fetch('https://www.ruedesjoueurs.com' + (chemin.startsWith('/') ? chemin : '/' + chemin), { headers: { 'user-agent': 'Mozilla/5.0 (compatible; Statify)', 'accept-language': 'fr-FR,fr;q=0.9' } });
+        const hote = u.searchParams.get('h') === 'live' ? 'https://live-tennis.eu' : 'https://www.ruedesjoueurs.com';
+        const r = await fetch(hote + (chemin.startsWith('/') ? chemin : '/' + chemin), { headers: { 'user-agent': 'Mozilla/5.0 (compatible; Statify)', 'accept-language': 'fr-FR,fr;q=0.9' } });
         const html = await r.text();
         const liens = [...new Set([...html.matchAll(/href="([^"#]*(?:tennis|pronostic)[^"#]*)"/gi)].map(m => m[1]))].slice(0, 60);
         const texte = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');

@@ -175,7 +175,7 @@
   const filtrer = () => S.res.filter(r => r.w !== 0 && !estQualif(r.tournoi) && r.tour === 'ATP');
   const tousSaisis = () => S.res.filter(r => !estQualif(r.tournoi) && r.tour === 'ATP');
   window.__tennis = { info, stats, parTranche, parCle, cumul, matchId, parJoueur, ecartDe, jourSem, moment };
-  window.__tennisAuto = { pronoAuto, statsAuto, niveauDe, figerAuto, POIDS, etat: () => S };
+  window.__tennisAuto = { pronoAuto, statsAuto, niveauDe, figerAuto, POIDS, etat: () => S, render: () => render() };
 
   /* ---------- Styles ---------- */
   const BD = 'rgba(128,128,128,.32)';
@@ -430,6 +430,7 @@
       <button type="button" onclick="tennisDiag()" style="min-height:44px;padding:0 14px;margin-left:6px;border-radius:10px;font-weight:700;font-size:12px;background:transparent;color:inherit;border:1px solid ${BD};cursor:pointer">Diagnostic</button>
       <button type="button" onclick="tennisDiagDetail()" style="min-height:44px;padding:0 14px;margin-left:6px;border-radius:10px;font-weight:700;font-size:12px;background:transparent;color:inherit;border:1px solid ${BD};cursor:pointer">Diagnostic détail</button>
       <button type="button" onclick="tennisDiagExpert()" style="min-height:44px;padding:0 14px;margin-left:6px;border-radius:10px;font-weight:700;font-size:12px;background:transparent;color:inherit;border:1px solid ${BD};cursor:pointer">Diagnostic expert</button>
+      <button type="button" onclick="tennisDiagLive()" style="min-height:44px;padding:0 14px;margin-left:6px;border-radius:10px;font-weight:700;font-size:12px;background:transparent;color:inherit;border:1px solid ${BD};cursor:pointer">Diagnostic classement live</button>
       ${S.diag ? `<p style="font-size:12px;opacity:.7;margin:8px 0 4px">Copie tout ce texte et envoie-le moi :</p><textarea readonly onclick="this.select()" style="width:100%;box-sizing:border-box;height:160px;font-size:11px;border-radius:8px;border:1px solid ${BD};background:transparent;color:inherit">${esc(S.diag)}</textarea>` : ''}</details>`;
   }
 
@@ -446,6 +447,7 @@
       ${titreSect('Bilan')}${bilanHaut()}
       ${titreSect('Calendrier du jour')}${vueCalendrier()}
       ${panneauSans()}
+      ${S.res.length && window.__tennisJoueurs ? titreSect('Joueurs') + window.__tennisJoueurs.bloc(filtrer(), BD, card) : ''}
       ${S.res.length ? titreSect('Détail des stats') + detailBas() : ''}
       ${reglage()}
       <p style="font-size:11px;opacity:.55;margin-top:10px">Les cotes viennent de Tennis Explorer et peuvent différer de celles de ton bookmaker. Elles sont gardées au moment où tu saisis le résultat.</p></div>`;
@@ -568,6 +570,14 @@
     try {
       const r = await fetch(S.robot.url.replace(/\/+$/, '') + '/tennis?debug=1&date=' + S.jour, { headers: { 'x-key': S.robot.key }, cache: 'no-store' });
       S.diag = (await r.text()).slice(0, 12000);
+    } catch (e) { S.diag = 'Erreur : ' + e.message; }
+    render();
+  };
+  window.tennisDiagLive = async () => {
+    S.diag = 'Chargement du diagnostic du classement live…'; render();
+    try {
+      const r = await fetch(S.robot.url.replace(/\/+$/, '') + '/rdj-diag?h=live&grep=Alcaraz&first=1&w=900&p=' + encodeURIComponent('/fr/classement-atp-live'), { headers: { 'x-key': S.robot.key }, cache: 'no-store' });
+      S.diag = (await r.text()).slice(0, 9000);
     } catch (e) { S.diag = 'Erreur : ' + e.message; }
     render();
   };
