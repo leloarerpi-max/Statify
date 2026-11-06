@@ -62,6 +62,10 @@ export default {
       const ok = await ntfy(env, '✅ Statify : test', 'Le robot est bien relié à ton téléphone.');
       return reply({ ok }, ok ? 200 : 502);
     }
+    if (u.pathname === '/tennis-detail') {
+      try { return reply(await tennisDetail(u.searchParams.get('id'), u.searchParams.get('debug') === '1')); }
+      catch (e) { return reply({ ok: false, error: String(e && e.message || e) }, 502); }
+    }
     if (u.pathname === '/tennis') {
       try { return reply(await tennisDuJour(u.searchParams.get('date'), u.searchParams.get('debug') === '1', env)); }
       catch (e) { return reply({ ok: false, error: String(e && e.message || e) }, 502); }
@@ -398,7 +402,7 @@ function lireTE(html, ymdStr, tour) {
   let date = tabDate, tournoi = null, tHref = '', cur = null, principal = false, basVu = false;
   const vus = new Set();
   const jourPasse = ymdStr < parisYmd();
-  const fin = () => { if (cur && cur.p.length >= 2 && tournoi && principal && (sansDates || date === cible || date === null)) out.push({ tour, tournoi, heure: cur.h, j1: cur.p[0], j2: cur.p[1], c1: cur.o[0] ?? null, c2: cur.o[1] ?? null, w: vainqueur(cur.s) }); cur = null; };
+  const fin = () => { if (cur && cur.p.length >= 2 && tournoi && principal && (sansDates || date === cible || date === null)) out.push({ tour, tournoi, heure: cur.h, id: cur.id || null, j1: cur.p[0], j2: cur.p[1], c1: cur.o[0] ?? null, c2: cur.o[1] ?? null, w: vainqueur(cur.s) }); cur = null; };
   // Sur la page du jour, Tennis Explorer empile plusieurs jours (hier, aujourd'hui) : chaque jour a son propre onglet de date
   // placé AVANT son tableau, en dehors des lignes <tr>. On suit donc ces onglets au fil de la page.
   const onglets = [...html.matchAll(/class="tab">\s*([\d.\s]{8,14})</gi)].map(m => ({ i: m.index, d: dateDe(m[1]) })).filter(o => o.d);
@@ -433,6 +437,7 @@ function lireTE(html, ymdStr, tour) {
     }
     if (heure) { fin(); cur = { h: heure, p: [], o: [], s: [] }; }
     else if (!cur) cur = { h: '', p: [], o: [], s: [] };
+    { const di = (r.match(/\/match-detail\/\?id=(\d+)/i) || [])[1]; if (di && !cur.id) cur.id = di; }
     const propre = x => String(x || '').replace(/\b(info|h2h|live)\b/gi, ' ').replace(/\s*\(\d+\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
     let noms = joueurs.map(propre).filter(Boolean);
     if (noms.length < 2 && duel) { const d = txt(duel[1]); if (/\s-\s/.test(d)) noms = d.split(/\s+-\s+/).map(propre).filter(Boolean); }
@@ -515,9 +520,9 @@ async function tennisDuJour(dateParam, debug, env) {
   // doublons éventuels (la même page servie pour les deux circuits)
   const vu = new Set();
   matchs = matchs.filter(m => { const k = [m.tournoi, m.heure, m.j1, m.j2].join('|'); if (vu.has(k)) return false; vu.add(k); return true; });
-  if (debug) return { ok: true, v: 4, debug: brut, pages, matchs };
+  if (debug) return { ok: true, v: 5, debug: brut, pages, matchs };
   matchs.sort((a, b) => a.heure.localeCompare(b.heure) || a.tournoi.localeCompare(b.tournoi));
-  const rep = { ok: true, v: 4, jour, maj: Date.now(), matchs, avertissements: erreurs, pages };
+  const rep = { ok: true, v: 5, jour, maj: Date.now(), matchs, avertissements: erreurs, pages };
   if (matchs.length) {
     await cache.put(ck, new Response(JSON.stringify(rep), { headers: { 'content-type': 'application/json', 'cache-control': 'max-age=300' } }));
     if (kv) { try { await kv.put(kvKey, JSON.stringify(rep), { expirationTtl: 14 * 86400 }); } catch (e) {} }
@@ -527,10 +532,41 @@ async function tennisDuJour(dateParam, debug, env) {
   if (kv) {
     try {
       const vieux = JSON.parse((await kv.get(kvKey)) || 'null');
-      if (vieux && Array.isArray(vieux.matchs) && vieux.matchs.length) return Object.assign(vieux, { v: 4, perime: true, avertissements: erreurs.length ? erreurs : ['Tennis Explorer n\'a rien renvoyé de lisible : dernier calendrier connu.'], pages });
+      if (vieux && Array.isArray(vieux.matchs) && vieux.matchs.length) return Object.assign(vieux, { v: 5, perime: true, avertissements: erreurs.length ? erreurs : ['Tennis Explorer n\'a rien renvoyé de lisible : dernier calendrier connu.'], pages });
     } catch (e) {}
   }
   if (erreurs.length) throw new Error(erreurs.join(' · '));
   rep.raison = 'page lue mais aucun match de tournoi du circuit trouvé (' + pages.join(' ; ') + ')';
+  return rep;
+}
+
+// ── Détail d'un match (page « match-detail » de Tennis Explorer) : classement, face-à-face, bilan de la saison.
+// Lecture tolérante par le texte de la page ; si un champ n'est pas trouvé il reste null (l'appli s'en passe).
+function lireDetailTE(html) {
+  const T = txt(String(html || '').replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' '));
+  const n = x => { const v = parseInt(x, 10); return Number.isFinite(v) ? v : null; };
+  const out = { r1: null, r2: null, h1: null, h2: null, w1: null, l1: null, w2: null, l2: null, surface: null };
+  const rk = [...T.matchAll(/ranking\s*:?\s*(\d{1,4})\b/gi)].map(m => n(m[1]));
+  if (rk.length >= 2) { out.r1 = rk[0]; out.r2 = rk[1]; }
+  const h = T.match(/head[\s-]*to[\s-]*head[^0-9]{0,60}(\d{1,3})\s*-\s*(\d{1,3})/i);
+  if (h) { out.h1 = n(h[1]); out.h2 = n(h[2]); }
+  const wl = T.match(/W\s*\/\s*L\s*-\s*\d{4}[^0-9]{0,60}(\d{1,3})\s*\/\s*(\d{1,3})[^0-9]{0,80}(\d{1,3})\s*\/\s*(\d{1,3})/i);
+  if (wl) { out.w1 = n(wl[1]); out.l1 = n(wl[2]); out.w2 = n(wl[3]); out.l2 = n(wl[4]); }
+  const su = T.match(/\b(clay|hard|grass|indoors?)\b/i); if (su) out.surface = su[1].toLowerCase();
+  return out;
+}
+async function tennisDetail(id, debug) {
+  if (!/^\d{3,10}$/.test(id || '')) throw new Error('identifiant de match invalide');
+  const cache = caches.default, ck = new Request(`https://statify.cache/tennis-detail-v1/${id}`);
+  if (!debug) { const hit = await cache.match(ck); if (hit) return await hit.json(); }
+  const res = await fetch(`${TE}/match-detail/?id=${id}`, { headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36', 'accept-language': 'en' } });
+  if (!res.ok) throw new Error(`Tennis Explorer a répondu ${res.status}`);
+  const html = await res.text(), d = lireDetailTE(html);
+  if (debug) {
+    const T = txt(html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')), ctx = re => { const i = T.search(re); return i >= 0 ? T.slice(Math.max(0, i - 80), i + 260) : null; };
+    return { ok: true, v: 5, id, lu: d, taille: html.length, extraits: { ranking: ctx(/ranking/i), h2h: ctx(/head[\s-]*to[\s-]*head/i), saison: ctx(/W\s*\/\s*L\s*-/i) } };
+  }
+  const rep = { ok: true, v: 5, id, ...d };
+  if (d.r1 != null || d.h1 != null || d.w1 != null) await cache.put(ck, new Response(JSON.stringify(rep), { headers: { 'content-type': 'application/json', 'cache-control': 'max-age=21600' } }));
   return rep;
 }
