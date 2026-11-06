@@ -87,6 +87,10 @@ export default {
       try { return reply(await rdjMatch(u.searchParams.get('a'), u.searchParams.get('b'), u.searchParams.get('debug') === '1')); }
       catch (e) { return reply({ ok: false, error: String(e && e.message || e) }, 502); }
     }
+    if (u.pathname === '/classement') {                    // classement ATP en direct (live-tennis.eu), lecture seule
+      try { return reply(await classementLive(u.searchParams.get('debug') === '1')); }
+      catch (e) { return reply({ ok: false, error: String(e && e.message || e) }, 502); }
+    }
     if (u.pathname === '/tennis-detail') {
       try { return reply(await tennisDetail(u.searchParams.get('id'), u.searchParams.get('debug') === '1')); }
       catch (e) { return reply({ ok: false, error: String(e && e.message || e) }, 502); }
@@ -659,4 +663,38 @@ async function rdjMatch(a0, b0, debug) {
   }
   if (!debug && out.ok) await cache.put(ck, new Response(JSON.stringify(out), { headers: { 'content-type': 'application/json', 'cache-control': 'max-age=' + (out.trouve ? 1800 : 600) } }));
   return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* Classement ATP en direct (live-tennis.eu)                           */
+/* Lecture du tableau : rang, joueur, pays, âge, points, variation,     */
+/* résultat en cours. Aucune autre donnée n'est reprise.                */
+/* ------------------------------------------------------------------ */
+function lireClassementLive(html) {
+  const out = [];
+  const txtc = h => String(h || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+  for (const rm of String(html || '').matchAll(/<tr class="?([A-Z]{3}) [^">]*"?>([\s\S]*?)<\/tr>/g)) {
+    const cells = [...rm[2].matchAll(/<td([^>]*)>([\s\S]*?)<\/td>/g)].map(c => ({ a: c[1], t: txtc(c[2]) }));
+    const cl = (re) => cells.find(c => re.test(c.a));
+    const rang = parseInt((cl(/class=\"?rk\b/) || {}).t, 10), nom = (cl(/class=\"?pn\b/) || {}).t;
+    if (!Number.isFinite(rang) || !nom) continue;
+    const sm = cells.filter(c => /class=\"?sm\b/.test(c.a));
+    const ip = cells.findIndex(c => /class=\"?pn\b/.test(c.a)), age = (cells[ip + 1] && /^\d{2}$/.test(cells[ip + 1].t) ? cells[ip + 1] : {}).t, pays = (sm.find(c => /^[A-Z]{3}$/.test(c.t)) || {}).t || rm[1];
+    const points = cells.find(c => !/class/.test(c.a) && /^\d{3,5}$/.test(c.t));
+    const variation = cells.find(c => /^[+-]\d{1,4}$/.test(c.t));
+    const res = cl(/class=\"?rst\b/);
+    out.push({ rang, nom, pays, age: age ? +age : null, points: points ? +points.t : null, variation: variation ? parseInt(variation.t, 10) : null, resultat: res && res.t ? res.t.slice(0, 40) : '' });
+  }
+  return out;
+}
+async function classementLive(debug) {
+  const cache = caches.default, ck = new Request('https://statify.cache/classement-live-v1');
+  if (!debug) { const hit = await cache.match(ck); if (hit) return await hit.json(); }
+  const r = await fetch('https://live-tennis.eu/fr/classement-atp-live', { headers: { 'user-agent': 'Mozilla/5.0 (compatible; Statify)', 'accept-language': 'fr-FR,fr;q=0.9' } });
+  if (!r.ok) return { ok: false, error: 'live-tennis.eu a répondu ' + r.status };
+  const l = lireClassementLive(await r.text());
+  if (!l.length) return { ok: false, error: 'classement illisible : la page a peut-être changé' };
+  const rep = { ok: true, maj: Date.now(), source: 'live-tennis.eu', joueurs: l.slice(0, 150) };
+  if (!debug) await cache.put(ck, new Response(JSON.stringify(rep), { headers: { 'content-type': 'application/json', 'cache-control': 'max-age=300' } }));
+  return rep;
 }

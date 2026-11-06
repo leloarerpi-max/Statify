@@ -12,9 +12,11 @@
   const KEY_RES = 'prono_tennis_results_v1';       // matchs terminés enregistrés (même clé qu'avant : rien n'est perdu)
   const KEY_HISTO = 'prono_tennis_histo_v3';       // jours déjà importés dans l'historique (reprise possible)
   const KEY_DAYS = 'prono_tennis_days_v1';
-  const S = { robot: { url: '', key: '' }, jour: '', fin: '', days: {}, busy: false, err: '', res: [], diag: '', majBusy: false, histo: { done: {}, busy: false, stop: false, ajoutes: 0, err: '' } };
+  const KEY_CL = 'prono_tennis_cl_v1';              // dernier classement ATP en direct lu (affiché même hors ligne)
+  const S = { robot: { url: '', key: '' }, jour: '', fin: '', days: {}, busy: false, err: '', res: [], diag: '', majBusy: false, cl: { l: [], maj: 0, busy: false, err: '', n: 20, q: '' }, histo: { done: {}, busy: false, stop: false, ajoutes: 0, err: '' } };
   try { Object.assign(S.robot, JSON.parse(localStorage.getItem(KEY_ROBOT) || '{}')); } catch (e) {}
   try { const b = JSON.parse(localStorage.getItem(KEY_RES) || '[]'); if (Array.isArray(b)) S.res = b; } catch (e) {}
+  try { const c = JSON.parse(localStorage.getItem(KEY_CL) || 'null'); if (c && Array.isArray(c.l)) { S.cl.l = c.l; S.cl.maj = c.maj || 0; } } catch (e) {}
   try { const d = JSON.parse(localStorage.getItem(KEY_HISTO) || '{}'); if (d && typeof d === 'object') S.histo.done = d; } catch (e) {}
 
   /* ---------- Outils ---------- */
@@ -107,6 +109,38 @@
       ${bandeJours()}${corps}`;
   }
 
+  /* ---------- Classement ATP en direct (live-tennis.eu, lu par le robot) ---------- */
+  function blocClassement() {
+    const c = S.cl, cfg = S.robot.url && S.robot.key, q = (c.q || '').trim().toLowerCase();
+    let l = c.l; if (q) l = l.filter(x => String(x.nom).toLowerCase().includes(q) || String(x.pays || '').toLowerCase() === q);
+    const vu = l.slice(0, q ? 30 : c.n);
+    const ligne = x => `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid ${BD};font-size:13px"><span style="min-width:30px;font-weight:800">${esc(x.rang)}</span>
+      <span style="min-width:0;flex:1"><span style="font-weight:700">${esc(x.nom)}</span> <span style="opacity:.6;font-size:11px">${esc(x.pays || '')}${x.age ? ' · ' + esc(x.age) + ' ans' : ''}</span>${x.resultat ? `<div style="font-size:11px;opacity:.65">${esc(x.resultat)}</div>` : ''}</span>
+      <span style="text-align:right;white-space:nowrap"><b>${x.points != null ? esc(x.points) : '—'}</b>${x.variation ? `<div style="font-size:11px;font-weight:800;color:${x.variation > 0 ? VERT : '#dc2626'}">${x.variation > 0 ? '▲ +' : '▼ '}${esc(x.variation)}</div>` : ''}</span></div>`;
+    return `<div style="${card};border-left:5px solid #2563eb"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div style="font-size:13px;font-weight:800">🌍 Classement ATP en direct</div>
+        <button type="button" onclick="tennisClassement(true)" style="min-height:40px;padding:0 12px;border-radius:10px;font-weight:700;font-size:12px;cursor:pointer;background:transparent;color:inherit;border:1px solid ${BD}">${c.busy ? '…' : 'Actualiser'}</button></div>
+      <div style="font-size:11px;opacity:.7;margin-top:2px">Points en direct pendant les tournois · source : <a href="https://live-tennis.eu/fr/classement-atp-live" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">live-tennis.eu</a>${c.maj ? ' · lu à ' + new Date(c.maj).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+      ${c.err ? `<div style="font-size:12px;font-weight:700;margin-top:6px;color:#dc2626">${esc(c.err)}</div>` : ''}
+      ${c.l.length ? `<input type="search" value="${esc(c.q)}" placeholder="Chercher un joueur ou un pays (ex. Sinner, FRA)" onchange="tennisClFiltre(this.value)" style="margin-top:8px;width:100%;box-sizing:border-box;min-height:44px;border-radius:10px;border:1px solid ${BD};background:transparent;color:inherit;padding:0 10px;font-size:14px"><div style="margin-top:6px">${vu.map(ligne).join('') || '<p style="font-size:12px;opacity:.7">Aucun joueur trouvé.</p>'}</div>
+        ${!q && c.n < l.length ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${[50, 100, 150].filter(n => n > c.n && n <= Math.max(50, l.length)).map(n => `<button type="button" onclick="tennisClPlus(${n})" style="min-height:40px;padding:0 12px;border-radius:10px;font-weight:700;font-size:12px;cursor:pointer;background:transparent;color:inherit;border:1px solid ${BD}">Afficher le top ${n}</button>`).join('')}</div>` : ''}`
+        : (cfg ? '<p style="font-size:12px;opacity:.75;margin:8px 0 0">' + (c.busy ? 'Chargement…' : 'Appuie sur Actualiser pour lire le classement.') + '</p>' : '<p style="font-size:12px;opacity:.75;margin:8px 0 0">Renseigne d\'abord le robot (réglage en bas de page).</p>')}</div>`;
+  }
+  async function chargerClassement(force) {
+    const c = S.cl; if (c.busy || !S.robot.url || !S.robot.key) return;
+    if (!force && c.l.length && Date.now() - c.maj < 10 * 60e3) return;
+    c.busy = true; c.err = ''; render();
+    try {
+      const r = await fetch(S.robot.url.replace(/\/+$/, '') + '/classement', { headers: { 'x-key': S.robot.key }, cache: 'no-store' });
+      const o = await r.json().catch(() => ({}));
+      if (r.status === 404) throw new Error('Colle la dernière version de worker.js dans Cloudflare puis Deploy pour avoir le classement.');
+      if (r.status === 401) throw new Error('Clé refusée : vérifie la SYNC_KEY.');
+      if (!r.ok || !o.ok || !Array.isArray(o.joueurs)) throw new Error(o.error || ('Le robot a répondu ' + r.status));
+      c.l = o.joueurs; c.maj = o.maj || Date.now();
+      try { localStorage.setItem(KEY_CL, JSON.stringify({ l: c.l, maj: c.maj })); } catch (e) {}
+    } catch (e) { c.err = e.message === 'Failed to fetch' ? (c.l.length ? 'Robot injoignable : dernier classement connu affiché.' : "Robot injoignable : vérifie l'adresse et ta connexion.") : e.message; }
+    c.busy = false; render();
+  }
+
   /* ---------- Historique depuis le 1er janvier ---------- */
   const DEBUT_HISTO = () => auj().slice(0, 4) + '-01-01';
   function blocHisto() {
@@ -147,7 +181,7 @@
       ${S.err ? `<p style="margin:10px 0 0;font-size:13px;color:#dc2626;font-weight:700">${esc(S.err)}</p>` : ''}
       ${data && data.avertissements && data.avertissements.length ? `<p style="margin:8px 0 0;font-size:12px;color:#d97706">${esc(data.avertissements.join(' · '))}</p>` : ''}
       ${titreSect('Calendrier du jour')}${vueCalendrier()}
-      ${titreSect('Statistiques')}${window.__tennisJoueurs ? window.__tennisJoueurs.bloc(filtrer(), BD, card) : ''}
+      ${titreSect('Statistiques')}${blocClassement()}${window.__tennisJoueurs ? window.__tennisJoueurs.bloc(filtrer(), BD, card) : ''}
       ${titreSect('Historique')}${blocHisto()}
       ${S.res.length ? `<button type="button" onclick="tennisExport()" style="margin-top:16px;min-height:44px;padding:0 14px;border-radius:12px;border:1px solid ${BD};background:transparent;color:inherit;font-weight:700;font-size:12px;cursor:pointer">Exporter les matchs (CSV)</button>` : ''}
       ${reglage()}
@@ -178,6 +212,7 @@
       if (!r.ok || !j.ok) throw new Error(j.error || ('Le robot a répondu ' + r.status + (r.status === 404 ? ' : colle la nouvelle version de worker.js dans Cloudflare puis Deploy.' : '')));
       S.days[jour] = j;
       if (j.matchs && j.matchs.length && !j.perime) { ecrireMem(jour, j); if (enregistrer(jour, j)) sauver(); }
+      setTimeout(() => { try { chargerClassement(false); } catch (e) {} }, 0);          // le classement se lit à part : une panne ici ne gêne jamais le calendrier
     } catch (e) {
       S.err = e.message === 'Failed to fetch' ? "Robot injoignable : vérifie l'adresse et ta connexion." : e.message;
       // le calendrier ne disparaît pas : on réaffiche le dernier connu sur cet appareil
@@ -222,6 +257,9 @@
     if (n) sauver(); S.majBusy = false; render();
   };
   window.tennisHistoVides = () => { Object.keys(S.histo.done).forEach(j => { if (S.histo.done[j] === 2) delete S.histo.done[j]; }); try { localStorage.setItem(KEY_HISTO, JSON.stringify(S.histo.done)); } catch (e) {} window.tennisHisto(); };
+  window.tennisClassement = f => chargerClassement(f !== false);
+  window.tennisClPlus = n => { S.cl.n = n; render(); };
+  window.tennisClFiltre = q => { S.cl.q = String(q || ''); render(); };
   window.tennisHistoStop = () => { S.histo.stop = true; render(); };
   window.tennisHisto = async () => {
     const h = S.histo; if (h.busy || !S.robot.url || !S.robot.key) return;
