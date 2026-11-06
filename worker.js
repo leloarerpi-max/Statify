@@ -42,7 +42,7 @@ export default {
     if (u.pathname === '/') return new Response('Statify robot : en marche ✓ (version 5, tennis ATP + détails)', { headers: { 'content-type': 'text/plain; charset=utf-8', ...CORS } });
     const p0 = t => t.slice(2200, 3200);
     if (u.pathname === '/rdj-diag') {                      // diagnostic RueDesJoueurs (lecture seule, isolé ; clé en ?key=)
-      if (!env.SYNC_KEY || u.searchParams.get('key') !== env.SYNC_KEY) return reply({ ok: false, error: 'Clé refusée' }, 401);
+      if (!env.SYNC_KEY || (u.searchParams.get('key') !== env.SYNC_KEY && req.headers.get('x-key') !== env.SYNC_KEY)) { const k = u.searchParams.get('key') || ''; return reply({ ok: false, error: 'Clé refusée', longueurRecue: k.length, longueurAttendue: (env.SYNC_KEY || '').length, premiereLettreIdentique: !!k && !!env.SYNC_KEY && k[0] === env.SYNC_KEY[0], derniereLettreIdentique: !!k && !!env.SYNC_KEY && k[k.length - 1] === env.SYNC_KEY[env.SYNC_KEY.length - 1] }, 401); }
       try {
         const chemin = (u.searchParams.get('p') || '/').replace(/[^\w\-./?=&%]/g, '');
         const r = await fetch('https://www.ruedesjoueurs.com' + (chemin.startsWith('/') ? chemin : '/' + chemin), { headers: { 'user-agent': 'Mozilla/5.0 (compatible; Statify)', 'accept-language': 'fr-FR,fr;q=0.9' } });
@@ -55,7 +55,8 @@ export default {
         const motif = ctx ? html.split(ctx).slice(1, 4).map(x => x.slice(0, 700)) : [];
         const g = (u.searchParams.get('grep') || '').replace(/[^\w\s\-éèàç]/g, '').slice(0, 30);
         const trouves = []; if (g) { const re = new RegExp(g, 'gi'); let mm; while ((mm = re.exec(html)) && trouves.length < 400) trouves.push(mm.index); }
-        const extraits = trouves.slice(-8).map(i => html.slice(Math.max(0, i - 300), i + 400));
+        const w = Math.min(+u.searchParams.get('w') || 300, 3000), nbE = u.searchParams.get('first') ? 2 : 8;
+        const extraits = (u.searchParams.get('first') ? trouves.slice(0, nbE) : trouves.slice(-nbE)).map(i => html.slice(Math.max(0, i - w), i + w + 100).replace(/\s+/g, ' '));
         return reply({ ok: r.ok, status: r.status, taille: html.length, titre: (html.match(/<title>([^<]*)/i) || [])[1] || '', grep: g, nbTrouves: trouves.length, extraits });
       } catch (e) { return reply({ ok: false, error: String(e && e.message || e) }, 502); }
     }
@@ -400,9 +401,11 @@ function tournoisPrincipaux(html) {
   html.slice(a, b).replace(/<a [^>]*>([\s\S]*?)<\/a>/gi, (_m, t) => { const n = norm(txt(t)).replace(/\s+(wta|atp)$/, ''); if (n) set.add(n); return ''; });
   return set.size ? set : null;
 }
-function estPrincipal(nom, href, liste) {
+function estPrincipal(nom, href, liste, jourPasse) {
   const n = norm(nom);
   if (/challenger|futures|\bitf\b|utr|\b125\b|exhibition|exhibit|qualif|\bqual\b|\(q\)/.test(n) || /qualif/i.test(href || '')) return false;   // pas de petits tournois ni de qualifications
+  // Jours passés : la liste « Main tournaments » de la page ne décrit que les tournois en cours aujourd'hui. On se fie au type du tournoi dans son adresse.
+  if (jourPasse && href) { if (/challenger|futures|itf|utr/i.test(href)) return false; if (/\/atp-men\b/i.test(href)) return true; }
   if (liste) return [...liste].some(x => n === x || n.startsWith(x + ' ') || x.startsWith(n + ' '));
   return !/challenger|futures|itf|utr/i.test(href || '');          // secours si la liste n'a pas été trouvée
 }
@@ -452,8 +455,8 @@ function lireTE(html, ymdStr, tour) {
         const cle = tHref || tournoi;
         // « avant tout petit tournoi » : vrai seulement sur les pages de résultats (jours passés), triées par niveau.
         // Sur la page du jour et des jours à venir, Tennis Explorer trie par heure : on ne s'y fie pas.
-        principal = estPrincipal(tournoi, tHref, liste) && !vus.has(cle) && !(jourPasse && basVu);
-        if (!estPrincipal(tournoi, tHref, liste)) basVu = true;
+        principal = estPrincipal(tournoi, tHref, liste, jourPasse) && !vus.has(cle) && !(jourPasse && basVu);
+        if (!estPrincipal(tournoi, tHref, liste, jourPasse)) basVu = true;
         vus.add(cle);
       }
       continue;
@@ -569,12 +572,16 @@ function lireDetailTE(html) {
   const T = txt(String(html || '').replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' '));
   const n = x => { const v = parseInt(x, 10); return Number.isFinite(v) ? v : null; };
   const out = { r1: null, r2: null, h1: null, h2: null, w1: null, l1: null, w2: null, l2: null, surface: null };
-  const rk = [...T.matchAll(/ranking\s*:?\s*(\d{1,4})\b/gi)].map(m => n(m[1]));
-  if (rk.length >= 2) { out.r1 = rk[0]; out.r2 = rk[1]; }
+  const rg = T.match(/(\d{1,4})\.\s*Singles ranking\s*(\d{1,4})\./i);      // « 4. Singles ranking 14. » : joueur 1, libellé, joueur 2
+  if (rg) { out.r1 = n(rg[1]); out.r2 = n(rg[2]); }
+  else { const rk = [...T.matchAll(/ranking\s*:?\s*(\d{1,4})\b/gi)].map(m => n(m[1])); if (rk.length >= 2) { out.r1 = rk[0]; out.r2 = rk[1]; } }
   const h = T.match(/head[\s-]*to[\s-]*head[^0-9]{0,60}(\d{1,3})\s*-\s*(\d{1,3})/i);
   if (h) { out.h1 = n(h[1]); out.h2 = n(h[2]); }
   const wl = T.match(/W\s*\/\s*L\s*-\s*\d{4}[^0-9]{0,60}(\d{1,3})\s*\/\s*(\d{1,3})[^0-9]{0,80}(\d{1,3})\s*\/\s*(\d{1,3})/i);
   if (wl) { out.w1 = n(wl[1]); out.l1 = n(wl[2]); out.w2 = n(wl[3]); out.l2 = n(wl[4]); }
+  // Bilan de la saison : sous « Summary: … » de chaque joueur, la première ligne d'année (ex. « 2026 44/18 … »)
+  const sm = [...T.matchAll(/Summary:\s*(?:\d+\/\d+\s+){1,7}(20\d\d)\s+(\d+)\/(\d+)/g)];
+  if (sm.length >= 2 && sm[0][1] === sm[1][1]) { out.w1 = n(sm[0][2]); out.l1 = n(sm[0][3]); out.w2 = n(sm[1][2]); out.l2 = n(sm[1][3]); }
   const su = T.match(/\b(clay|hard|grass|indoors?)\b/i); if (su) out.surface = su[1].toLowerCase();
   return out;
 }
@@ -587,7 +594,7 @@ async function tennisDetail(id, debug) {
   const html = await res.text(), d = lireDetailTE(html);
   if (debug) {
     const T = txt(html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')), ctx = re => { const i = T.search(re); return i >= 0 ? T.slice(Math.max(0, i - 80), i + 260) : null; };
-    return { ok: true, v: 5, id, lu: d, taille: html.length, extraits: { ranking: ctx(/ranking/i), h2h: ctx(/head[\s-]*to[\s-]*head/i), saison: ctx(/W\s*\/\s*L\s*-/i) } };
+    return { ok: true, v: 5, id, lu: d, taille: html.length, extraits: { ranking: ctx(/ranking/i), h2h: ctx(/head[\s-]*to[\s-]*head/i), saison: ctx(/W\s*\/\s*L\s*-/i), unibet: ctx(/unibet/i), bookmakers: ctx(/bet365|pinnacle|betclic|winamax|bookmaker/i) } };
   }
   const rep = { ok: true, v: 5, id, ...d };
   if (d.r1 != null || d.h1 != null || d.w1 != null) await cache.put(ck, new Response(JSON.stringify(rep), { headers: { 'content-type': 'application/json', 'cache-control': 'max-age=21600' } }));

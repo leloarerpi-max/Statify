@@ -11,7 +11,7 @@
   const KEY_RES = 'prono_tennis_results_v1';
   const KEY_DET = 'prono_tennis_det_v1';      // détails de match lus (classement, face-à-face, saison)
   const KEY_RDJ = 'prono_tennis_rdj_v1';      // pronostics d'experts RueDesJoueurs lus par le robot
-  const KEY_HISTO = 'prono_tennis_histo_v1';  // jours déjà importés dans l'historique (reprise possible)
+  const KEY_HISTO = 'prono_tennis_histo_v2';  // jours déjà importés dans l'historique (reprise possible)
   const KEY_AUTO = 'prono_tennis_auto_v1';    // pronos auto figés avant le match
   const S = { robot: { url: '', key: '' }, vue: 'cal', tour: 'all', jour: '', days: {}, busy: false, err: '', res: [], strat: 'bas', diag: '', sans: false, sansBusy: false, det: {}, auto: [], detBusy: false, rdj: {}, rdjBusy: false, histo: { done: {}, busy: false, stop: false, i: 0, total: 0, ajoutes: 0, err: '' } };
   try { Object.assign(S.robot, JSON.parse(localStorage.getItem(KEY_ROBOT) || '{}')); } catch (e) {}
@@ -398,15 +398,15 @@
   const DEBUT_HISTO = () => auj().slice(0, 4) + '-01-01';
   function blocHisto() {
     const h = S.histo, deb = DEBUT_HISTO(), hier = decaler(auj(), -1), tousJours = []; for (let j = deb; j <= hier; j = decaler(j, 1)) tousJours.push(j);
-    const faits = tousJours.filter(j => h.done[j]).length, reste = tousJours.length - faits, pc = tousJours.length ? Math.round(faits / tousJours.length * 100) : 0;
+    const faits = tousJours.filter(j => h.done[j]).length, vides = tousJours.filter(j => h.done[j] === 2).length, reste = tousJours.length - faits, pc = tousJours.length ? Math.round(faits / tousJours.length * 100) : 0;
     const cfg = S.robot.url && S.robot.key;
     const btn = (txt, on, c) => `<button type="button" onclick="${on}" style="min-height:44px;padding:0 14px;border-radius:10px;font-weight:800;font-size:13px;background:${c};color:#fff;border:0;cursor:pointer">${txt}</button>`;
     return `<div style="${card};border-left:5px solid #16a34a"><div style="font-size:13px;font-weight:800">📚 Historique depuis le 1er janvier ${deb.slice(0, 4)}</div>
       <p style="margin:6px 0 0;font-size:12px;opacity:.85">${reste <= 0 ? 'Tous les jours jusqu\'à hier sont importés.' : 'Relit les résultats ATP jour par jour (matchs des tournois principaux avec cotes) pour remplir les statistiques de l\'année. Ça prend quelques minutes ; tu peux arrêter et reprendre : ce qui est fait est gardé.'}</p>
       <div style="height:6px;border-radius:999px;background:rgba(128,128,128,.25);margin-top:8px;overflow:hidden"><div style="height:100%;width:${pc}%;background:${pc === 100 ? '#16a34a' : '#2563eb'};transition:width .3s"></div></div>
-      <div style="font-size:11px;opacity:.75;margin-top:4px">${faits} jour${faits > 1 ? 's' : ''} sur ${tousJours.length} importés${h.ajoutes ? ' · ' + h.ajoutes + ' matchs ajoutés cette fois' : ''}${h.busy ? ' · en cours…' : ''}</div>
+      <div style="font-size:11px;opacity:.75;margin-top:4px">${faits} jour${faits > 1 ? 's' : ''} sur ${tousJours.length} traités · ${S.res.filter(r => r.histo).length} matchs importés${vides ? ' · ' + vides + ' jour' + (vides > 1 ? 's' : '') + ' sans match lu' : ''}${h.ajoutes ? ' · ' + h.ajoutes + ' matchs ajoutés cette fois' : ''}${h.busy ? ' · en cours…' : ''}</div>
       ${h.err ? `<div style="font-size:12px;font-weight:700;margin-top:6px;color:#dc2626">${esc(h.err)}</div>` : ''}
-      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${h.busy ? btn('Arrêter', 'tennisHistoStop()', '#6b7280') : reste > 0 ? btn(faits ? 'Reprendre l\'import' : 'Importer depuis janvier', 'tennisHisto()', cfg ? '#16a34a' : '#6b7280') : ''}</div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${h.busy ? btn('Arrêter', 'tennisHistoStop()', '#6b7280') : vides ? btn('Refaire les jours sans match', 'tennisHistoVides()', '#d97706') : ''}${h.busy ? '' : reste > 0 ? btn(faits ? 'Reprendre l\'import' : 'Importer depuis janvier', 'tennisHisto()', cfg ? '#16a34a' : '#6b7280') : ''}</div>
       ${cfg ? '' : '<div style="font-size:11px;opacity:.7;margin-top:6px">Renseigne d\'abord le robot (réglage en bas de page).</div>'}</div>`;
   }
   function panneauSans() {
@@ -624,6 +624,7 @@
     for (const j of sept()) await chargerJour(j);
     S.sansBusy = false; render();
   };
+  window.tennisHistoVides = () => { Object.keys(S.histo.done).forEach(j => { if (S.histo.done[j] === 2) delete S.histo.done[j]; }); try { localStorage.setItem(KEY_HISTO, JSON.stringify(S.histo.done)); } catch (e) {} window.tennisHisto(); };
   window.tennisHistoStop = () => { S.histo.stop = true; render(); };
   window.tennisHisto = async () => {
     const h = S.histo; if (h.busy || !S.robot.url || !S.robot.key) return;
@@ -645,7 +646,7 @@
               const id = matchId(j, m); if (S.res.some(x => x.id === id)) return;
               S.res.push({ id, date: j, heure: m.heure, tour: m.tour, tournoi: m.tournoi, j1: m.j1, j2: m.j2, c1: m.c1, c2: m.c2, w: m.w, auto: true, histo: true }); h.ajoutes++;
             });
-            h.done[j] = 1; echecs = 0;
+            h.done[j] = (o.matchs || []).length ? 1 : 2; echecs = 0;          // 2 = aucun match lu ce jour-là (on pourra le refaire)
           } else echecs++;
         } catch (e) { echecs++; }
         if (++fini % 8 === 0) { sauverH(); render(); }
