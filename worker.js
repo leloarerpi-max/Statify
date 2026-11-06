@@ -63,7 +63,7 @@ export default {
       return reply({ ok }, ok ? 200 : 502);
     }
     if (u.pathname === '/tennis') {
-      try { return reply(await tennisDuJour(u.searchParams.get('date'), u.searchParams.get('debug') === '1')); }
+      try { return reply(await tennisDuJour(u.searchParams.get('date'), u.searchParams.get('debug') === '1', env)); }
       catch (e) { return reply({ ok: false, error: String(e && e.message || e) }, 502); }
     }
     if (u.pathname === '/status') {
@@ -384,7 +384,7 @@ function estPrincipal(nom, href, liste) {
 function vainqueur(s) {
   if (!Array.isArray(s) || s.length < 2) return null;
   const a = s[0], b = s[1];
-  if (a === b || Math.max(a, b) < 2 || Math.min(a, b) > 2) return null;
+  if (a === b || Math.max(a, b) < 2 || Math.max(a, b) > 3 || Math.min(a, b) > 2) return null;   // 3 sets gagnants au maximum : au-delà, la lecture est douteuse
   return a > b ? 1 : 2;
 }
 function lireTE(html, ymdStr, tour) {
@@ -397,6 +397,7 @@ function lireTE(html, ymdStr, tour) {
   const out = [];
   let date = tabDate, tournoi = null, tHref = '', cur = null, principal = false, basVu = false;
   const vus = new Set();
+  const jourPasse = ymdStr < parisYmd();
   const fin = () => { if (cur && cur.p.length >= 2 && tournoi && principal && (sansDates || date === cible || date === null)) out.push({ tour, tournoi, heure: cur.h, j1: cur.p[0], j2: cur.p[1], c1: cur.o[0] ?? null, c2: cur.o[1] ?? null, w: vainqueur(cur.s) }); cur = null; };
   const rows = html.match(/<tr[\s\S]*?<\/tr>/gi) || [];
   for (const r of rows) {
@@ -414,7 +415,9 @@ function lireTE(html, ymdStr, tour) {
         // Tennis Explorer range les qualifications sous un titre qui porte le même nom que le tournoi (« Paris »), APRÈS les petits tournois.
         // Règle : un titre n'est « principal » que s'il est autorisé, jamais vu plus haut, et placé avant tout petit tournoi.
         const cle = tHref || tournoi;
-        principal = estPrincipal(tournoi, tHref, liste) && !basVu && !vus.has(cle);
+        // « avant tout petit tournoi » : vrai seulement sur les pages de résultats (jours passés), triées par niveau.
+        // Sur la page du jour et des jours à venir, Tennis Explorer trie par heure : on ne s'y fie pas.
+        principal = estPrincipal(tournoi, tHref, liste) && !vus.has(cle) && !(jourPasse && basVu);
         if (!estPrincipal(tournoi, tHref, liste)) basVu = true;
         vus.add(cle);
       }
@@ -444,19 +447,49 @@ function lireTE(html, ymdStr, tour) {
   fin();
   return out;
 }
-async function tennisDuJour(dateParam, debug) {
+// Lecture d'une page Tennis Explorer, avec une 2e tentative si le site répond 429/5xx ou une page de blocage.
+async function pageTE(page, type, Y, M, D, heads) {
+  let dernier = { status: 0, html: '' };
+  for (let essai = 0; essai < 2; essai++) {
+    try {
+      const res = await fetch(`${TE}/${page}/?type=${type}&year=${Y}&month=${M}&day=${D}`, { headers: heads });
+      const html = res.ok ? await res.text() : '';
+      dernier = { status: res.status, html };
+      const blocage = res.ok && (html.length < 400 || /just a moment|captcha|access denied|cf-chl|attention required/i.test(html.slice(0, 6000)));
+      if (res.ok && !blocage) return dernier;
+      if (blocage) dernier = { status: 'bloqué', html: '' };
+      if (res.status !== 429 && res.status < 500 && !blocage) return dernier;   // 403/404 : inutile de réessayer
+    } catch (e) { dernier = { status: 'réseau', html: '' }; }
+    await new Promise(r => setTimeout(r, 400));
+  }
+  return dernier;
+}
+
+async function tennisDuJour(dateParam, debug, env) {
   const jour = /^\d{4}-\d{2}-\d{2}$/.test(dateParam || '') ? dateParam : parisYmd();
   const [Y, M, D] = jour.split('-');
-  const cache = caches.default, ck = new Request(`https://statify.cache/tennis/${jour}`);
+  const cache = caches.default, ck = new Request(`https://statify.cache/tennis-v2/${jour}`);
   if (!debug) { const hit = await cache.match(ck); if (hit) return await hit.json(); }
+  const kv = env && env.STATE, kvKey = `tennis:dernier:${jour}`;
   const heads = { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36', 'accept-language': 'en' };
-  let matchs = [], brut = {}, erreurs = [];
+  let matchs = [], brut = {}, erreurs = [], pages = [];
+  // Tennis Explorer a 3 pages selon le jour : « matches » = aujourd'hui, « results » = jours passés, « next » = jours à venir.
+  // Si la page principale ne donne rien, on essaie l'autre page possible avant de conclure.
+  const aujd = parisYmd();
+  const essais = jour === aujd ? ['matches', 'next'] : jour < aujd ? ['results'] : ['next'];
   for (const [tour, type] of [['ATP', 'atp-single'], ['WTA', 'wta-single']]) {
-    const res = await fetch(`${TE}/next/?type=${type}&year=${Y}&month=${M}&day=${D}`, { headers: heads });
-    if (!res.ok) { erreurs.push(`${tour} : Tennis Explorer a répondu ${res.status}`); continue; }
-    const html = await res.text();
+    let lus = [], htmlDiag = '', dernierStatut = '';
+    for (const page of essais) {
+      const { status, html } = await pageTE(page, type, Y, M, D, heads);
+      pages.push(`${tour} ${page} → ${status}${html ? ' (' + html.length + ' o)' : ''}`);
+      if (!html) { dernierStatut = String(status); continue; }
+      const l = lireTE(html, jour, tour);
+      if (!htmlDiag || l.length) htmlDiag = html;
+      if (l.length) { lus = l; break; }
+    }
+    if (!lus.length && dernierStatut) erreurs.push(`${tour} : Tennis Explorer a répondu ${dernierStatut}`);
     if (debug) {
-      const i = html.search(/\/player\//i), k = html.search(/Main tournaments/i);
+      const html = htmlDiag, i = html.search(/\/player\//i), k = html.search(/Main tournaments/i);
       brut[tour] = {
         taille: html.length, lignes: (html.match(/<tr/gi) || []).length, liensJoueur: (html.match(/\/player\//gi) || []).length, liensMatch: (html.match(/\/match-detail\//gi) || []).length,
         dates: [...new Set(html.match(/\b\d{2}\.\d{2}\.\d{4}\b/g) || [])].slice(0, 6), mainTournaments: k >= 0, coursesCells: (html.match(/class="[^"]*course/gi) || []).length,
@@ -467,12 +500,27 @@ async function tennisDuJour(dateParam, debug) {
         matchsLus: lireTE(html, jour, tour).slice(0, 6).map(m => m.tournoi + ' | ' + m.heure + ' | ' + m.j1 + ' - ' + m.j2)
       };
     }
-    matchs = matchs.concat(lireTE(html, jour, tour));
+    matchs = matchs.concat(lus);
   }
-  if (debug) return { ok: true, debug: brut, matchs };
-  if (!matchs.length && erreurs.length) throw new Error(erreurs.join(' · '));
+  // doublons éventuels (la même page servie pour les deux circuits)
+  const vu = new Set();
+  matchs = matchs.filter(m => { const k = [m.tournoi, m.heure, m.j1, m.j2].join('|'); if (vu.has(k)) return false; vu.add(k); return true; });
+  if (debug) return { ok: true, debug: brut, pages, matchs };
   matchs.sort((a, b) => a.heure.localeCompare(b.heure) || a.tournoi.localeCompare(b.tournoi));
-  const rep = { ok: true, jour, maj: Date.now(), matchs, avertissements: erreurs };
-  await cache.put(ck, new Response(JSON.stringify(rep), { headers: { 'content-type': 'application/json', 'cache-control': 'max-age=300' } }));
+  const rep = { ok: true, jour, maj: Date.now(), matchs, avertissements: erreurs, pages };
+  if (matchs.length) {
+    await cache.put(ck, new Response(JSON.stringify(rep), { headers: { 'content-type': 'application/json', 'cache-control': 'max-age=300' } }));
+    if (kv) { try { await kv.put(kvKey, JSON.stringify(rep), { expirationTtl: 14 * 86400 }); } catch (e) {} }
+    return rep;
+  }
+  // Rien de lisible : on ressort le dernier bon calendrier connu pour ce jour, en le signalant.
+  if (kv) {
+    try {
+      const vieux = JSON.parse((await kv.get(kvKey)) || 'null');
+      if (vieux && Array.isArray(vieux.matchs) && vieux.matchs.length) return Object.assign(vieux, { perime: true, avertissements: erreurs.length ? erreurs : ['Tennis Explorer n\'a rien renvoyé de lisible : dernier calendrier connu.'], pages });
+    } catch (e) {}
+  }
+  if (erreurs.length) throw new Error(erreurs.join(' · '));
+  rep.raison = 'page lue mais aucun match de tournoi du circuit trouvé (' + pages.join(' ; ') + ')';
   return rep;
 }
