@@ -139,7 +139,7 @@
   }
 
   /* ---------- Actions ---------- */
-  const redraw = () => { try { window.__tennisAuto && window.__tennisAuto.render && window.__tennisAuto.render(); } catch (e) {} };
+  const redraw = () => { try { window.__tennis && window.__tennis.render && window.__tennis.render(); } catch (e) {} };
   window.tnJx = (k, v) => { st[k] = v; redraw(); };
   window.tnJoueur = n => { st.joueur = String(n || '').trim(); st.vue = 'fiche'; redraw(); };
   window.tnJoueur1 = n => { st.joueur = String(n || '').trim(); redraw(); };
