@@ -409,6 +409,7 @@
       <button type="button" onclick="tennisSauver()" style="min-height:44px;padding:0 14px;border-radius:10px;font-weight:700;font-size:12px;background:#16a34a;color:#fff;border:0;cursor:pointer">Enregistrer et charger</button>
       <button type="button" onclick="tennisDiag()" style="min-height:44px;padding:0 14px;margin-left:6px;border-radius:10px;font-weight:700;font-size:12px;background:transparent;color:inherit;border:1px solid ${BD};cursor:pointer">Diagnostic</button>
       <button type="button" onclick="tennisDiagDetail()" style="min-height:44px;padding:0 14px;margin-left:6px;border-radius:10px;font-weight:700;font-size:12px;background:transparent;color:inherit;border:1px solid ${BD};cursor:pointer">Diagnostic détail</button>
+      <button type="button" onclick="tennisDiagExpert()" style="min-height:44px;padding:0 14px;margin-left:6px;border-radius:10px;font-weight:700;font-size:12px;background:transparent;color:inherit;border:1px solid ${BD};cursor:pointer">Diagnostic expert</button>
       ${S.diag ? `<p style="font-size:12px;opacity:.7;margin:8px 0 4px">Copie tout ce texte et envoie-le moi :</p><textarea readonly onclick="this.select()" style="width:100%;box-sizing:border-box;height:160px;font-size:11px;border-radius:8px;border:1px solid ${BD};background:transparent;color:inherit">${esc(S.diag)}</textarea>` : ''}</details>`;
   }
 
@@ -545,6 +546,19 @@
     try {
       const r = await fetch(S.robot.url.replace(/\/+$/, '') + '/tennis?debug=1&date=' + S.jour, { headers: { 'x-key': S.robot.key }, cache: 'no-store' });
       S.diag = (await r.text()).slice(0, 12000);
+    } catch (e) { S.diag = 'Erreur : ' + e.message; }
+    render();
+  };
+  window.tennisDiagExpert = async () => {
+    const data = S.days[S.jour], L = data ? (data.matchs || []).filter(x => x.tour === 'ATP' && x.id && !/\//.test(x.j1 + x.j2)) : [], m = L.find(x => S.rdj[x.id] && S.rdj[x.id].trouve) || L[0];
+    if (!m) { S.diag = "Aucun match ATP pour ce jour : appuie d'abord sur Actualiser."; render(); return; }
+    S.diag = 'Chargement du diagnostic expert…'; render();
+    const base = S.robot.url.replace(/\/+$/, ''), H = { headers: { 'x-key': S.robot.key }, cache: 'no-store' };
+    try {
+      const r1 = await fetch(base + '/rdj?debug=1&a=' + encodeURIComponent(nomFamille(m.j1)) + '&b=' + encodeURIComponent(nomFamille(m.j2)), H), t1 = await r1.text();
+      let t2 = '';
+      try { const o = JSON.parse(t1); if (o.url) { const r2 = await fetch(base + '/rdj-diag?grep=unibet&p=' + encodeURIComponent(o.url.replace('https://www.ruedesjoueurs.com', '')), H); t2 = '\n\n--- Page du match (recherche « unibet ») ---\n' + (await r2.text()); } } catch (e) {}
+      S.diag = ('Match : ' + m.j1 + ' / ' + m.j2 + '\n' + t1 + t2).slice(0, 14000);
     } catch (e) { S.diag = 'Erreur : ' + e.message; }
     render();
   };
