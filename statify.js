@@ -10,8 +10,8 @@ const ink = c => { const n=parseInt(c.slice(1),16); return (((n>>16)*299+(((n>>8
 const cdist = (x,y) => { const p=parseInt(x.slice(1),16), q=parseInt(y.slice(1),16); return Math.hypot((p>>16)-(q>>16),((p>>8)&255)-((q>>8)&255),(p&255)-(q&255)); };
 function pickColors(cs){ const fb=['#34b64f','#f0b010','#f07020']; const out=[]; cs.forEach((c,i)=>{ let col=c||fb[i%3]; if(out.some(o=>cdist(o,col)<70)) col=fb.find(f=>!out.some(o=>cdist(o,f)<70))||fb[i%3]; out.push(col); }); return out; }
 const TABS=[['home','Accueil'],['games','Matchs'],['players','Joueurs'],['teams','Équipes'],['standings','Classement'],['studio','Studio'],['race','Qualification'],['records','Records'],['compare','Comparer'],['rest','Repos'],['cal','Calendrier']];
-const HOME_BLOCKS=[['tonight','Ce soir (heure de Paris)'],['kpis','Chiffres clés'],['alerts','Alertes sur mes favoris'],['week','Équipe de la semaine'],['bigmatch','Gros matchs à venir'],['news','Actus NBA (français)'],['duel','Duel de la semaine'],['favs','Mes favoris'],['notes','Mes notes'],['results','Derniers résultats'],['scorers','Meilleurs marqueurs']];
-const HOME_FULL=['kpis','alerts','week','favs','notes','news'];
+const HOME_BLOCKS=[['tonight','Ce soir (heure de Paris)'],['news','Actus NBA (français)'],['kpis','Chiffres clés'],['alerts','Alertes sur mes favoris'],['week','Équipe de la semaine'],['bigmatch','Gros matchs à venir'],['duel','Duel de la semaine'],['favs','Mes favoris'],['notes','Mes notes'],['results','Derniers résultats'],['scorers','Meilleurs marqueurs']];
+const HOME_FULL=['kpis','alerts','week','favs','notes'];
 
 function loadJ(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } }
 /* ---- Grosse mémoire : copie dans IndexedDB (beaucoup plus de place que localStorage, limité à ~5 Mo sur iPhone) ---- */
@@ -626,11 +626,27 @@ function lineScore(g){
 }
 
 /* ---- Accueil personnalisable ---- */
-function homeCfgNorm(){ const ids=HOME_BLOCKS.map(b=>b[0]); const o=(homeCfg.order||[]).filter(i=>ids.includes(i)); for(const i of ids) if(!o.includes(i)){ if(i==='tonight') o.unshift(i); else o.push(i); } return {order:o,hidden:(homeCfg.hidden||[]).filter(i=>ids.includes(i))}; }
+try{ if(!localStorage.getItem('suivi-nba-home-v2')){ const o=(homeCfg.order||[]).filter(i=>i!=='news'), k=o.indexOf('tonight'); o.splice(k>=0?k+1:0,0,'news'); homeCfg.order=o; saveJ(KEYH,homeCfg); localStorage.setItem('suivi-nba-home-v2','1'); } }catch(e){}
+function homeIsFull(id,cfg){ const w=(cfg.w||{})[id]; return w?w==='f':HOME_FULL.includes(id); }
+function homeCfgNorm(){ const ids=HOME_BLOCKS.map(b=>b[0]); const o=(homeCfg.order||[]).filter(i=>ids.includes(i)); for(const i of ids) if(!o.includes(i)){ if(i==='tonight') o.unshift(i); else o.push(i); } return {order:o,hidden:(homeCfg.hidden||[]).filter(i=>ids.includes(i)),w:homeCfg.w||{}}; }
 function homeEditor(cfg){
   const lab=Object.fromEntries(HOME_BLOCKS);
-  return `<div class="card"><h2>Personnaliser l'accueil</h2><p class="mut">Coche les blocs à afficher et change leur ordre avec les flèches.</p>${cfg.order.map((id,i)=>`<div class="row hrow"><label><input type="checkbox" data-act="hometoggle" data-id="${id}" ${cfg.hidden.includes(id)?'':'checked'}> ${esc(lab[id])}</label><button class="sec" data-act="homemove" data-id="${id}" data-d="-1" ${i===0?'disabled':''}>↑</button><button class="sec" data-act="homemove" data-id="${id}" data-d="1" ${i===cfg.order.length-1?'disabled':''}>↓</button></div>`).join('')}<div class="row" style="margin-top:10px"><button data-act="homeedit">Terminé</button><button class="sec" data-act="homereset">Tout réinitialiser</button></div></div>`;
+  return `<div class="card"><h2>Personnaliser l'accueil</h2><p class="mut">Coche les blocs à afficher, <b>glisse-les directement sur la page</b> (poignée ⠿) ou utilise les flèches. Le bouton de largeur choisit pleine ou demi-largeur.</p>${cfg.order.map((id,i)=>`<div class="row hrow"><label><input type="checkbox" data-act="hometoggle" data-id="${id}" ${cfg.hidden.includes(id)?'':'checked'}> ${esc(lab[id])}</label><button class="sec" data-act="homewide" data-id="${id}" title="Largeur du bloc">${homeIsFull(id,cfg)?'↔ Pleine largeur':'▯ Demi-largeur'}</button><button class="sec" data-act="homemove" data-id="${id}" data-d="-1" ${i===0?'disabled':''}>↑</button><button class="sec" data-act="homemove" data-id="${id}" data-d="1" ${i===cfg.order.length-1?'disabled':''}>↓</button></div>`).join('')}<div class="row" style="margin-top:10px"><button data-act="homeedit">Terminé</button><button class="sec" data-act="homereset">Tout réinitialiser</button></div></div>`;
 }
+
+
+/* ---- Accueil NBA : glisser-déposer des blocs (mode « Personnaliser ») ---- */
+(function(){
+  let dragId=null;
+  const clean=()=>document.querySelectorAll('.hbover,.hbdrag').forEach(x=>x.classList.remove('hbover','hbafter','hbdrag'));
+  const blk=e=>e.target&&e.target.closest?e.target.closest('.hb[draggable]'):null;
+  const after=(e,b)=>{ const r=b.getBoundingClientRect(); return b.classList.contains('full')?e.clientY>r.top+r.height/2:e.clientX>r.left+r.width/2; };
+  document.addEventListener('dragstart',e=>{ const b=blk(e); if(!b) return; dragId=b.dataset.hb; b.classList.add('hbdrag'); try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',dragId); }catch(_){} });
+  document.addEventListener('dragover',e=>{ if(!dragId) return; const b=blk(e); if(!b||b.dataset.hb===dragId) return; e.preventDefault(); document.querySelectorAll('.hbover').forEach(x=>x.classList.remove('hbover','hbafter')); b.classList.add('hbover'); b.classList.toggle('hbafter',after(e,b)); });
+  document.addEventListener('drop',e=>{ if(!dragId) return; const b=blk(e); if(!b||b.dataset.hb===dragId){ clean(); dragId=null; return; } e.preventDefault();
+    const cf=homeCfgNorm(), o=cf.order.filter(i=>i!==dragId), k=o.indexOf(b.dataset.hb); o.splice(k+(after(e,b)?1:0),0,dragId); cf.order=o; homeCfg=cf; saveJ(KEYH,homeCfg); dragId=null; clean(); render(); });
+  document.addEventListener('dragend',()=>{ dragId=null; clean(); });
+})();
 
 /* ---- Mode grand écran ---- */
 const tv={on:false,i:0,timer:null,fs:false};
@@ -839,8 +855,8 @@ function viewHome(S){
   const top=topAll.slice(0,5).map((p,i)=>`<tr><td class="l">${i+1}.${moveHtml(pvTop,p.id,i+1)} ${avatar(p.id,p.name,p.tri,26)}${playerLink(p.id,p.name)} <span class="mut">${p.tri}</span></td><td>${p.gp}</td><td><b>${f1(p.pts/p.gp)}</b></td><td>${p.pts}</td></tr>`).join('');
   B.scorers=`<div class="card"><h2>Meilleurs marqueurs</h2><div class="scroll"><table><thead><tr><th class="l">Joueur</th><th>MJ</th><th>PTS moy.</th><th>PTS tot.</th></tr></thead><tbody>${top||'<tr><td class="empty" colspan="4">–</td></tr>'}</tbody></table></div></div>`;
   const cfg=homeCfgNorm();
-  const parts=cfg.order.filter(id=>!cfg.hidden.includes(id)).map(id=>B[id]?`<div class="${HOME_FULL.includes(id)?'full':''}">${B[id]}</div>`:'').join('');
-  return heroNba(S)+(()=>{ try{ return stuReadyCard('nba'); }catch(e){ return ''; } })()+`<div class="row between" style="margin-bottom:10px"><span class="mut">${cfg.hidden.length?cfg.hidden.length+' bloc(s) masqué(s)':''}</span><button class="sec" data-act="homeedit">⚙ Personnaliser l'accueil</button></div>${ui.homeEdit?homeEditor(cfg):''}<div class="home">${parts}</div>`;
+  const lab=Object.fromEntries(HOME_BLOCKS), parts=cfg.order.filter(id=>!cfg.hidden.includes(id)).map(id=>B[id]?`<div class="hb${homeIsFull(id,cfg)?' full':''}" data-hb="${id}"${ui.homeEdit?' draggable="true"':''}>${ui.homeEdit?`<div class="hbbar"><span>⠿ ${esc(lab[id]||id)}</span><button class="sec" data-act="homewide" data-id="${id}">${homeIsFull(id,cfg)?'↔ Pleine':'▯ Demi'}</button></div>`:''}${B[id]}</div>`:'').join('');
+  return heroNba(S)+(()=>{ try{ return stuReadyCard('nba'); }catch(e){ return ''; } })()+`<div class="row between" style="margin-bottom:10px"><span class="mut">${cfg.hidden.length?cfg.hidden.length+' bloc(s) masqué(s)':''}</span><button class="sec" data-act="homeedit">⚙ Personnaliser l'accueil</button></div>${ui.homeEdit?homeEditor(cfg):''}<div class="home${ui.homeEdit?' edit':''}">${parts}</div>`;
 }
 
 function viewGames(S){
@@ -2581,7 +2597,8 @@ function toggleFav(type,id,name){
   else if(a==='homeedit'){ ui.homeEdit=!ui.homeEdit; render(); }
   else if(a==='hometoggle'){ const cf=homeCfgNorm(), i=cf.hidden.indexOf(id); if(i>=0) cf.hidden.splice(i,1); else cf.hidden.push(id); homeCfg=cf; saveJ(KEYH,homeCfg); render(); }
   else if(a==='homemove'){ const cf=homeCfgNorm(), i=cf.order.indexOf(id), j=i+(+el.dataset.d); if(i>=0&&j>=0&&j<cf.order.length){ [cf.order[i],cf.order[j]]=[cf.order[j],cf.order[i]]; homeCfg=cf; saveJ(KEYH,homeCfg); render(); } }
-  else if(a==='homereset'){ homeCfg={order:HOME_BLOCKS.map(b=>b[0]),hidden:[]}; saveJ(KEYH,homeCfg); render(); }
+  else if(a==='homewide'){ const cf=homeCfgNorm(); cf.w={...cf.w,[id]:homeIsFull(id,cf)?'h':'f'}; homeCfg=cf; saveJ(KEYH,homeCfg); render(); }
+  else if(a==='homereset'){ homeCfg={order:HOME_BLOCKS.map(b=>b[0]),hidden:[],w:{}}; saveJ(KEYH,homeCfg); render(); }
   else if(a==='print'){ document.body.classList.add('print-one'); setTimeout(()=>window.print(),50); }
   else if(a==='addfavteam'){ const v=$('#favTeamSel').value; if(v&&!fav.teams.includes(v)){ fav.teams.push(v); saveFav(); render(); } }
 }));
