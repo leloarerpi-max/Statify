@@ -1726,11 +1726,11 @@ function nbaRails(S){
   return {l:box('Conférence Ouest','W'), r:box('Conférence Est','E')};
 }
 function railsRender(FT,S){
-  const on=FT?['home','matches'].includes(ui.ftab):['home','games'].includes(ui.tab), L=$('#railL'), R=$('#railR');
-  document.body.classList.toggle('rails',!!on&&FT); document.body.classList.toggle('rails-nba',!!on&&!FT);
+  const on=!FT&&['home','games'].includes(ui.tab), L=$('#railL'), R=$('#railR');
+  document.body.classList.toggle('rails',false); document.body.classList.toggle('rails-nba',!!on);
   if(!L||!R) return;
   if(!on){ L.innerHTML=R.innerHTML=''; return; }
-  const h=FT?footRails():nbaRails(S); L.innerHTML=h.l; R.innerHTML=h.r;
+  const h=nbaRails(S); L.innerHTML=h.l; R.innerHTML=h.r;
 }
 function footScorersTable(pl,key,lab,n=8){
   const top=pl.filter(p=>p[key]>0).sort((a,b)=>b[key]-a[key]||b.gp-a.gp).slice(0,n);
@@ -1757,11 +1757,71 @@ function fhomeEditor(cfg){
   return `<div class="card"><h2>Personnaliser l'accueil foot</h2><p class="mut">Coche les blocs à afficher et change leur ordre avec les flèches (mets tes blocs préférés en premier).</p>${cfg.order.map((id,i)=>`<div class="row hrow"><label><input type="checkbox" data-act="fhometoggle" data-id="${id}" ${cfg.hidden.includes(id)?'':'checked'}> ${esc(lab[id])}</label><button class="sec" data-act="fhomemove" data-id="${id}" data-d="-1" ${i===0?'disabled':''}>↑</button><button class="sec" data-act="fhomemove" data-id="${id}" data-d="1" ${i===cfg.order.length-1?'disabled':''}>↓</button></div>`).join('')}<h3 style="margin:14px 0 4px">Colonnes latérales (grands écrans)</h3><p class="mut" style="margin:0 0 4px">« Mes clubs » suit le bloc du même nom ci-dessus : sur grand écran il passe dans la colonne de gauche.</p>${FRAIL.map(([id,t])=>`<div class="row hrow"><label><input type="checkbox" data-act="frailtoggle" data-id="${id}" ${(cfg.rh||[]).includes(id)?'':'checked'}> ${esc(t)}</label></div>`).join('')}<div class="row" style="margin-top:10px"><button data-act="fhomeedit">Terminé</button><button class="sec" data-act="fhomereset">Tout réinitialiser</button></div></div>`;
 }
 const FRAIL=[['stand','📊 Classement'],['live','🔴 En direct'],['res','🏁 Derniers résultats']];
+
+/* ---- Accueil foot : zones libres (colonne gauche / centre / colonne droite) ---- */
+const KEYFZ='suivi-foot-zones', FZ=['L','C','R'], FZN={L:'Colonne gauche',C:'Centre',R:'Colonne droite'};
+let fz=loadJ(KEYFZ,null);
+function fzDefault(){ return {L:['stand:auto'],C:FHOME_BLOCKS.map(b=>b[0]).filter(i=>!FHOME_HIDE0.includes(i)),R:['live','res']}; }
+function fzInit(){ if(fz&&fz.L&&fz.C&&fz.R) return;
+  try{ const old=fhomeNorm(); fz={L:old.rh.includes('stand')?[]:['stand:auto'],C:old.order.filter(i=>!old.hidden.includes(i)),R:['live','res'].filter(i=>!old.rh.includes(i))}; }catch(e){ fz=fzDefault(); }
+  saveJ(KEYFZ,fz); }
+function fzPlaced(){ fzInit(); return [...fz.L,...fz.C,...fz.R]; }
+function fzLabel(id){
+  if(id==='live') return '🔴 En direct'; if(id==='res') return '🏁 Derniers résultats';
+  if(id.startsWith('stand:')){ const k=id.slice(6); return '📊 Classement – '+(k==='auto'?'championnat de mon 1er club favori':k==='all'?'tous les championnats':footLgName(k)); }
+  const b=FHOME_BLOCKS.find(x=>x[0]===id); return b?b[1]:id; }
+function fzCatalog(){ const placed=new Set(fzPlaced()), out=[];
+  for(const [id] of FHOME_BLOCKS) if(!placed.has(id)) out.push(id);
+  const lgs=Object.keys(foot.leagues).filter(k=>foot.leagues[k]&&foot.leagues[k].standings&&foot.leagues[k].standings.length);
+  for(const id of ['live','res','stand:auto','stand:all',...lgs.map(k=>'stand:'+k)]) if(!placed.has(id)) out.push(id);
+  return out; }
+function fzSc(m){ return `<div class="rr"><div class="rt"><b>${mlink(m,`${esc(m.hn)} ${m.hs}-${m.as} ${esc(m.an)}`)}</b>${m.txt&&m.st==='in'?`<small class="mut">${esc(m.txt)}</small>`:''}</div></div>`; }
+function fzLive(){ const {mt}=footIdx(), live=mt.filter(m=>m.st==='in');
+  return `<div class="card rail"><h2>${live.length?'<span class="livedot"></span> ':'🔴 '}En direct</h2>${live.length?live.map(fzSc).join(''):'<p class="mut">Aucun match en cours.</p>'}</div>`; }
+function fzRes(){ const {mt}=footIdx(), res=mt.filter(m=>m.done).sort((a,b)=>Date.parse(b.d)-Date.parse(a.d)).slice(0,8);
+  return res.length?`<div class="card rail"><h2>🏁 Derniers résultats</h2>${res.map(fzSc).join('')}</div>`:''; }
+function fzStand(k,zone){ const {T}=footIdx();
+  const one=code=>{ const L=foot.leagues[code]; if(!L||!L.standings||!L.standings.length) return '';
+    const rows=[...L.standings].sort((a,b)=>a.rank-b.rank).slice(0,zone==='C'?30:8).map(r=>`<div class="rr"><span class="rk">${r.rank}</span><span class="rl">${footLogo(r.logo,20)||''}</span><div class="rt"><b>${tlink(r.id,r.name)}</b></div><b class="rp">${r.pts}</b></div>`).join('');
+    return `<div class="card rail"><h2>📊 ${esc(footLgName(code))}</h2>${rows}</div>`; };
+  if(k==='all') return Object.keys(foot.leagues).map(one).join('');
+  if(k==='auto'){ const f0=ffav.length&&T[ffav[0]]?T[ffav[0]].lg:'fra.1'; return one(foot.leagues[f0]?f0:'fra.1')||one(Object.keys(foot.leagues)[0]); }
+  return one(k); }
+function fzBlock(id,zone,FB){ if(id==='live') return fzLive(); if(id==='res') return fzRes(); if(id.startsWith('stand:')) return fzStand(id.slice(6),zone); return FB[id]||''; }
+function fzEditor(){ fzInit();
+  const row=(z,id,i)=>`<div class="row hrow"><span style="flex:1">${esc(fzLabel(id))}</span><button class="sec" data-act="fzgo" data-id="${id}" data-d="-1" ${z==='L'?'disabled':''} title="Zone précédente">◀</button><button class="sec" data-act="fzmv" data-id="${id}" data-d="-1" ${i===0?'disabled':''}>▲</button><button class="sec" data-act="fzmv" data-id="${id}" data-d="1" ${i===fz[z].length-1?'disabled':''}>▼</button><button class="sec" data-act="fzgo" data-id="${id}" data-d="1" ${z==='R'?'disabled':''} title="Zone suivante">▶</button><button class="sec" data-act="fzdel" data-id="${id}" title="Retirer">✕</button></div>`;
+  const cat=fzCatalog();
+  return `<div class="card"><h2>Personnaliser l'accueil foot</h2><p class="mut">Glisse les blocs <b>directement sur la page</b> (poignée ⠿) vers la colonne gauche, le centre ou la colonne droite, ou utilise ◀ ▶ ▲ ▼. ✕ retire un bloc. Les colonnes latérales s'affichent à partir de 1100 px de large.</p>${FZ.map(z=>`<h3 style="margin:12px 0 4px">${FZN[z]}</h3>${fz[z].map((id,i)=>row(z,id,i)).join('')||'<p class="mut" style="margin:0">Vide.</p>'}`).join('')}<h3 style="margin:14px 0 4px">Ajouter un bloc</h3>${cat.length?`<div class="row"><select id="fzAddSel">${cat.map(id=>`<option value="${id}">${esc(fzLabel(id))}</option>`).join('')}</select><select id="fzAddZone"><option value="C">au centre</option><option value="L">colonne gauche</option><option value="R">colonne droite</option></select><button class="sec" data-act="fzadd">Ajouter</button></div>`:'<p class="mut" style="margin:0">Tous les blocs sont déjà placés.</p>'}<div class="row" style="margin-top:10px"><button data-act="fhomeedit">Terminé</button><button class="sec" data-act="fzreset">Tout réinitialiser</button></div></div>`; }
+function fzRender(FB){ fzInit(); const edit=!!ui.fHomeEdit, Z={};
+  for(const z of FZ) Z[z]=fz[z].map(id=>{ const b=fzBlock(id,z,FB); if(!b&&!edit) return '';
+    return `<div class="fb" data-fb="${id}"${edit?' draggable="true"':''}>${edit?`<div class="hbbar"><span>⠿ ${esc(fzLabel(id))}</span><span><button class="sec" data-act="fzgo" data-id="${id}" data-d="-1" title="Zone précédente">◀</button><button class="sec" data-act="fzgo" data-id="${id}" data-d="1" title="Zone suivante">▶</button><button class="sec" data-act="fzdel" data-id="${id}" title="Retirer">✕</button></span></div>`:''}${b||'<p class="mut">(rien à afficher pour l\'instant)</p>'}</div>`; }).join('');
+  const hl=edit||Z.L, hr=edit||Z.R;
+  return `<div class="fz${edit?' edit':''}${hl?' hasl':''}${hr?' hasr':''}">${FZ.map(z=>`<div class="fzc${z==='C'?'':' rail'}" data-zone="${z}" data-label="${FZN[z]}">${Z[z]}</div>`).join('')}</div>`; }
+(function(){
+  let dragId=null;
+  const clean=()=>document.querySelectorAll('.hbover,.hbdrag,.hcover').forEach(x=>x.classList.remove('hbover','hbafter','hbdrag','hcover'));
+  const blk=e=>e.target&&e.target.closest?e.target.closest('.fz.edit .fb'):null;
+  const zon=e=>e.target&&e.target.closest?e.target.closest('.fz.edit .fzc'):null;
+  const after=(e,b)=>{ const r=b.getBoundingClientRect(); return e.clientY>r.top+r.height/2; };
+  document.addEventListener('dragstart',e=>{ const b=blk(e); if(!b) return; dragId=b.dataset.fb; b.classList.add('hbdrag'); try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',dragId); }catch(_){} });
+  document.addEventListener('dragover',e=>{ if(!dragId) return; const b=blk(e), c=zon(e);
+    if(b&&b.dataset.fb!==dragId){ e.preventDefault(); clean(); b.classList.add('hbover'); b.classList.toggle('hbafter',after(e,b)); }
+    else if(!b&&c){ e.preventDefault(); clean(); c.classList.add('hcover'); } });
+  document.addEventListener('drop',e=>{ if(!dragId) return; const b=blk(e), c=zon(e);
+    if((b&&b.dataset.fb===dragId)||(!b&&!c)){ clean(); dragId=null; return; }
+    e.preventDefault(); fzInit();
+    for(const z of FZ) fz[z]=fz[z].filter(i=>i!==dragId);
+    if(b){ const z=b.closest('.fzc').dataset.zone, k=fz[z].indexOf(b.dataset.fb); fz[z].splice(k+(after(e,b)?1:0),0,dragId); }
+    else fz[c.dataset.zone].push(dragId);
+    fzSave(); dragId=null; clean(); render(); });
+  document.addEventListener('dragend',()=>{ dragId=null; clean(); });
+})();
+function fzSave(){ saveJ(KEYFZ,fz); }
 function footHome(){
   const {mt,done,P}=footIdx(), pl=Object.values(P), lg=ui.fLg&&ui.fLg!=='mine'?ui.fLg:'';
-  const cfg=fhomeNorm();
-  let h=footControls(`${cfg.hidden.length?`<span class="mut">${cfg.hidden.length} bloc${cfg.hidden.length>1?'s':''} masqué${cfg.hidden.length>1?'s':''} · </span>`:''}<button class="sec fbtn" data-act="fhomeedit" title="Personnaliser l'accueil">⚙<span class="hide-m"> Personnaliser</span></button>`); const FB={};
-  if(cfg.hidden.includes('multi')) h+=multiBanner();
+  fzInit(); const unp=FHOME_BLOCKS.filter(b=>!fzPlaced().includes(b[0])).length;
+  let h=footControls(`${unp?`<span class="mut">${unp} bloc${unp>1?'s':''} masqué${unp>1?'s':''} · </span>`:''}<button class="sec fbtn" data-act="fhomeedit" title="Personnaliser l'accueil">⚙<span class="hide-m"> Personnaliser</span></button>`); const FB={};
+  if(!fzPlaced().includes('multi')) h+=multiBanner();
   if(!mt.length) return h;
   { const ac=footAlertsCard(); if(ac) FB.alerts=ac; }
   const nw=footNews(3); if(nw.length) FB.news=`<div class="card"><h2>📰 À la une</h2>${nw.map(n=>`<div class="alert"><b>${mlink(n.m,esc(n.r.title))}</b> <span class="mut" style="font-size:12px">· ${esc(footLgName(n.m.lg))} · ${n.age<1?'aujourd\'hui':n.age<2?'hier':'il y a '+Math.floor(n.age)+' j'}</span><div class="mut" style="margin-top:3px">${(()=>{ const t=n.r.paras[1]||n.r.paras[0]; if(t.length<=230) return t; const c=t.slice(0,230), i=c.lastIndexOf(' ; '); return (i>60?c.slice(0,i):c.replace(/\s+\S*$/,''))+' … <span class="link" data-act="fmatch" data-id="'+esc(n.m.id)+'">lire la suite</span>'; })()}</div></div>`).join('')}</div>`;
@@ -1774,10 +1834,10 @@ function footHome(){
   FB.matches=`<div class="card"><div class="row between"><h2 style="margin:0">Matchs</h2>${footLgSel('fLg',ui.fLg,true,true)}</div>${footLists(footMatches(),8,!ui.fLg||ui.fLg==='mine')}</div>`;
   const sc=lg?pl.filter(p=>inLg(p,lg)):pl;
   FB.scorers=`<div class="card"><h2>Meilleurs buteurs ${lg?'— '+esc(footLgName(lg)):''}</h2>${sc.length?`<div class="grid2"><div><h3>Buts</h3>${footScorersTable(sc,'g','buts',6)}</div><div><h3>Passes décisives</h3>${footScorersTable(sc,'a','PD',6)}</div></div>`:(lg?footLeadersFallback(lg):'')||'<p class="mut">Les buteurs apparaissent après le chargement des détails des matchs (bouton Actualiser).</p>'}</div>`;
-  if(!cfg.hidden.includes('multi')){ const mx=footMultiView(true); if(mx) FB.multi=mx; }
+  if(fzPlaced().includes('multi')){ const mx=footMultiView(true); if(mx) FB.multi=mx; }
   if(!FB.multi) h+=heroFoot(done);
-  h+=ui.fHomeEdit?fhomeEditor(cfg):'';
-  for(const id of cfg.order) if(!cfg.hidden.includes(id)&&FB[id]) h+=FB[id];
+  h+=ui.fHomeEdit?fzEditor():'';
+  h+=fzRender(FB);
   return h;
 }
 
@@ -2614,6 +2674,11 @@ function toggleFav(type,id,name){
   else if(a==='fhomeedit'){ ui.fHomeEdit=!ui.fHomeEdit; render(); }
   else if(a==='fhometoggle'){ const cf=fhomeNorm(), i=cf.hidden.indexOf(id); if(i>=0) cf.hidden.splice(i,1); else cf.hidden.push(id); fhomeCfg=cf; saveJ(KEYFH,fhomeCfg); render(); }
   else if(a==='fhomemove'){ const cf=fhomeNorm(), i=cf.order.indexOf(id), j=i+(+el.dataset.d); if(i>=0&&j>=0&&j<cf.order.length){ [cf.order[i],cf.order[j]]=[cf.order[j],cf.order[i]]; fhomeCfg=cf; saveJ(KEYFH,fhomeCfg); render(); } }
+  else if(a==='fzgo'){ fzInit(); const z=FZ.find(k=>fz[k].includes(id)), j=FZ.indexOf(z)+(+el.dataset.d); if(z&&j>=0&&j<3){ fz[z]=fz[z].filter(i=>i!==id); fz[FZ[j]].push(id); fzSave(); render(); } }
+  else if(a==='fzmv'){ fzInit(); const z=FZ.find(k=>fz[k].includes(id)), A=z&&fz[z], i=z?A.indexOf(id):-1, j=i+(+el.dataset.d); if(z&&j>=0&&j<A.length){ [A[i],A[j]]=[A[j],A[i]]; fzSave(); render(); } }
+  else if(a==='fzdel'){ fzInit(); for(const z of FZ) fz[z]=fz[z].filter(i=>i!==id); fzSave(); render(); }
+  else if(a==='fzadd'){ fzInit(); const v=$('#fzAddSel')&&$('#fzAddSel').value, z=$('#fzAddZone')&&$('#fzAddZone').value; if(v&&FZ.includes(z)&&!fzPlaced().includes(v)){ fz[z].push(v); fzSave(); render(); } }
+  else if(a==='fzreset'){ fz=fzDefault(); fzSave(); render(); }
   else if(a==='frailtoggle'){ const cf=fhomeNorm(), i=cf.rh.indexOf(id); if(i>=0) cf.rh.splice(i,1); else cf.rh.push(id); fhomeCfg=cf; saveJ(KEYFH,fhomeCfg); render(); }
   else if(a==='fhomereset'){ fhomeCfg={order:FHOME_BLOCKS.map(b=>b[0]),hidden:[...FHOME_HIDE0],rh:[]}; saveJ(KEYFH,fhomeCfg); render(); }
   else if(a==='homeedit'){ ui.homeEdit=!ui.homeEdit; render(); }
@@ -3013,7 +3078,7 @@ function liveFootRow(x,mine,rk,go,fl,barHtml,lg){
 function liveRender(){
   const box=document.getElementById('liveBox'); if(!box) return;
   if(ui.sport==='tennis'){ box.innerHTML=''; return; }
-  const want=ui.sport==='foot'?'f':'n', ALL=(liveData.items||[]).filter(x=>x.st==='in'&&x.k===want); if(!ALL.length||(ui.sport==='foot'&&ui.ftab==='home'&&!fhomeNorm().hidden.includes('multi'))){ box.innerHTML=''; return; }
+  const want=ui.sport==='foot'?'f':'n', ALL=(liveData.items||[]).filter(x=>x.st==='in'&&x.k===want); if(!ALL.length||(ui.sport==='foot'&&ui.ftab==='home'&&fzPlaced().includes('multi'))){ box.innerHTML=''; return; }
   // foot : on ne montre ici que mes clubs (étoile, étoile dorée, matchs choisis) ; les autres matchs en cours sont dans le Multiplex
   const mineF=x=>ffav.includes(x.h.id)||ffav.includes(x.a.id)||nfav.foot.includes(x.h.id)||nfav.foot.includes(x.a.id)||!!mpick[x.id];
   const L=want==='f'?ALL.filter(mineF):ALL, others=ALL.length-L.length, bannerOn=ui.ftab==='home'&&!!multiBanner();   // sur l'accueil, le bandeau « Multiplex en cours » fait déjà le lien
@@ -3035,7 +3100,7 @@ function liveRender(){
     const go=(x.k==='f'&&Object.values(foot.leagues).some(L=>L.matches[x.id]))?` data-act="fmatch" data-id="${esc(x.id)}" style="cursor:pointer"`:'';
     if(x.k==='f') return liveFootRow(x,mine(x),rkOf(x.lg),go,fl,bar(x),lg);
     return `<div class="liverow${fl}"${go}><div class="lt">${lo(x.h)}<b>${esc(x.h.n)}</b></div><div class="ls">${x.h.s} - ${x.a.s}<span class="lm">${esc(liveText(x))}</span></div><div class="lt r"><b>${esc(x.a.n)}</b>${lo(x.a)}</div>${bar(x)}${evs(x)}<div class="lc mut">${mine(x)?'⭐ ':''}${esc(lg)}</div></div>`; };
-  box.innerHTML=`<div class="card livecard"><h2><span class="livedot"></span><span class="lhn">En direct</span> <span class="mut" style="font-size:12px;font-weight:400">· mis à jour il y a ${ago} s · <span class="link" data-act="liverefresh">actualiser</span></span>${want==='f'?`<label class="mut" style="font-size:12px;margin-left:auto;font-weight:400"><input type="checkbox" data-act="livefav" ${liveFavOnly()?'checked':''}> Alertes buts : mes clubs</label>`:''}</h2>${L.map(row).join('')}${othersHtml}</div>`;
+  box.innerHTML=`<div class="card livecard"><h2><span class="livedot"></span><span class="lhn">En direct</span> <span class="mut" style="font-size:12px;font-weight:400">· mis à jour il y a ${ago} s · <span class="link" data-act="liverefresh">actualiser</span></span>${want==='f'?`<label class="mut" style="font-size:12px;margin-left:auto;font-weight:400"><input type="checkbox" data-act="livefav" ${liveFavOnly()?'checked':''}> Alertes buts : mes clubs</label>`:''}</h2><div class="livegrid">${L.map(row).join('')}</div>${othersHtml}</div>`;
 }
 async function liveFetch(manual,only){
   if(liveData.busy) return; liveData.busy=true; liveTry=Date.now();
