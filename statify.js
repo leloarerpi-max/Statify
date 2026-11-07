@@ -1007,7 +1007,7 @@ function boxScore(g){
   const tbl=t=>{
     const ps=t.players.filter(p=>p.min>0).sort((a,b)=>b.pts-a.pts||b.min-a.min), s=t.st||{}, top=ps.length?ps[0].pts:0, won=+t.score>+other(t).score;
     const pm=v=>`<span class="${v>0?'pmp':v<0?'pmn':'mut'}">${v>0?'+':''}${v}</span>`;
-    return `<div class="bx"><div class="bx-head" style="--tc:${tcolor(t.tri)}">${teamLogo(t.tri,34)}<div class="bx-name">${esc(t.name)}<span class="mut">${won?'Victoire':'Défaite'}</span></div><div class="bx-score ${won?'':'lose'}">${t.score}</div></div><div class="scroll"><table class="bxt"><thead><tr><th class="l">Joueur</th><th class="pt">PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>FG</th><th>3P</th><th>LF</th><th>MIN</th><th>+/-</th></tr></thead><tbody>
+    return `<div class="bx"><div class="bx-head" style="--tc:${tcolor(t.tri)}">${teamLogo(t.tri,34)}<div class="bx-name">${esc(t.name)}<span class="mut">${g.status!==3?'En cours':won?'Victoire':'Défaite'}</span></div><div class="bx-score ${won?'':'lose'}">${t.score}</div></div><div class="scroll"><table class="bxt"><thead><tr><th class="l">Joueur</th><th class="pt">PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>FG</th><th>3P</th><th>LF</th><th>MIN</th><th>+/-</th></tr></thead><tbody>
     ${ps.map(p=>`<tr><td class="l bxp">${star('player',p.id,p.name)}${avatar(p.id,p.name,p.tri,24)}${playerLink(p.id,p.name)} <span class="mut">${esc(p.pos)}</span>${ddBadge(p)}</td><td class="pt"><b class="${p.pts===top&&top>0?'best':''}">${p.pts}</b></td><td>${p.reb}</td><td>${p.ast}</td><td>${p.stl}</td><td>${p.blk}</td><td>${p.to}</td><td>${p.fgm}/${p.fga}<i class="pcb" style="--w:${p.fga?Math.round(p.fgm/p.fga*100):0}%"></i></td><td>${p.tpm}/${p.tpa}</td><td>${p.ftm}/${p.fta}</td><td class="mut">${Math.round(p.min)}</td><td>${pm(p.pm)}</td></tr>`).join('')}
     <tr class="bx-tot"><td class="l">Total équipe</td><td class="pt"><b>${t.score}</b></td><td>${s.reb??''}</td><td>${s.ast??''}</td><td>${s.stl??''}</td><td>${s.blk??''}</td><td>${s.to??''}</td><td>${s.fgm??''}/${s.fga??''}</td><td>${s.tpm??''}/${s.tpa??''}</td><td>${s.ftm??''}/${s.fta??''}</td><td></td><td></td></tr></tbody></table></div></div>`;
   };
@@ -1452,7 +1452,7 @@ function viewCal(S){
 }
 
 /* ================= Foot (ESPN) : données ================= */
-function closeModals(){ ui.openPlayer=ui.openTeam=ui.openGame=ui.fMatch=ui.fPlayer=ui.fTeam=ui.newsRead=null; }
+function closeModals(){ ui.nLive=null; ui.openPlayer=ui.openTeam=ui.openGame=ui.fMatch=ui.fPlayer=ui.fTeam=ui.newsRead=null; }
 function setSport(x){ const ch=ui.sport!==x; ui.sport=x; try{ localStorage.setItem('suivi-sport',x); }catch(e){} if(ch) setTimeout(()=>{ try{ liveRender(); }catch(e){} },400); }
 const KEYFO='suivi-foot-v1', KEYFF='suivi-foot-fav', KEYFP='suivi-foot-favp', KEYSP='suivi-sport';
 const FLG=[['fra.1','Ligue 1'],['eng.1','Premier League'],['esp.1','Liga'],['ita.1','Serie A'],['ger.1','Bundesliga'],['uefa.champions','Ligue des champions'],['uefa.europa','Europa League'],['uefa.europa.conf','Conférence League']];
@@ -2571,6 +2571,7 @@ function render(){
     else if(ui.newsRead) mh=newsReaderHtml(ui.newsRead);
     else if(ui.openPlayer&&S.P[ui.openPlayer]) mh=playerDetail(S,S.P[ui.openPlayer]);
     else if(ui.openTeam&&S.T[ui.openTeam]) mh=teamDetail(S,S.T[ui.openTeam]);
+    else if(ui.nLive&&liveG[ui.nLive]) mh=boxScore(liveG[ui.nLive]);
     else if(ui.openGame&&gameOrSched(ui.openGame)) mh=boxScore(gameOrSched(ui.openGame));
     mb.innerHTML=mh; M.classList.toggle('on',!!mh); document.body.style.overflow=mh?'hidden':''; M.scrollTop=keep; modalHist(!!mh);
     try{ renderLeaders(S); }catch(e){}
@@ -2644,8 +2645,9 @@ function toggleFav(type,id,name){
   if(a==='closewelcome') return;
   if(a==='favteam') toggleFav('team',id);
   else if(a==='favplayer') toggleFav('player',id,el.dataset.name);
+  else if(a==='nlive'){ closeModals(); ui.nLive=id; $('#modal').scrollTop=0; say('⏳ Box score en direct…','warn'); nbaLiveDetail(); }
   else if(a==='opengame'){ closeModals(); ui.openGame=id; $('#modal').scrollTop=0; render(); }
-  else if(a==='closegame'){ ui.openGame=null; render(); }
+  else if(a==='closegame'){ ui.openGame=null; ui.nLive=null; render(); }
   else if(a==='aikeysave'){ const v=((document.getElementById('aiKeyIn')||{}).value||'').trim().replace(/\s+/g,''); if(v.length<20){ say('⚠️ Cette clé paraît incomplète : copie-la en entier depuis Google AI Studio.','err'); return; } aiKey=v; aiDraft=''; aiModels=null; try{ localStorage.setItem(KEYAI,v); }catch(e){} for(const k in resErr) delete resErr[k]; say('✓ Clé Gemini enregistrée. Le résumé est en cours de rédaction…','ok'); render(); }
   else if(a==='aikeyreset'){ aiKey=''; aiModels=null; try{ localStorage.removeItem(KEYAI); }catch(e){} for(const k in resErr) delete resErr[k]; render(); }
   else if(a==='resgen'){ const m=footIdx().mt.find(z=>String(z.id)===String(id)); if(m){ delete resumes[String(id)]; resSave(); delete resErr[String(id)]; resGen(m); } }
@@ -3122,7 +3124,8 @@ function liveRender(){
     const lg=x.k==='n'?'NBA':footLgName(x.lg), lo=(s,k)=>x.k==='n'?teamLogo(s.id,22):footLogo(s.l,22);
     const go=(x.k==='f'&&Object.values(foot.leagues).some(L=>L.matches[x.id]))?` data-act="fmatch" data-id="${esc(x.id)}" style="cursor:pointer"`:'';
     if(x.k==='f') return liveFootRow(x,mine(x),rkOf(x.lg),go,fl,bar(x),lg);
-    return `<div class="liverow${fl}"${go}><div class="lt">${lo(x.h)}<b>${esc(x.h.n)}</b></div><div class="ls">${x.h.s} - ${x.a.s}<span class="lm">${esc(liveText(x))}</span></div><div class="lt r"><b>${esc(x.a.n)}</b>${lo(x.a)}</div>${bar(x)}${evs(x)}<div class="lc mut">${mine(x)?'⭐ ':''}${esc(lg)}</div></div>`; };
+    const goN=x.k==='n'?` data-act="nlive" data-id="${esc(x.id)}" style="cursor:pointer" title="Box score en direct"`:go;
+    return `<div class="liverow${fl}"${goN}><div class="lt">${lo(x.h)}<b>${esc(x.h.n)}</b></div><div class="ls">${x.h.s} - ${x.a.s}<span class="lm">${esc(liveText(x))}</span></div><div class="lt r"><b>${esc(x.a.n)}</b>${lo(x.a)}</div>${bar(x)}${evs(x)}<div class="lc mut">${mine(x)?'⭐ ':''}${esc(lg)}</div></div>`; };
   box.innerHTML=`<div class="card livecard"><h2><span class="livedot"></span><span class="lhn">En direct</span> <span class="mut" style="font-size:12px;font-weight:400">· mis à jour il y a ${ago} s · <span class="link" data-act="liverefresh">actualiser</span></span>${want==='f'?`<label class="mut" style="font-size:12px;margin-left:auto;font-weight:400"><input type="checkbox" data-act="livefav" ${liveFavOnly()?'checked':''}> Alertes buts : mes clubs</label>`:''}</h2><div class="livegrid">${L.map(row).join('')}</div>${othersHtml}</div>`;
 }
 async function liveFetch(manual,only){
@@ -3168,6 +3171,7 @@ async function liveFetch(manual,only){
     if(!changed&&items.some(x=>x.st==='in')&&Date.now()-liveRen>6e4) changed=true;
     liveRender(); if(changed&&!document.querySelector('input:focus')){ liveRen=Date.now(); render(); }
     if(ui.fMatch) await liveDetail(ui.fMatch);
+    if(ui.nLive) await nbaLiveDetail();
     // fins de match : on complète les détails
     for(const k of ended){ const [kind,lg,id]=k.split(':'); const it=items.find(x=>x.k===kind&&x.id===id&&x.lg===lg);
       if(!it||!it.done) continue;
@@ -3175,6 +3179,33 @@ async function liveFetch(manual,only){
       if(kind==='f'){ try{ footIngest({__foot:'summary',league:lg,id,data:await footGet(`https://site.api.espn.com/apis/site/v2/sports/soccer/${lg}/summary?event=${id}`)}); footSave(); render(); }catch(e){} }
       else { sayMute=ui.sport==='foot'; try{ await nbaEspnRefresh(); }catch(e){} finally{ sayMute=false; } } }
   }finally{ liveData.busy=false; }
+}
+
+/* ---- Box score NBA en direct (ESPN) : on touche un match de la bande « En direct » ---- */
+const liveG={};
+function nbaLiveParse(d,id){
+  const comp=d&&d.header&&d.header.competitions&&d.header.competitions[0]; if(!comp) return null;
+  const tri=a=>ESPN_TRI[a]||a, side={};
+  for(const c of comp.competitors||[]) side[c.homeAway]={tri:tri(c.team.abbreviation),name:c.team.displayName||tname(tri(c.team.abbreviation)),score:+c.score||0,q:(c.linescores||[]).map(x=>+x.displayValue).filter(Number.isFinite)};
+  if(!side.home||!side.away) return null;
+  const ty=(comp.status&&comp.status.type)||{}, two=v=>{ const m=/(\d+)\s*-\s*(\d+)/.exec(v||''); return m?[+m[1],+m[2]]:[0,0]; };
+  for(const pt of (d.boxscore&&d.boxscore.players)||[]){
+    const T=tri(pt.team.abbreviation), sd=side.home.tri===T?side.home:side.away.tri===T?side.away:null, blk=(pt.statistics||[])[0]; if(!sd||!blk) continue;
+    const names=blk.names||blk.keys||[], ix=k=>names.indexOf(k), num=(arr,k)=>{ const v=arr[ix(k)]; return v==null||v==='--'?0:(parseFloat(String(v).replace('+',''))||0); };
+    sd.players=(blk.athletes||[]).map(a=>{ const s=a.stats||[], [fgm,fga]=two(s[ix('FG')]), [tpm,tpa]=two(s[ix('3PT')]), [ftm,fta]=two(s[ix('FT')]);
+      return {id:String(a.athlete.id),name:a.athlete.displayName,tri:T,pos:(a.athlete.position&&a.athlete.position.abbreviation)||'',starter:!!a.starter,min:num(s,'MIN'),pts:num(s,'PTS'),reb:num(s,'REB'),ast:num(s,'AST'),stl:num(s,'STL'),blk:num(s,'BLK'),to:num(s,'TO'),pf:num(s,'PF'),fgm,fga,tpm,tpa,ftm,fta,pm:num(s,'+/-'),oreb:ix('OREB')>=0?num(s,'OREB'):null,dreb:ix('DREB')>=0?num(s,'DREB'):null}; });
+    const tot=blk.totals||[], [fgm,fga]=two(tot[ix('FG')]), [tpm,tpa]=two(tot[ix('3PT')]), [ftm,fta]=two(tot[ix('FT')]);
+    sd.st={fgm,fga,tpm,tpa,ftm,fta,reb:num(tot,'REB'),ast:num(tot,'AST'),stl:num(tot,'STL'),blk:num(tot,'BLK'),to:num(tot,'TO'),pf:num(tot,'PF'),oreb:ix('OREB')>=0?num(tot,'OREB'):null,dreb:ix('DREB')>=0?num(tot,'DREB'):null};
+  }
+  for(const k of ['home','away']){ side[k].players=side[k].players||[]; side[k].st=side[k].st||{}; }
+  return {id:'L'+id,status:ty.completed?3:2,statusText:ty.shortDetail||ty.detail||'En cours',time:comp.date||'',home:side.home,away:side.away};
+}
+async function nbaLiveDetail(){
+  const id=ui.nLive; if(!id) return;
+  try{ const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${encodeURIComponent(id)}`,{cache:'no-store'}); if(!r.ok) throw new Error('HTTP '+r.status);
+    const g=nbaLiveParse(await r.json(),id); if(!g) throw new Error('données illisibles'); liveG[id]=g;
+    if(ui.nLive===id&&!document.querySelector('#modal input:focus,#modal textarea:focus')) render();
+  }catch(e){ if(!liveG[id]){ say('⚠️ Box score en direct indisponible : '+esc(e.message||'erreur'),'err'); ui.nLive=null; } }
 }
 async function liveDetail(id){
   const it=(liveData.items||[]).find(x=>x.k==='f'&&x.id===String(id)&&x.st==='in'); if(!it) return;
