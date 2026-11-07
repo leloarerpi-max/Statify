@@ -370,14 +370,15 @@ function drawOf(t){ let ev=currentEvent(), key=ev?t+':'+ev.id:'', D=key&&S.draw[
   if(!ev){ const ks=Object.keys(S.draw).filter(k=>k.startsWith(t+':')).sort((a,b)=>(S.draw[b].t||0)-(S.draw[a].t||0)); if(ks.length){ key=ks[0]; D=S.draw[key]; ev={id:key.split(':')[1],sn:D.n,start:D.start,end:D.end}; past=true; } }
   return {ev,key,D,past,all:(D?Object.values(D.ms||{}):[]).filter(m=>S.qual||!isQual(m))}; }
 const TZ=['L','C','R'], TZN={L:'Colonne gauche',C:'Centre',R:'Colonne droite'}, KZ='suivi-tennis-zones';
-const TB_LABEL={live:'🔴 En direct',today:"⏰ À venir aujourd'hui",results:'🏁 Résultats récents',mine:'⭐ Mes joueurs',bracket:'🌳 Tableau du tournoi (arbre)',rank:'📊 Classement',stats:'📈 Faits marquants (Stats ATP)'};
-const TSIZE=['today','results','rank'];
+const tmv=r=>r.pv==null?'<span class="mv eq">·</span>':r.pv>r.rk?`<span class="mv up">▲${r.pv-r.rk}</span>`:r.pv<r.rk?`<span class="mv dn">▼${r.rk-r.pv}</span>`:'<span class="mv eq">=</span>';
+const TB_LABEL={lrank:'🌍 Classement ATP en direct (flèches)',live:'🔴 En direct',today:"⏰ À venir aujourd'hui",results:'🏁 Résultats récents',mine:'⭐ Mes joueurs',bracket:'🌳 Tableau du tournoi (arbre)',rank:'📊 Classement (ESPN)',stats:'📈 Faits marquants (Stats ATP)'};
+const TSIZE=['today','results','rank','lrank'];
 let tz=jl(KZ,null);
-const tzDefault=()=>({L:['mine','rank'],C:['live','today','bracket'],R:['results','stats'],n:{}});
+const tzDefault=()=>({L:['mine','lrank'],C:['live','today','bracket'],R:['results','stats'],n:{}});
 function tzInit(){ if(!tz||!tz.L||!tz.C||!tz.R) tz=tzDefault(); if(!tz.n) tz.n={}; }
 const tzSave=()=>js_(KZ,tz);
 function tzPlaced(){ tzInit(); return [...tz.L,...tz.C,...tz.R]; }
-const tzSizeLbl=id=>{ const all=tz.n[id]==='all'; return id==='rank'?(all?'📏 Top 50':'📏 Top 10'):(all?'📏 Tout':'📏 Top 8'); };
+const tzSizeLbl=id=>{ const all=tz.n[id]==='all'; return id==='rank'||id==='lrank'?(all?'📏 Top 50':'📏 Top 10'):(all?'📏 Tout':'📏 Top 8'); };
 function tzBlock(id){ const t=myTour(), ms=allMatches(t), all=tz.n[id]==='all';
   const byT=(a,b)=>(Date.parse(a.t)||0)-(Date.parse(b.t)||0);
   const list=(L,empty)=>L.length?`<div class="tng tzg">${L.map(mini).join('')}</div>`:`<p class="mut" style="margin:0">${empty}</p>`;
@@ -390,8 +391,13 @@ function tzBlock(id){ const t=myTour(), ms=allMatches(t), all=tz.n[id]==='all';
     return box('⭐ Mes joueurs',list(L,'Aucun match récent de tes joueurs.')); }
   if(id==='bracket'){ const d=drawOf(t); if(!d.ev) return box('🌳 Tableau du tournoi','<p class="mut" style="margin:0">Aucun tournoi en cours aujourd\'hui.</p>'); return box('🌳 '+esc(d.ev.sn||'Tournoi'),bracketHtml(d.all)); }
   if(id==='rank'){ const R=S.cache.rank[t]; if(!R) return box('📊 Classement '+t.toUpperCase(),'<p class="mut" style="margin:0">Classement en chargement…</p>');
-    const rows=R.rows.slice(0,all?50:10).map(r=>`<div class="rr${S.fav[r.id]?' fv':''}"><span class="rk">${r.rk}</span><div class="rt"><b>${esc(r.n)}</b></div><b class="rp">${r.pts!=null?r.pts.toLocaleString('fr-FR'):'–'}</b></div>`).join('');
+    const rows=R.rows.slice(0,all?50:10).map(r=>`<div class="rr${S.fav[r.id]?' fv':''}"><span class="rk">${r.rk}</span>${tmv(r)}<div class="rt"><b>${esc(r.n)}</b></div><b class="rp">${r.pts!=null?r.pts.toLocaleString('fr-FR'):'–'}</b></div>`).join('');
     return box('📊 Classement '+t.toUpperCase(),rows); }
+  if(id==='lrank'){ const T=window.__tennis, C=T&&T.etat().cl, cfg=T&&T.etat().robot&&T.etat().robot.url;
+    if(C&&!C.l.length&&cfg&&!S.lrT&&window.tennisClassement){ S.lrT=1; Promise.resolve(window.tennisClassement(false)).then(()=>{ try{ window.tennisRender&&window.tennisRender(); }catch(e){} }); }
+    if(!C||!C.l.length) return box('🌍 Classement ATP en direct',`<p class="mut" style="margin:0">${cfg?'Chargement du classement en direct…':'Classement live indisponible : renseigne le robot (réglage en bas de l’onglet Stats ATP). Classement ESPN avec flèches disponible via le bloc « Classement (ESPN) ».'}</p>`);
+    const rows=C.l.slice(0,all?50:10).map(x=>`<div class="rr"><span class="rk">${esc(x.rang)}</span>${x.variation?`<span class="mv ${x.variation>0?'up':'dn'}">${x.variation>0?'▲'+x.variation:'▼'+Math.abs(x.variation)}</span>`:'<span class="mv eq">=</span>'}<div class="rt"><b>${esc(x.nom)}</b>${x.resultat?`<div class="mut" style="font-size:11px">${esc(x.resultat)}</div>`:''}</div><b class="rp">${x.points!=null?esc(x.points):'–'}</b></div>`).join('');
+    return box('🌍 Classement ATP en direct',rows+`<div class="mut" style="font-size:11px;margin-top:6px">Points en direct · live-tennis.eu${C.maj?' · lu à '+new Date(C.maj).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):''}</div>`); }
   if(id==='stats'){ const J=window.__tennisJoueurs, T=window.__tennis; return box('📈 Faits marquants',J&&T?J.faitsHtml(T.filtrer(),'rgba(128,128,128,.32)'):'<p class="mut" style="margin:0">Stats indisponibles.</p>'); }
   return ''; }
 function tzRender(){ tzInit(); const edit=!!S.tzEdit, Z={};
