@@ -59,10 +59,10 @@ const K={fav:'suivi-tennis-fav',pref:'suivi-tennis-pref',cache:'suivi-tennis-cac
 const jl=(k,d)=>{ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } };
 const js_=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
 const P0=jl(K.pref,{});
-const S={errT:{},tab:['today','draw','rank','mine'].includes(P0.tab)?P0.tab:'today',tour:P0.tour==='wta'?'wta':'atp',day:0,mine:!!P0.mine,rankN:P0.rankN||50,more:0,
+const S={errT:{},tab:['today','draw','rank','mine','stats'].includes(P0.tab)?P0.tab:'today',qual:!!P0.qual,tour:P0.tour==='wta'?'wta':'atp',day:0,mine:!!P0.mine,rankN:P0.rankN||50,more:0,
   fav:jl(K.fav,{}),cache:jl(K.cache,{board:{},rank:{}}),draw:jl(K.draw,{}),busy:{},err:{},open:{},evSel:'',diag:null,pasteT:0};
 S.cache.board=S.cache.board||{}; S.cache.rank=S.cache.rank||{};
-const savePref=()=>js_(K.pref,{tab:S.tab,tour:S.tour,mine:S.mine,rankN:S.rankN});
+const savePref=()=>js_(K.pref,{tab:S.tab,tour:S.tour,mine:S.mine,rankN:S.rankN,qual:S.qual});
 const saveFav=()=>js_(K.fav,S.fav);
 // matchs étoilés (★) : {idMatch:{t:date,tr:circuit}} ; propres à cet appareil, oubliés après 3 jours
 S.starM=jl(K.starm,{}); for(const k of Object.keys(S.starM)) if(Date.now()-((S.starM[k]||{}).t||0)>3*864e5) delete S.starM[k];
@@ -106,7 +106,8 @@ setInterval(()=>{ if(ui.sport!=='tennis'||document.hidden||S.tab==='rank') retur
 
 /* ---------- 5. Données utiles aux écrans ---------- */
 const boardEvents=(tour,off)=>((S.cache.board[bKey(tour,off)]||{}).ev)||[];
-function allMatches(tour){ const out=[]; for(const k of Object.keys(S.draw)) if(k.startsWith(tour+':')) out.push(...Object.values(S.draw[k].ms||{})); return out; }
+const isQual=m=>m.ri===0||/qualif/i.test(m.rd||'');   // qualifications : masquées par défaut (case « Qualifications » pour les afficher)
+function allMatches(tour){ const out=[]; for(const k of Object.keys(S.draw)) if(k.startsWith(tour+':')) out.push(...Object.values(S.draw[k].ms||{}).filter(m=>S.qual||!isQual(m))); return out; }
 // matchs d'un jour (jour de Paris) ; un match en cours compte pour aujourd'hui quelle que soit son heure de départ
 const dayMs=(tour,off)=>allMatches(tour).filter(m=>m.st==='in'?off===0:!!Date.parse(m.t)&&parisDK(m.t)===dayKey(off));
 function currentEvent(){ const evs=boardEvents(myTour(),0).filter(e=>e.ms.length||true); if(!evs.length) return null; return evs.find(e=>e.id===S.evSel)||evs.slice().sort((a,b)=>b.ms.length-a.ms.length)[0]; }
@@ -133,7 +134,7 @@ function card(m){ const fv=isFav(m.a)||isFav(m.b), head=`${esc(m.en||'')}${m.en&
   return `<div class="tnc${fv||isStar(m)?' fv':''}"><div class="tnh"><span>${head}</span><span style="display:flex;gap:6px;align-items:center;flex:none">${pill}${ms}</span></div>${row(m,m.a,m.b)}${row(m,m.b,m.a)}</div>`; }
 function hero(title,sub,live,extra){ const t=myTour();
   return `<div class="mxhero"><div class="row between" style="gap:10px;align-items:center;flex-wrap:wrap"><div style="min-width:0"><h2 style="margin:0">${live?'<span class="livedot"></span>':''}${title}</h2><div class="mut" style="font-size:12px;margin-top:2px">${sub}</div></div>
-    <div class="row" style="gap:6px;flex-wrap:nowrap"><button class="${t==='atp'?'':'sec '}fbtn" data-tn="tour" data-v="atp">ATP</button><button class="${t==='wta'?'':'sec '}fbtn" data-tn="tour" data-v="wta">WTA</button></div></div>${extra||''}</div>`; }
+    <div class="row" style="gap:6px;flex-wrap:nowrap"><button class="${t==='atp'?'':'sec '}fbtn" data-tn="tour" data-v="atp">ATP</button><button class="${t==='wta'?'':'sec '}fbtn" data-tn="tour" data-v="wta">WTA</button><label class="mut" style="font-size:12px;display:flex;align-items:center;gap:4px;margin-left:6px;white-space:nowrap;cursor:pointer"><input type="checkbox" data-tn="qual" ${S.qual?'checked':''}> Qualifications</label></div></div>${extra||''}</div>`; }
 function status(k){ if(S.busy[k]&&!S.cache.board[k]) return '<div class="card"><p class="mut" style="margin:0">⏳ Chargement…</p></div>';
   if(S.err[k]&&!(S.cache.board[k])) return `<div class="card"><p class="err" style="margin:0 0 6px">⚠️ ESPN ne répond pas (${esc(S.err[k])}).</p><button class="sec" data-tn="refresh">Réessayer</button> <button class="sec" data-tn="diag">🔧 Diagnostic ESPN</button></div>`; return ''; }
 
@@ -157,7 +158,7 @@ function vDraw(){ const t=myTour(); let ev=currentEvent(), key=ev?t+':'+ev.id:''
   if(!ev){ const ks=Object.keys(S.draw).filter(k=>k.startsWith(t+':')).sort((a,b)=>(S.draw[b].t||0)-(S.draw[a].t||0)); if(ks.length){ key=ks[0]; D=S.draw[key]; ev={id:key.split(':')[1],sn:D.n,start:D.start,end:D.end}; past=true; } }
   if(!ev) return hero('🏆 Tableau du tournoi','',false)+status(bKey(t,0))+(S.busy[bKey(t,0)]?'':'<div class="card"><p class="mut" style="margin:0">Aucun tournoi en cours aujourd\'hui. Le tableau apparaît dès qu\'ESPN annonce un tournoi.</p></div>');
   const evs=boardEvents(t,0), sel=evs.length>1?`<select data-tn-sel="ev" style="margin-top:10px">${evs.map(e=>`<option value="${esc(e.id)}" ${e.id===ev.id?'selected':''}>${esc(e.sn)}</option>`).join('')}</select>`:'';
-  const all=D?Object.values(D.ms||{}):[], by={}; all.forEach(m=>{ (by[m.ri]||(by[m.ri]=[])).push(m); });
+  const all=(D?Object.values(D.ms||{}):[]).filter(m=>S.qual||!isQual(m)), by={}; all.forEach(m=>{ (by[m.ri]||(by[m.ri]=[])).push(m); });
   const ris=Object.keys(by).map(Number).sort((a,b)=>a-b);
   const dateTxt=(ev.start?new Date(ev.start).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}):'')+(ev.end?' – '+new Date(ev.end).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}):'');
   let h=hero('🏆 '+esc(ev.sn||'Tournoi'),(past?'Dernier tournoi enregistré · ':'')+esc(dateTxt),all.some(m=>m.st==='in'),sel)+status(bKey(t,0))+`<div class="mut" style="font-size:12px;margin:-4px 4px 8px;text-align:right">${S.busy['d'+key]?'⏳ lecture des jours précédents…':`<span class="link" data-tn="drawdays" data-id="${esc(ev.id)}">↻ Compléter avec les jours précédents</span>`}</div>`;
@@ -342,9 +343,13 @@ function ntCard(){ if(!NT_OK) return `<div class="card"><h2 style="margin:0">�
     <p class="mut" style="margin:8px 0 0;font-size:13px">${txt}</p>${on?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="${NT.scope==='all'?'':'sec '}fbtn" data-tn="ntscope" data-v="all">Tous les matchs en direct</button><button class="${NT.scope==='fav'?'':'sec '}fbtn" data-tn="ntscope" data-v="fav">Mes joueurs + matchs ★</button><button class="${NT.scope==='pick'?'':'sec '}fbtn" data-tn="ntscope" data-v="pick">Matchs ★ seulement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${opt('start','Début')}${opt('game','Chaque jeu')}${opt('set','Chaque set')}${opt('end','Fin du match')}<button class="${NT.snd?'':'sec '}fbtn" data-tn="ntopt" data-v="snd">${NT.snd?'🔊 Son':'🔇 Son'}</button><button class="sec fbtn" data-tn="ntsnd">Tester le son</button><button class="sec fbtn" data-tn="nttest">Tester la notification</button></div>${NT.stat?`<p class="mut" style="margin:8px 0 0;font-size:12px">Surveillance : ${NT.stat.n} match${NT.stat.n>1?'s':''} · dernière lecture d\'ESPN à ${new Date(NT.stat.t).toLocaleTimeString('fr-FR',{timeZone:'Europe/Paris'})}</p>`:'<p class="mut" style="margin:8px 0 0;font-size:12px">Surveillance : pas encore de lecture depuis l\'ouverture de la page.</p>'}${NT.lastSnd?`<p class="mut" style="margin:8px 0 0;font-size:12px">${esc(NT.lastSnd)}</p>`:''}${NT.last?`<p class="mut" style="margin:8px 0 0;font-size:12px">Dernier essai : ${esc(NT.last)}. Si rien n'apparaît à l'écran alors que c'est « ok » : Windows → Paramètres → Système → Notifications → active ton navigateur et coupe « Ne pas déranger » / « Assistant de concentration » ; sur Mac : Réglages → Notifications → ton navigateur.</p>`:''}`:''}</div>`; }
 
 /* ---------- 12. Affichage principal + clics ---------- */
-const TABS=[['today','📅',"Aujourd'hui"],['draw','🏆','Tableau'],['rank','📊','Classement'],['mine','⭐','Mes joueurs']];
+const TABS=[['today','📅',"Aujourd'hui"],['draw','🏆','Tableau'],['rank','📊','Classement'],['mine','⭐','Mes joueurs'],['stats','📈','Stats ATP']];
 window.tennisRender=function(){ $('#tabs').innerHTML=TABS.map(([k,i,l])=>`<button data-act="tab" data-t="${k}" class="${S.tab===k?'on':''}"><i>${i}</i><span>${esc(l)}</span></button>`).join('');
-  const f={today:vToday,draw:vDraw,rank:vRank,mine:vMine}[S.tab]; $('#view').innerHTML=f(); ensure(); };
+  const f={today:vToday,draw:vDraw,rank:vRank,mine:vMine,stats:()=>'<div id="tennisViewContent"></div>'}[S.tab]; $('#view').innerHTML=f(); ensure();
+  // Stats ATP = l'ancien onglet Tennis de PronoTracker (Elo, palmarès, fiches joueurs, duels, historique), affiché ici
+  if(S.tab==='stats') setTimeout(()=>{ try{ window.__tennis&&window.__tennis.render(); }catch(e){} },0);
+  // les matchs ATP terminés s'enregistrent tout seuls (comme avant dans PronoTracker) dès qu'on ouvre le tennis
+  if(!S.recT){ S.recT=1; setTimeout(()=>{ try{ window.tennisOuvrir&&window.tennisOuvrir(); }catch(e){} },1500); } };
 window.tennisRefresh=tennisRefresh;
 window.Tennis={parseBoard,parseRank,roundFr,roundIdx,sample,state:S,nt:NT,ntScan,ntEvents,ntSend:NTS};
 if(ui.sport==='tennis') render();   // le premier rendu a eu lieu avant le chargement de ce fichier
@@ -352,6 +357,7 @@ document.addEventListener('click',e=>{ if(ui.sport!=='tennis') return;
   const tb=e.target.closest&&e.target.closest('#tabs [data-act=tab]'); if(tb){ e.stopPropagation(); e.preventDefault(); S.tab=tb.dataset.t; S.more=0; savePref(); render(); window.scrollTo(0,0); return; }
   const el=e.target.closest&&e.target.closest('#view [data-tn]'); if(!el) return; const a=el.dataset.tn, v=el.dataset.v;
   if(a==='tour'){ S.tour=v; S.more=0; S.evSel=''; savePref(); render(); }
+  else if(a==='qual'){ S.qual=!S.qual; S.more=0; savePref(); render(); }
   else if(a==='day'){ S.day=+v; S.more=0; render(); }
   else if(a==='mine'){ S.mine=!S.mine; savePref(); render(); }
   else if(a==='more'){ S.more++; render(); }

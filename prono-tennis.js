@@ -201,7 +201,10 @@
   }
 
   /* ---------- Affichage général ---------- */
-  const ONGLETS = [['cal', '📅 Calendrier'], ['cl', '🌍 Classement'], ['jou', '👥 Joueurs'], ['his', '📚 Historique']];
+  // Dans Statify, Calendrier et Classement existent déjà (onglets Aujourd'hui / Classement) : on ne garde ici que Joueurs et Historique
+  const INTEGRE = !document.getElementById('analyzerViewContent');
+  const ONGLETS = INTEGRE ? [['jou', '👥 Joueurs'], ['his', '📚 Historique']] : [['cal', '📅 Calendrier'], ['cl', '🌍 Classement'], ['jou', '👥 Joueurs'], ['his', '📚 Historique']];
+  if (INTEGRE && S.onglet === 'cal') S.onglet = 'jou';
   const barreOnglets = () => `<div role="tablist" style="display:flex;gap:6px;overflow-x:auto;margin-top:12px;padding-bottom:2px">${ONGLETS.map(([k, t]) => `<button type="button" role="tab" aria-selected="${S.onglet === k}" onclick="tennisOnglet('${k}')" style="flex:1 0 auto;min-height:46px;padding:0 14px;border-radius:12px;font-weight:800;font-size:13px;cursor:pointer;white-space:nowrap;${S.onglet === k ? 'background:#1d4ed8;color:#fff;border:1px solid #3b82f6;box-shadow:0 4px 14px rgba(29,78,216,.3)' : 'background:transparent;color:inherit;border:1px solid ' + BD}">${t}</button>`).join('')}</div>`;
   function contenuOnglet() {
     const J = window.__tennisJoueurs;
@@ -217,7 +220,7 @@
   }
   function render() {
     const el = root(); if (!el) return;
-    elargir(el);
+    if (!INTEGRE) elargir(el);
     const data = S.days[S.jour];
     el.innerHTML = `<style>.tnG{display:grid;gap:14px}@media (min-width:1100px){.tnG{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}}</style><div class="surface" style="border:1px solid ${BD};border-radius:16px;padding:14px">
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;border-radius:14px;padding:14px;color:#fff;background:linear-gradient(135deg,#14532d,#166534 55%,#a3e635 220%)">
