@@ -59,10 +59,10 @@ const K={fav:'suivi-tennis-fav',pref:'suivi-tennis-pref',cache:'suivi-tennis-cac
 const jl=(k,d)=>{ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } };
 const js_=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
 const P0=jl(K.pref,{});
-const S={errT:{},tab:['today','draw','rank','mine','stats'].includes(P0.tab)?P0.tab:'today',qual:!!P0.qual,tour:P0.tour==='wta'?'wta':'atp',day:0,mine:!!P0.mine,rankN:P0.rankN||50,more:0,
+const S={errT:{},tab:['home','today','draw','rank','mine','stats'].includes(P0.tab)?P0.tab:'home',qual:!!P0.qual,dmode:P0.dmode==='list'?'list':'tree',autoDraw:{},tour:P0.tour==='wta'?'wta':'atp',day:0,mine:!!P0.mine,rankN:P0.rankN||50,more:0,
   fav:jl(K.fav,{}),cache:jl(K.cache,{board:{},rank:{}}),draw:jl(K.draw,{}),busy:{},err:{},open:{},evSel:'',diag:null,pasteT:0};
 S.cache.board=S.cache.board||{}; S.cache.rank=S.cache.rank||{};
-const savePref=()=>js_(K.pref,{tab:S.tab,tour:S.tour,mine:S.mine,rankN:S.rankN,qual:S.qual});
+const savePref=()=>js_(K.pref,{tab:S.tab,tour:S.tour,mine:S.mine,rankN:S.rankN,qual:S.qual,dmode:S.dmode});
 const saveFav=()=>js_(K.fav,S.fav);
 // matchs étoilés (★) : {idMatch:{t:date,tr:circuit}} ; propres à cet appareil, oubliés après 3 jours
 S.starM=jl(K.starm,{}); for(const k of Object.keys(S.starM)) if(Date.now()-((S.starM[k]||{}).t||0)>3*864e5) delete S.starM[k];
@@ -98,7 +98,8 @@ function tennisRefresh(manual){ const t=myTour();
   if(manual&&typeof say==='function') say('🎾 Actualisation du tennis…','warn'); }
 function ensure(){ const t=myTour();
   loadBoard(t,0); if(S.tab==='today'&&S.day!==0&&!dayMs(t,S.day).length) loadBoard(t,S.day);   // le scoreboard du jour contient déjà les autres jours ; lecture datée seulement en dernier recours
-  loadRank(t); }
+  loadRank(t);
+  try{ if(S.tab==='draw'||(S.tab==='home'&&tzPlaced().includes('bracket'))){ const ev=currentEvent(); if(ev&&!S.autoDraw[t+ev.id]){ S.autoDraw[t+ev.id]=1; loadDraw(t,ev); } } }catch(e){} }
 // mise à jour automatique : toutes les 30 s s'il y a du direct ou un match imminent (le scoreboard pèse ~200 Ko), sinon toutes les 3 min
 function hasLive(){ return allMatches(myTour()).some(m=>m.st==='in'||(m.st==='pre'&&Date.parse(m.t)-Date.now()<20*6e4&&Date.parse(m.t)-Date.now()>-3*36e5)); }
 setInterval(()=>{ if(ui.sport!=='tennis'||document.hidden||S.tab==='rank') return; const c=S.cache.board[bKey(myTour(),0)], age=Date.now()-((c&&c.t)||0), live=hasLive();
@@ -170,6 +171,8 @@ function vDraw(){ const t=myTour(); let ev=currentEvent(), key=ev?t+':'+ev.id:''
       const sh=mm?({5:'Quart',6:'Demi',7:'Finale'}[mm.ri]||mm.rdf.replace(/ de finale$/,'')):nm;
       return `<span class="pc${state}">${esc(sh)}${state===' ok'?' ✓':state===' ko'?' ✗':state===' cur'?' · en cours':''}</span>`; };
     h+=`<div class="mxl">⭐ Parcours de ${esc(fp.s)}</div><div class="card" style="padding:10px 14px"><div class="tnparc">${rds.map(cell).join('')}</div></div>`; }
+  h+=`<div class="row" style="gap:6px;margin:0 0 10px"><button class="${S.dmode==='list'?'sec ':''}fbtn" data-tn="dmode" data-v="tree">🌳 Arbre</button><button class="${S.dmode==='list'?'':'sec '}fbtn" data-tn="dmode" data-v="list">📋 Liste par tour</button></div>`;
+  if(S.dmode!=='list') return h+`<div class="card" style="padding:12px">${bracketHtml(all)}</div>`;
   // tours : en cours d'abord, puis les suivants, puis les tours passés (repliés)
   const curRi=ris.find(r=>by[r].some(m=>m.st!=='post'))??ris[ris.length-1], later=ris.filter(r=>r>curRi), earlier=ris.filter(r=>r<curRi).reverse();
   const futureMissing=[5,6,7].filter(r=>r>Math.max(...ris));   // seulement quarts / demis / finale (les tours intermédiaires varient selon le tournoi)
@@ -343,9 +346,83 @@ function ntCard(){ if(!NT_OK) return `<div class="card"><h2 style="margin:0">�
     <p class="mut" style="margin:8px 0 0;font-size:13px">${txt}</p>${on?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="${NT.scope==='all'?'':'sec '}fbtn" data-tn="ntscope" data-v="all">Tous les matchs en direct</button><button class="${NT.scope==='fav'?'':'sec '}fbtn" data-tn="ntscope" data-v="fav">Mes joueurs + matchs ★</button><button class="${NT.scope==='pick'?'':'sec '}fbtn" data-tn="ntscope" data-v="pick">Matchs ★ seulement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${opt('start','Début')}${opt('game','Chaque jeu')}${opt('set','Chaque set')}${opt('end','Fin du match')}<button class="${NT.snd?'':'sec '}fbtn" data-tn="ntopt" data-v="snd">${NT.snd?'🔊 Son':'🔇 Son'}</button><button class="sec fbtn" data-tn="ntsnd">Tester le son</button><button class="sec fbtn" data-tn="nttest">Tester la notification</button></div>${NT.stat?`<p class="mut" style="margin:8px 0 0;font-size:12px">Surveillance : ${NT.stat.n} match${NT.stat.n>1?'s':''} · dernière lecture d\'ESPN à ${new Date(NT.stat.t).toLocaleTimeString('fr-FR',{timeZone:'Europe/Paris'})}</p>`:'<p class="mut" style="margin:8px 0 0;font-size:12px">Surveillance : pas encore de lecture depuis l\'ouverture de la page.</p>'}${NT.lastSnd?`<p class="mut" style="margin:8px 0 0;font-size:12px">${esc(NT.lastSnd)}</p>`:''}${NT.last?`<p class="mut" style="margin:8px 0 0;font-size:12px">Dernier essai : ${esc(NT.last)}. Si rien n'apparaît à l'écran alors que c'est « ok » : Windows → Paramètres → Système → Notifications → active ton navigateur et coupe « Ne pas déranger » / « Assistant de concentration » ; sur Mac : Réglages → Notifications → ton navigateur.</p>`:''}`:''}</div>`; }
 
 /* ---------- 12. Affichage principal + clics ---------- */
-const TABS=[['today','📅',"Aujourd'hui"],['draw','🏆','Tableau'],['rank','📊','Classement'],['mine','⭐','Mes joueurs'],['stats','📈','Stats ATP']];
+
+
+/* ---------- Tableau en arbre (branches) + Accueil tennis en zones libres ---------- */
+function bracketHtml(all){
+  if(!all.length) return '<p class="mut" style="margin:0">Aucun match.</p>';
+  const byR={}; all.forEach(m=>(byR[m.ri]||(byR[m.ri]=[])).push(m));
+  const ris=Object.keys(byR).map(Number).sort((a,b)=>a-b), win=m=>m.st==='post'?(m.a.w?m.a:m.b.w?m.b:null):null;
+  const kids=new Map(), used=new Set();
+  for(let i=1;i<ris.length;i++) for(const m of byR[ris[i]]){ const ks=[];
+    for(const p of [m.a,m.b]){ const km=byR[ris[i-1]].find(x=>!used.has(x.id)&&win(x)&&win(x).id===p.id); if(km){ ks.push(km); used.add(km.id); } }
+    if(ks.length) kids.set(m.id,ks); }
+  const byT=(a,b)=>(Date.parse(a.t)||0)-(Date.parse(b.t)||0);
+  const roots=all.filter(m=>!used.has(m.id)).sort((a,b)=>b.ri-a.ri||byT(a,b));
+  const trees=roots.filter(m=>kids.has(m.id)), leaves=roots.filter(m=>!kids.has(m.id));
+  const node=m=>{ const ks=kids.get(m.id)||[]; return `<div class="bn">${ks.length?`<div class="bk">${ks.map(node).join('')}</div>`:''}<div class="bm${ks.length?' hk':''}"><div class="brl">${esc(m.rdf)}</div>${mini(m)}</div></div>`; };
+  let h=trees.length?`<div class="brk">${trees.map(m=>`<div class="broot">${node(m)}</div>`).join('')}</div>`:'';
+  if(leaves.length){ const g={}; leaves.forEach(m=>(g[m.rdf]||(g[m.rdf]=[])).push(m));
+    h+=(trees.length?'<div class="mxl" style="margin-top:12px">Autres matchs (l\'arbre se dessine au fil des tours)</div>':'<div class="mut" style="font-size:12px;margin:0 0 8px">Les branches se dessinent au fil des tours : pour l\'instant, les matchs sont listés par tour.</div>')
+      +Object.keys(g).map(r=>`<div class="mut" style="font-weight:700;font-size:12px;margin:8px 0 4px">${esc(r)}</div><div class="tng">${g[r].sort(byT).map(mini).join('')}</div>`).join(''); }
+  return h; }
+function drawOf(t){ let ev=currentEvent(), key=ev?t+':'+ev.id:'', D=key&&S.draw[key], past=false;
+  if(!ev){ const ks=Object.keys(S.draw).filter(k=>k.startsWith(t+':')).sort((a,b)=>(S.draw[b].t||0)-(S.draw[a].t||0)); if(ks.length){ key=ks[0]; D=S.draw[key]; ev={id:key.split(':')[1],sn:D.n,start:D.start,end:D.end}; past=true; } }
+  return {ev,key,D,past,all:(D?Object.values(D.ms||{}):[]).filter(m=>S.qual||!isQual(m))}; }
+const TZ=['L','C','R'], TZN={L:'Colonne gauche',C:'Centre',R:'Colonne droite'}, KZ='suivi-tennis-zones';
+const TB_LABEL={live:'🔴 En direct',today:"⏰ À venir aujourd'hui",results:'🏁 Résultats récents',mine:'⭐ Mes joueurs',bracket:'🌳 Tableau du tournoi (arbre)',rank:'📊 Classement',stats:'📈 Faits marquants (Stats ATP)'};
+const TSIZE=['today','results','rank'];
+let tz=jl(KZ,null);
+const tzDefault=()=>({L:['mine','rank'],C:['live','today','bracket'],R:['results','stats'],n:{}});
+function tzInit(){ if(!tz||!tz.L||!tz.C||!tz.R) tz=tzDefault(); if(!tz.n) tz.n={}; }
+const tzSave=()=>js_(KZ,tz);
+function tzPlaced(){ tzInit(); return [...tz.L,...tz.C,...tz.R]; }
+const tzSizeLbl=id=>{ const all=tz.n[id]==='all'; return id==='rank'?(all?'📏 Top 50':'📏 Top 10'):(all?'📏 Tout':'📏 Top 8'); };
+function tzBlock(id){ const t=myTour(), ms=allMatches(t), all=tz.n[id]==='all';
+  const byT=(a,b)=>(Date.parse(a.t)||0)-(Date.parse(b.t)||0);
+  const list=(L,empty)=>L.length?`<div class="tng tzg">${L.map(mini).join('')}</div>`:`<p class="mut" style="margin:0">${empty}</p>`;
+  const box=(title,body)=>`<div class="card tzcard"><h2>${title}</h2>${body}</div>`;
+  if(id==='live'){ const L=ms.filter(m=>m.st==='in'); return box((L.length?'<span class="livedot"></span> ':'🔴 ')+'En direct',list(L,'Aucun match en cours.')); }
+  if(id==='today'){ const L=dayMs(t,0).filter(m=>m.st==='pre').sort(byT); return box("⏰ À venir aujourd'hui",list(L.slice(0,all?999:8),"Plus de match à venir aujourd'hui.")); }
+  if(id==='results'){ const L=ms.filter(m=>m.st==='post').sort((a,b)=>byT(b,a)); return box('🏁 Résultats récents',list(L.slice(0,all?999:8),'Aucun résultat pour le moment.')); }
+  if(id==='mine'){ const ids=Object.keys(S.fav); if(!ids.length) return box('⭐ Mes joueurs','<p class="mut" style="margin:0">Touche ☆ à côté d\'un joueur pour le suivre.</p>');
+    const seen=new Set(), L=[]; for(const f of ids){ const mm=ms.filter(m=>m.a.id===f||m.b.id===f), pick=mm.find(m=>m.st==='in')||mm.filter(m=>m.st==='pre').sort(byT)[0]||mm.filter(m=>m.st==='post').sort((a,b)=>byT(b,a))[0]; if(pick&&!seen.has(pick.id)){ seen.add(pick.id); L.push(pick); } }
+    return box('⭐ Mes joueurs',list(L,'Aucun match récent de tes joueurs.')); }
+  if(id==='bracket'){ const d=drawOf(t); if(!d.ev) return box('🌳 Tableau du tournoi','<p class="mut" style="margin:0">Aucun tournoi en cours aujourd\'hui.</p>'); return box('🌳 '+esc(d.ev.sn||'Tournoi'),bracketHtml(d.all)); }
+  if(id==='rank'){ const R=S.cache.rank[t]; if(!R) return box('📊 Classement '+t.toUpperCase(),'<p class="mut" style="margin:0">Classement en chargement…</p>');
+    const rows=R.rows.slice(0,all?50:10).map(r=>`<div class="rr${S.fav[r.id]?' fv':''}"><span class="rk">${r.rk}</span><div class="rt"><b>${esc(r.n)}</b></div><b class="rp">${r.pts!=null?r.pts.toLocaleString('fr-FR'):'–'}</b></div>`).join('');
+    return box('📊 Classement '+t.toUpperCase(),rows); }
+  if(id==='stats'){ const J=window.__tennisJoueurs, T=window.__tennis; return box('📈 Faits marquants',J&&T?J.faitsHtml(T.filtrer(),'rgba(128,128,128,.32)'):'<p class="mut" style="margin:0">Stats indisponibles.</p>'); }
+  return ''; }
+function tzRender(){ tzInit(); const edit=!!S.tzEdit, Z={};
+  for(const z of TZ) Z[z]=tz[z].map(id=>{ let b=''; try{ b=tzBlock(id); }catch(e){ b=''; } if(!b&&!edit) return '';
+    return `<div class="tb" data-tb="${id}"${edit?' draggable="true"':''}>${edit?`<div class="hbbar"><span>⠿ ${esc(TB_LABEL[id]||id)}</span><span>${TSIZE.includes(id)?`<button class="sec" data-tn="tzsize" data-id="${id}">${tzSizeLbl(id)}</button>`:''}<button class="sec" data-tn="tzgo" data-id="${id}" data-d="-1" title="Zone précédente">◀</button><button class="sec" data-tn="tzgo" data-id="${id}" data-d="1" title="Zone suivante">▶</button><button class="sec" data-tn="tzdel" data-id="${id}" title="Retirer">✕</button></span></div>`:''}${b||'<p class="mut">(rien à afficher pour l\'instant)</p>'}</div>`; }).join('');
+  const hl=edit||Z.L, hr=edit||Z.R;
+  return `<div class="tz${edit?' edit':''}${hl?' hasl':''}${hr?' hasr':''}">${TZ.map(z=>`<div class="tzc${z==='C'?'':' rail'}" data-zone="${z}" data-label="${TZN[z]}">${Z[z]}</div>`).join('')}</div>`; }
+function tzEditor(){ tzInit(); const cat=Object.keys(TB_LABEL).filter(id=>!tzPlaced().includes(id));
+  const row=(z,id,i)=>`<div class="row hrow"><span style="flex:1">${esc(TB_LABEL[id])}</span>${TSIZE.includes(id)?`<button class="sec" data-tn="tzsize" data-id="${id}">${tzSizeLbl(id)}</button>`:''}<button class="sec" data-tn="tzgo" data-id="${id}" data-d="-1" ${z==='L'?'disabled':''}>◀</button><button class="sec" data-tn="tzmv" data-id="${id}" data-d="-1" ${i===0?'disabled':''}>▲</button><button class="sec" data-tn="tzmv" data-id="${id}" data-d="1" ${i===tz[z].length-1?'disabled':''}>▼</button><button class="sec" data-tn="tzgo" data-id="${id}" data-d="1" ${z==='R'?'disabled':''}>▶</button><button class="sec" data-tn="tzdel" data-id="${id}">✕</button></div>`;
+  return `<div class="card"><h2>Personnaliser l'accueil tennis</h2><p class="mut">Glisse les blocs <b>directement sur la page</b> (poignée ⠿) vers la colonne gauche, le centre ou la colonne droite, ou utilise ◀ ▶ ▲ ▼. ✕ retire un bloc.</p>${TZ.map(z=>`<h3 style="margin:12px 0 4px">${TZN[z]}</h3>${tz[z].map((id,i)=>row(z,id,i)).join('')||'<p class="mut" style="margin:0">Vide.</p>'}`).join('')}<h3 style="margin:14px 0 4px">Ajouter un bloc</h3>${cat.length?`<div class="row"><select id="tzAddSel">${cat.map(id=>`<option value="${id}">${esc(TB_LABEL[id])}</option>`).join('')}</select><select id="tzAddZone"><option value="C">au centre</option><option value="L">colonne gauche</option><option value="R">colonne droite</option></select><button class="sec" data-tn="tzadd">Ajouter</button></div>`:'<p class="mut" style="margin:0">Tous les blocs sont placés.</p>'}<div class="row" style="margin-top:10px"><button data-tn="tzedit">Terminé</button><button class="sec" data-tn="tzreset">Tout réinitialiser</button></div></div>`; }
+function vHome(){ const t=myTour(), k=bKey(t,0), live=allMatches(t).some(m=>m.st==='in');
+  const ex=`<div class="row" style="margin-top:10px;gap:6px;flex-wrap:wrap"><button class="sec fbtn" data-tn="tzedit">⚙ Personnaliser</button><span class="mut" style="margin-left:auto;font-size:12px">${(S.cache.board[k]&&S.cache.board[k].t)?'mis à jour '+new Date(S.cache.board[k].t).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):''}</span></div>`;
+  return hero('🎾 Accueil tennis',esc(new Date().toLocaleDateString('fr-FR',{timeZone:'Europe/Paris',weekday:'long',day:'numeric',month:'long'}))+' · heure de Paris',live,ex)+status(k)+(S.tzEdit?tzEditor():'')+tzRender(); }
+(function(){ let dragId=null;
+  const clean=()=>document.querySelectorAll('.hbover,.hbdrag,.hcover').forEach(x=>x.classList.remove('hbover','hbafter','hbdrag','hcover'));
+  const blk=e=>e.target&&e.target.closest?e.target.closest('.tz.edit .tb'):null, zon=e=>e.target&&e.target.closest?e.target.closest('.tz.edit .tzc'):null;
+  const after=(e,b)=>{ const r=b.getBoundingClientRect(); return e.clientY>r.top+r.height/2; };
+  document.addEventListener('dragstart',e=>{ const b=blk(e); if(!b) return; dragId=b.dataset.tb; b.classList.add('hbdrag'); try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',dragId); }catch(_){} });
+  document.addEventListener('dragover',e=>{ if(!dragId) return; const b=blk(e), c=zon(e);
+    if(b&&b.dataset.tb!==dragId){ e.preventDefault(); clean(); b.classList.add('hbover'); b.classList.toggle('hbafter',after(e,b)); }
+    else if(!b&&c){ e.preventDefault(); clean(); c.classList.add('hcover'); } });
+  document.addEventListener('drop',e=>{ if(!dragId) return; const b=blk(e), c=zon(e);
+    if((b&&b.dataset.tb===dragId)||(!b&&!c)){ clean(); dragId=null; return; }
+    e.preventDefault(); tzInit(); for(const z of TZ) tz[z]=tz[z].filter(i=>i!==dragId);
+    if(b){ const z=b.closest('.tzc').dataset.zone, k=tz[z].indexOf(b.dataset.tb); tz[z].splice(k+(after(e,b)?1:0),0,dragId); } else tz[c.dataset.zone].push(dragId);
+    tzSave(); dragId=null; clean(); render(); });
+  document.addEventListener('dragend',()=>{ dragId=null; clean(); });
+})();
+const TABS=[['home','🏠','Accueil'],['today','📅',"Aujourd'hui"],['draw','🏆','Tableau'],['rank','📊','Classement'],['mine','⭐','Mes joueurs'],['stats','📈','Stats ATP']];
 window.tennisRender=function(){ $('#tabs').innerHTML=TABS.map(([k,i,l])=>`<button data-act="tab" data-t="${k}" class="${S.tab===k?'on':''}"><i>${i}</i><span>${esc(l)}</span></button>`).join('');
-  const f={today:vToday,draw:vDraw,rank:vRank,mine:vMine,stats:()=>'<div id="tennisViewContent"></div>'}[S.tab]; $('#view').innerHTML=f(); ensure();
+  const f={home:vHome,today:vToday,draw:vDraw,rank:vRank,mine:vMine,stats:()=>'<div id="tennisViewContent"></div>'}[S.tab]; $('#view').innerHTML=f(); ensure();
   // Stats ATP = l'ancien onglet Tennis de PronoTracker (Elo, palmarès, fiches joueurs, duels, historique), affiché ici
   if(S.tab==='stats') setTimeout(()=>{ try{ window.__tennis&&window.__tennis.render(); }catch(e){} },0);
   // les matchs ATP terminés s'enregistrent tout seuls (comme avant dans PronoTracker) dès qu'on ouvre le tennis
@@ -357,6 +434,14 @@ document.addEventListener('click',e=>{ if(ui.sport!=='tennis') return;
   const tb=e.target.closest&&e.target.closest('#tabs [data-act=tab]'); if(tb){ e.stopPropagation(); e.preventDefault(); S.tab=tb.dataset.t; S.more=0; savePref(); render(); window.scrollTo(0,0); return; }
   const el=e.target.closest&&e.target.closest('#view [data-tn]'); if(!el) return; const a=el.dataset.tn, v=el.dataset.v;
   if(a==='tour'){ S.tour=v; S.more=0; S.evSel=''; savePref(); render(); }
+  else if(a==='dmode'){ S.dmode=v==='list'?'list':'tree'; savePref(); render(); }
+  else if(a==='tzedit'){ S.tzEdit=!S.tzEdit; render(); }
+  else if(a==='tzgo'){ tzInit(); const id=el.dataset.id, z=TZ.find(k=>tz[k].includes(id)), j=TZ.indexOf(z)+(+el.dataset.d); if(z&&j>=0&&j<3){ tz[z]=tz[z].filter(i=>i!==id); tz[TZ[j]].push(id); tzSave(); render(); } }
+  else if(a==='tzmv'){ tzInit(); const id=el.dataset.id, z=TZ.find(k=>tz[k].includes(id)), A=z&&tz[z], i=z?A.indexOf(id):-1, j=i+(+el.dataset.d); if(z&&j>=0&&j<A.length){ [A[i],A[j]]=[A[j],A[i]]; tzSave(); render(); } }
+  else if(a==='tzdel'){ tzInit(); const id=el.dataset.id; for(const z of TZ) tz[z]=tz[z].filter(i=>i!==id); tzSave(); render(); }
+  else if(a==='tzadd'){ tzInit(); const sv=document.getElementById('tzAddSel'), zv=document.getElementById('tzAddZone'), id=sv&&sv.value, z=zv&&zv.value; if(id&&TZ.includes(z)&&!tzPlaced().includes(id)){ tz[z].push(id); tzSave(); render(); } }
+  else if(a==='tzsize'){ tzInit(); const id=el.dataset.id; tz.n={...tz.n,[id]:tz.n[id]==='all'?'8':'all'}; tzSave(); render(); }
+  else if(a==='tzreset'){ tz=tzDefault(); tzSave(); render(); }
   else if(a==='qual'){ S.qual=!S.qual; S.more=0; savePref(); render(); }
   else if(a==='day'){ S.day=+v; S.more=0; render(); }
   else if(a==='mine'){ S.mine=!S.mine; savePref(); render(); }
