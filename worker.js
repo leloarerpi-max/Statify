@@ -27,7 +27,8 @@ const ESPN_TRI = { WSH: 'WAS', NO: 'NOP', UTAH: 'UTA', SA: 'SAS', NY: 'NYK', GS:
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type,x-key', 'access-control-allow-methods': 'GET,POST,OPTIONS' };
 const reply = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...CORS } });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\bk(?:o|oe)?ln\b/g, 'cologne');   // « Köln » = « Cologne » (idem pour les autres noms alternatifs ci-dessous)
+
 const hm = iso => new Date(iso).toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' });
 const ymd = d => d.toISOString().slice(0, 10).replace(/-/g, '');
 const clean = (a, re, max = 400) => (Array.isArray(a) ? a : []).map(String).filter(x => re.test(x)).slice(0, max);
@@ -160,7 +161,7 @@ async function run(env) {
     const [h, a] = sides(e) || []; if (!h || !a) return false;
     return kind === 'nba'
       ? [h, a].some(t => (cfg.nba || []).includes(ESPN_TRI[t.team.abbreviation] || t.team.abbreviation))
-      : pickF.has(String(e.id)) || [h, a].some(t => favIds.has(String(t.team.id)) || (!favIds.size && favF.some(f => norm(t.team.displayName) === f || norm(t.team.shortDisplayName) === f || (f.length > 4 && norm(t.team.displayName).includes(f)))));
+      : pickF.has(String(e.id)) || [h, a].some(t => favIds.has(String(t.team.id)) || (favF.some(f => norm(t.team.displayName) === f || norm(t.team.shortDisplayName) === f || (f.length > 4 && norm(t.team.displayName).includes(f)))));
   }
 
   // --- lecture d'un tableau de scores ESPN (une requête par jour) ---

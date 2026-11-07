@@ -2824,14 +2824,14 @@ async function cloudPull(){
 function notifConfig(){
   const nba=[...new Set(nfav.nba)].filter(t=>TEAMS[t]);
   let T={}; try{ T=footIdx().T; }catch(e){}
-  const names=[], lgs=new Set(), unk=[], order=FLG.map(x=>x[0]);
-  for(const id of nfav.foot){ const t=T[id]; if(!t){ unk.push(id); continue; } names.push(t.n); Object.keys(t.comps||{}).forEach(l=>lgs.add(l)); if(t.lg) lgs.add(t.lg); }
+  const names=[], tids=[], lgs=new Set(), unk=[], order=FLG.map(x=>x[0]);
+  for(const id of nfav.foot){ const t=T[id]; if(!t){ unk.push(id); continue; } names.push(t.n); if(/^\d{1,8}$/.test(String(id))) tids.push(String(id)); Object.keys(t.comps||{}).forEach(l=>lgs.add(l)); if(t.lg) lgs.add(t.lg); }
   // matchs choisis avec l'étoile dans le multiplex / le calendrier (récents ou à venir seulement)
   const picks=[]; try{ const byId=new Map(footIdx().mt.map(m=>[String(m.id),m])), lim=Date.now()-24*36e5;
     for(const id of Object.keys(mpick||{})){ const m=byId.get(String(id)); if(m&&Date.parse(m.d)>lim){ picks.push(String(m.id)); lgs.add(m.lg); } } }catch(e){}
   let leagues=[...lgs].filter(l=>order.includes(l)).sort((a,b)=>order.indexOf(a)-order.indexOf(b));
   if(!leagues.length&&(names.length||picks.length)) leagues=['fra.1'];
-  const cfg={nba,foot:{teams:[...new Set(names)],leagues,matches:picks},multiplex:{enabled:true,leagues:['fra.1','uefa.champions']},alerts:{kickoff:true,score:true,final:true},live:{everySeconds:15,runMinutes:9}};
+  const cfg={nba,foot:{teams:[...new Set(names)],ids:[...new Set(tids)],leagues,matches:picks},multiplex:{enabled:true,leagues:['fra.1','uefa.champions']},alerts:{kickoff:true,score:true,final:true},live:{everySeconds:15,runMinutes:9}};
   return {cfg,unk,text:JSON.stringify(cfg,null,2)};
 }
 async function notifSync(force){
