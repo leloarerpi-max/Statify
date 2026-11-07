@@ -1746,7 +1746,7 @@ function footLeadersFallback(lg){
 
 /* ---------- Accueil ---------- */
 
-const FHOME_BLOCKS=[['multi','🔥 Multiplex (matchs du jour)'],['alerts','Alertes sur mes clubs'],['tonight','Ce soir (heure de Paris)'],['clubs','Mes clubs'],['players','Mes joueurs'],['big','Gros matchs à venir'],['news','À la une'],['kpis','Chiffres clés'],['matches','Matchs'],['scorers','Meilleurs buteurs']];
+const FHOME_BLOCKS=[['hero','🏁 Bandeau « Dernier match joué »'],['multi','🔥 Multiplex (matchs du jour)'],['alerts','Alertes sur mes clubs'],['tonight','Ce soir (heure de Paris)'],['clubs','Mes clubs'],['players','Mes joueurs'],['big','Gros matchs à venir'],['news','À la une'],['kpis','Chiffres clés'],['matches','Matchs'],['scorers','Meilleurs buteurs']];
 const KEYFH='suivi-foot-home';
 const FHOME_HIDE0=['tonight','kpis','matches','scorers'];   // masqués par défaut : déjà dans Multiplex (Ce soir), Matchs, Joueurs / Records ; réactivables avec ⚙ Personnaliser
 let fhomeCfg=loadJ(KEYFH,{order:FHOME_BLOCKS.map(b=>b[0]),hidden:[...FHOME_HIDE0]});
@@ -1761,11 +1761,12 @@ const FRAIL=[['stand','📊 Classement'],['live','🔴 En direct'],['res','🏁 
 /* ---- Accueil foot : zones libres (colonne gauche / centre / colonne droite) ---- */
 const KEYFZ='suivi-foot-zones', FZ=['L','C','R'], FZN={L:'Colonne gauche',C:'Centre',R:'Colonne droite'};
 let fz=loadJ(KEYFZ,null);
-function fzDefault(){ return {L:['stand:auto'],C:FHOME_BLOCKS.map(b=>b[0]).filter(i=>!FHOME_HIDE0.includes(i)),R:['live','res']}; }
-function fzInit(){ if(fz&&fz.L&&fz.C&&fz.R) return;
+function fzDefault(){ return {L:['stand:auto'],C:FHOME_BLOCKS.map(b=>b[0]).filter(i=>!FHOME_HIDE0.includes(i)),R:['live','res'],n:{},h1:1}; }
+function fzInit(){ if(fz&&fz.L&&fz.C&&fz.R){ if(!fz.n) fz.n={}; if(!fz.h1){ fz.h1=1; if(!fzPlacedRaw().includes('hero')) fz.C.unshift('hero'); saveJ(KEYFZ,fz); } return; }
   try{ const old=fhomeNorm(); fz={L:old.rh.includes('stand')?[]:['stand:auto'],C:old.order.filter(i=>!old.hidden.includes(i)),R:['live','res'].filter(i=>!old.rh.includes(i))}; }catch(e){ fz=fzDefault(); }
-  saveJ(KEYFZ,fz); }
-function fzPlaced(){ fzInit(); return [...fz.L,...fz.C,...fz.R]; }
+  fz.n={}; fz.h1=1; fz.C=fz.C.filter(i=>i!=='hero'); fz.C.unshift('hero'); saveJ(KEYFZ,fz); }
+function fzPlacedRaw(){ return [...fz.L,...fz.C,...fz.R]; }
+function fzPlaced(){ fzInit(); return fzPlacedRaw(); }
 function fzLabel(id){
   if(id==='live') return '🔴 En direct'; if(id==='res') return '🏁 Derniers résultats';
   if(id.startsWith('stand:')){ const k=id.slice(6); return '📊 Classement – '+(k==='auto'?'championnat de mon 1er club favori':k==='all'?'tous les championnats':footLgName(k)); }
@@ -1780,21 +1781,21 @@ function fzLive(){ const {mt}=footIdx(), live=mt.filter(m=>m.st==='in');
   return `<div class="card rail"><h2>${live.length?'<span class="livedot"></span> ':'🔴 '}En direct</h2>${live.length?live.map(fzSc).join(''):'<p class="mut">Aucun match en cours.</p>'}</div>`; }
 function fzRes(){ const {mt}=footIdx(), res=mt.filter(m=>m.done).sort((a,b)=>Date.parse(b.d)-Date.parse(a.d)).slice(0,8);
   return res.length?`<div class="card rail"><h2>🏁 Derniers résultats</h2>${res.map(fzSc).join('')}</div>`:''; }
-function fzStand(k,zone){ const {T}=footIdx();
+function fzStand(k,zone,bid){ const {T}=footIdx(), all=(fz.n||{})[bid]==='all';
   const one=code=>{ const L=foot.leagues[code]; if(!L||!L.standings||!L.standings.length) return '';
-    const rows=[...L.standings].sort((a,b)=>a.rank-b.rank).slice(0,zone==='C'?30:8).map(r=>`<div class="rr"><span class="rk">${r.rank}</span><span class="rl">${footLogo(r.logo,20)||''}</span><div class="rt"><b>${tlink(r.id,r.name)}</b></div><b class="rp">${r.pts}</b></div>`).join('');
+    const rows=[...L.standings].sort((a,b)=>a.rank-b.rank).slice(0,all?999:8).map(r=>`<div class="rr"><span class="rk">${r.rank}</span><span class="rl">${footLogo(r.logo,20)||''}</span><div class="rt"><b>${tlink(r.id,r.name)}</b></div><b class="rp">${r.pts}</b></div>`).join('');
     return `<div class="card rail"><h2>📊 ${esc(footLgName(code))}</h2>${rows}</div>`; };
   if(k==='all') return Object.keys(foot.leagues).map(one).join('');
   if(k==='auto'){ const f0=ffav.length&&T[ffav[0]]?T[ffav[0]].lg:'fra.1'; return one(foot.leagues[f0]?f0:'fra.1')||one(Object.keys(foot.leagues)[0]); }
   return one(k); }
-function fzBlock(id,zone,FB){ if(id==='live') return fzLive(); if(id==='res') return fzRes(); if(id.startsWith('stand:')) return fzStand(id.slice(6),zone); return FB[id]||''; }
+function fzBlock(id,zone,FB){ if(id==='live') return fzLive(); if(id==='res') return fzRes(); if(id.startsWith('stand:')) return fzStand(id.slice(6),zone,id); return FB[id]||''; }
 function fzEditor(){ fzInit();
-  const row=(z,id,i)=>`<div class="row hrow"><span style="flex:1">${esc(fzLabel(id))}</span><button class="sec" data-act="fzgo" data-id="${id}" data-d="-1" ${z==='L'?'disabled':''} title="Zone précédente">◀</button><button class="sec" data-act="fzmv" data-id="${id}" data-d="-1" ${i===0?'disabled':''}>▲</button><button class="sec" data-act="fzmv" data-id="${id}" data-d="1" ${i===fz[z].length-1?'disabled':''}>▼</button><button class="sec" data-act="fzgo" data-id="${id}" data-d="1" ${z==='R'?'disabled':''} title="Zone suivante">▶</button><button class="sec" data-act="fzdel" data-id="${id}" title="Retirer">✕</button></div>`;
+  const row=(z,id,i)=>`<div class="row hrow"><span style="flex:1">${esc(fzLabel(id))}</span>${id.startsWith('stand:')?`<button class="sec" data-act="fzsize" data-id="${id}" title="Nombre d'équipes affichées">${(fz.n||{})[id]==='all'?'📏 Tout':'📏 Top 8'}</button>`:''}<button class="sec" data-act="fzgo" data-id="${id}" data-d="-1" ${z==='L'?'disabled':''} title="Zone précédente">◀</button><button class="sec" data-act="fzmv" data-id="${id}" data-d="-1" ${i===0?'disabled':''}>▲</button><button class="sec" data-act="fzmv" data-id="${id}" data-d="1" ${i===fz[z].length-1?'disabled':''}>▼</button><button class="sec" data-act="fzgo" data-id="${id}" data-d="1" ${z==='R'?'disabled':''} title="Zone suivante">▶</button><button class="sec" data-act="fzdel" data-id="${id}" title="Retirer">✕</button></div>`;
   const cat=fzCatalog();
   return `<div class="card"><h2>Personnaliser l'accueil foot</h2><p class="mut">Glisse les blocs <b>directement sur la page</b> (poignée ⠿) vers la colonne gauche, le centre ou la colonne droite, ou utilise ◀ ▶ ▲ ▼. ✕ retire un bloc. Les colonnes latérales s'affichent à partir de 1100 px de large.</p>${FZ.map(z=>`<h3 style="margin:12px 0 4px">${FZN[z]}</h3>${fz[z].map((id,i)=>row(z,id,i)).join('')||'<p class="mut" style="margin:0">Vide.</p>'}`).join('')}<h3 style="margin:14px 0 4px">Ajouter un bloc</h3>${cat.length?`<div class="row"><select id="fzAddSel">${cat.map(id=>`<option value="${id}">${esc(fzLabel(id))}</option>`).join('')}</select><select id="fzAddZone"><option value="C">au centre</option><option value="L">colonne gauche</option><option value="R">colonne droite</option></select><button class="sec" data-act="fzadd">Ajouter</button></div>`:'<p class="mut" style="margin:0">Tous les blocs sont déjà placés.</p>'}<div class="row" style="margin-top:10px"><button data-act="fhomeedit">Terminé</button><button class="sec" data-act="fzreset">Tout réinitialiser</button></div></div>`; }
 function fzRender(FB){ fzInit(); const edit=!!ui.fHomeEdit, Z={};
   for(const z of FZ) Z[z]=fz[z].map(id=>{ const b=fzBlock(id,z,FB); if(!b&&!edit) return '';
-    return `<div class="fb" data-fb="${id}"${edit?' draggable="true"':''}>${edit?`<div class="hbbar"><span>⠿ ${esc(fzLabel(id))}</span><span><button class="sec" data-act="fzgo" data-id="${id}" data-d="-1" title="Zone précédente">◀</button><button class="sec" data-act="fzgo" data-id="${id}" data-d="1" title="Zone suivante">▶</button><button class="sec" data-act="fzdel" data-id="${id}" title="Retirer">✕</button></span></div>`:''}${b||'<p class="mut">(rien à afficher pour l\'instant)</p>'}</div>`; }).join('');
+    return `<div class="fb" data-fb="${id}"${edit?' draggable="true"':''}>${edit?`<div class="hbbar"><span>⠿ ${esc(fzLabel(id))}</span><span>${id.startsWith('stand:')?`<button class="sec" data-act="fzsize" data-id="${id}" title="Nombre d'équipes affichées">${(fz.n||{})[id]==='all'?'📏 Tout':'📏 Top 8'}</button>`:''}<button class="sec" data-act="fzgo" data-id="${id}" data-d="-1" title="Zone précédente">◀</button><button class="sec" data-act="fzgo" data-id="${id}" data-d="1" title="Zone suivante">▶</button><button class="sec" data-act="fzdel" data-id="${id}" title="Retirer">✕</button></span></div>`:''}${b||'<p class="mut">(rien à afficher pour l\'instant)</p>'}</div>`; }).join('');
   const hl=edit||Z.L, hr=edit||Z.R;
   return `<div class="fz${edit?' edit':''}${hl?' hasl':''}${hr?' hasr':''}">${FZ.map(z=>`<div class="fzc${z==='C'?'':' rail'}" data-zone="${z}" data-label="${FZN[z]}">${Z[z]}</div>`).join('')}</div>`; }
 (function(){
@@ -1835,7 +1836,7 @@ function footHome(){
   const sc=lg?pl.filter(p=>inLg(p,lg)):pl;
   FB.scorers=`<div class="card"><h2>Meilleurs buteurs ${lg?'— '+esc(footLgName(lg)):''}</h2>${sc.length?`<div class="grid2"><div><h3>Buts</h3>${footScorersTable(sc,'g','buts',6)}</div><div><h3>Passes décisives</h3>${footScorersTable(sc,'a','PD',6)}</div></div>`:(lg?footLeadersFallback(lg):'')||'<p class="mut">Les buteurs apparaissent après le chargement des détails des matchs (bouton Actualiser).</p>'}</div>`;
   if(fzPlaced().includes('multi')){ const mx=footMultiView(true); if(mx) FB.multi=mx; }
-  if(!FB.multi) h+=heroFoot(done);
+  if(fzPlaced().includes('hero')){ const hf=heroFoot(done); if(hf) FB.hero=hf; }
   h+=ui.fHomeEdit?fzEditor():'';
   h+=fzRender(FB);
   return h;
@@ -2676,6 +2677,7 @@ function toggleFav(type,id,name){
   else if(a==='fhomemove'){ const cf=fhomeNorm(), i=cf.order.indexOf(id), j=i+(+el.dataset.d); if(i>=0&&j>=0&&j<cf.order.length){ [cf.order[i],cf.order[j]]=[cf.order[j],cf.order[i]]; fhomeCfg=cf; saveJ(KEYFH,fhomeCfg); render(); } }
   else if(a==='fzgo'){ fzInit(); const z=FZ.find(k=>fz[k].includes(id)), j=FZ.indexOf(z)+(+el.dataset.d); if(z&&j>=0&&j<3){ fz[z]=fz[z].filter(i=>i!==id); fz[FZ[j]].push(id); fzSave(); render(); } }
   else if(a==='fzmv'){ fzInit(); const z=FZ.find(k=>fz[k].includes(id)), A=z&&fz[z], i=z?A.indexOf(id):-1, j=i+(+el.dataset.d); if(z&&j>=0&&j<A.length){ [A[i],A[j]]=[A[j],A[i]]; fzSave(); render(); } }
+  else if(a==='fzsize'){ fzInit(); fz.n={...fz.n,[id]:fz.n[id]==='all'?'8':'all'}; fzSave(); render(); }
   else if(a==='fzdel'){ fzInit(); for(const z of FZ) fz[z]=fz[z].filter(i=>i!==id); fzSave(); render(); }
   else if(a==='fzadd'){ fzInit(); const v=$('#fzAddSel')&&$('#fzAddSel').value, z=$('#fzAddZone')&&$('#fzAddZone').value; if(v&&FZ.includes(z)&&!fzPlaced().includes(v)){ fz[z].push(v); fzSave(); render(); } }
   else if(a==='fzreset'){ fz=fzDefault(); fzSave(); render(); }
