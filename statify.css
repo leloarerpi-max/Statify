@@ -526,3 +526,12 @@ a.nrd-open{display:inline-block;padding:9px 14px;border-radius:14px;border:1px s
 /* colonnes NBA un peu plus larges, noms d'équipes sur 2 lignes si besoin */
 @media(min-width:1600px){body.rails-nba #stage{grid-template-columns:370px minmax(0,1fr) 370px}}
 .rail table.st td.l{white-space:normal;line-height:1.2}
+
+/* Accueil NBA : deux vraies colonnes indépendantes (un bloc peut se poser sous n'importe quel autre) */
+.home{display:flex;flex-direction:column;gap:16px}
+.hcols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+.hcol{display:flex;flex-direction:column;gap:16px;min-width:0}
+.home.edit .hcol{min-height:90px;border-radius:14px;transition:background .15s}
+.home.edit .hcol.hcover{background:color-mix(in srgb,var(--acc) 10%,transparent);outline:2px dashed var(--acc)}
+.hb.hbover,.hb.full.hbover{box-shadow:0 -5px 0 var(--acc)}.hb.hbover.hbafter,.hb.full.hbover.hbafter{box-shadow:0 5px 0 var(--acc)}
+@media(max-width:700px){.hcols{grid-template-columns:minmax(0,1fr)}.hcol{display:contents}.home.edit .hcol{min-height:0}}
