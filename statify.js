@@ -287,6 +287,27 @@ function buildStats(list){
 function streakN(log){ if(!log.length) return null; const w=log[log.length-1].win; let n=0; for(let i=log.length-1;i>=0&&log[i].win===w;i--) n++; return {w,n}; }
 const streak=log=>{ const s=streakN(log); return s?(s.w?'V':'D')+s.n:'–'; };
 const formDots=(log,n=5)=>log.slice(-n).map(x=>`<span class="dot ${x.win?'w':'l'}" title="${x.win?'Victoire':'Défaite'} vs ${esc(x.opp)}">${x.win?'V':'D'}</span>`).join('')||'<span class="mut">–</span>';
+
+/* ---- Bilan, forme et séries affichés sur les résultats NBA (calculés sur les matchs enregistrés) ---- */
+let _nctx=null,_nctxK='';
+function nbaCtx(S){
+  const k=Object.values(games).filter(g=>g.status===3).length+':'+Object.keys(games).length;
+  if(_nctx&&_nctxK===k) return _nctx;
+  let T; try{ T=(S&&S.T)||buildStats().T; }catch(e){ T={}; }
+  const M={};
+  for(const tri in T){ const log=T[tri].log||[]; let w=0,l=0;
+    log.forEach((x,i)=>{ x.win?w++:l++;
+      let n=1; for(let j=i-1;j>=0&&log[j].win===x.win;j--) n++;
+      let m=0; if(n===1){ for(let j=i-1;j>=0&&log[j].win===!x.win;j--) m++; }
+      const chips=[];
+      if(n>=3) chips.push({c:x.win?'up':'dn',t:`${x.win?'🔥':'⚠️'} ${tri} : ${n} ${x.win?'victoires':'défaites'} de suite`});
+      else if(x.win&&m>=3) chips.push({c:'ev',t:`✨ ${tri} : 1ère victoire en ${m+1} matchs`});
+      else if(!x.win&&m>=4) chips.push({c:'ev',t:`${tri} : 1ère défaite en ${m+1} matchs`});
+      M[x.gid+'|'+tri]={w,l,form:log.slice(Math.max(0,i-4),i+1).map(y=>y.win),chips}; }); }
+  _nctx=M; _nctxK=k; return M;
+}
+const nbaRec=(S,g,tri)=>{ const c=g.status===3?nbaCtx(S)[g.id+'|'+tri]:null; return c?`<span class="gt-rec">${c.w}-${c.l}<span class="fq">${c.form.map(x=>`<i class="${x?'w':'l'}"></i>`).join('')}</span></span>`:''; };
+const nbaChips=(S,g)=>{ if(g.status!==3) return ''; const M=nbaCtx(S), c=[...(M[g.id+'|'+g.away.tri]?.chips||[]),...(M[g.id+'|'+g.home.tri]?.chips||[])]; return c.length?`<div class="gt-chips">${c.map(x=>`<span class="cp ${x.c}">${esc(x.t)}</span>`).join('')}</div>`:''; };
 const ts=r=>r.pts/(2*(r.fga+0.44*r.fta));
 const efg=r=>(r.fgm+0.5*r.tpm)/r.fga;
 function upcoming(){
@@ -862,7 +883,7 @@ function viewHome(S){
   B.tonight=tonightNba(S); B.bigmatch=bigCard(S); B.duel=duelCard(S); B.news=newsCard();
   const lastDay=fin.length?nyDay(fin[fin.length-1].time):null, dayG=fin.filter(g=>nyDay(g.time)===lastDay);
   const last=[...(lastDay?dayG:[])].reverse().map(g=>{ const aw=+g.away.score>+g.home.score, hw=+g.home.score>+g.away.score;
-    return `<tr class="click" data-act="opengame" data-id="${g.id}"><td class="l">${gameDate(g)}</td><td class="l ${aw?'win':''}">${teamLogo(g.away.tri,20)}<span class="nfull">${esc(g.away.name)}</span><span class="ntri">${esc(g.away.tri)}</span></td><td class="${aw?'win':''}">${g.away.score}</td><td class="l ${hw?'win':''}">@ ${teamLogo(g.home.tri,20)}<span class="nfull">${esc(g.home.name)}</span><span class="ntri">${esc(g.home.tri)}</span></td><td class="${hw?'win':''}">${g.home.score}</td></tr>`; }).join('');
+    return `<tr class="click" data-act="opengame" data-id="${g.id}"><td class="l">${gameDate(g)}</td><td class="l ${aw?'win':''}">${teamLogo(g.away.tri,20)}<span class="nfull">${esc(g.away.name)}</span><span class="ntri">${esc(g.away.tri)}</span>${nbaRec(S,g,g.away.tri)}</td><td class="${aw?'win':''}">${g.away.score}</td><td class="l ${hw?'win':''}">@ ${teamLogo(g.home.tri,20)}<span class="nfull">${esc(g.home.name)}</span><span class="ntri">${esc(g.home.tri)}</span>${nbaRec(S,g,g.home.tri)}</td><td class="${hw?'win':''}">${g.home.score}</td></tr>${(()=>{ const c=nbaChips(S,g); return c?`<tr class="chiprow"><td colspan="5">${c}</td></tr>`:''; })()}`; }).join('');
   B.results=`<div class="card"><h2>Derniers résultats <span class="mut" style="font-weight:400;font-size:13px">${lastDay?esc(fmtD(dayG[dayG.length-1].time))+' · '+dayG.length+' match'+(dayG.length>1?'s':''):''}</span></h2><div class="scroll"><table><tbody>${last||'<tr><td class="empty">Aucun match terminé</td></tr>'}</tbody></table></div></div>`;
   const topAll=Object.values(S.P).sort((a,b)=>b.pts/b.gp-a.pts/a.gp), pvTop=S.prev?rankMap(playerRanking(S.prev.P,'pts',-1,1)):null;
   const top=topAll.slice(0,5).map((p,i)=>`<tr><td class="l">${i+1}.${moveHtml(pvTop,p.id,i+1)} ${avatar(p.id,p.name,p.tri,26)}${playerLink(p.id,p.name)} <span class="mut">${p.tri}</span></td><td>${p.gp}</td><td><b>${f1(p.pts/p.gp)}</b></td><td>${p.pts}</td></tr>`).join('');
@@ -886,10 +907,10 @@ function viewGames(S){
   const win=(g,side)=>{ const fin=g.status===3, a=+g.away.score, h=+g.home.score; return fin&&(side==='a'?a>h:h>a); };
   const isFav=g=>fav.teams.includes(g.home.tri)||fav.teams.includes(g.away.tri);
   const tile=g=>{ const fin=g.status===3, wa=win(g,'a'), wh=win(g,'h'), diff=Math.abs(+g.away.score-+g.home.score), w=wa?g.away.tri:g.home.tri;
-    const side=(t,sc,isW)=>`<div class="gt-side ${fin&&!isW?'lose':''}"><span class="gt-t">${teamLogo(t.tri,28)}<b>${esc(t.tri)}</b></span><span class="gt-sc">${esc(String(sc))}</span></div>`;
-    const bg=stuNbaBig(g.away.tri,g.home.tri); return `<div class="gt-tile click ${isFav(g)?'fv':''} ${bg?'big':''}" data-act="opengame" data-id="${g.id}">${bg?`<div class="bigtag">🔥 ${esc(bg)}</div>`:''}<div class="gt-top"><span>${fin?'FINAL':esc(g.statusText||'À venir')}${noteMark('game:'+g.id)}</span><span>${isFav(g)?'⭐ ':''}<button class="danger gt-x" data-act="delgame" data-id="${g.id}" title="Supprimer">✕</button></span></div>${side(g.away,g.away.score,wa)}${side(g.home,g.home.score,wh)}${fin&&diff?`<div class="gt-diff">${esc(w)} +${diff}</div>`:''}</div>`; };
+    const side=(t,sc,isW)=>`<div class="gt-side ${fin&&!isW?'lose':''}"><span class="gt-t">${teamLogo(t.tri,28)}<b>${esc(t.tri)}</b>${nbaRec(S,g,t.tri)}</span><span class="gt-sc">${esc(String(sc))}</span></div>`;
+    const bg=stuNbaBig(g.away.tri,g.home.tri); return `<div class="gt-tile click ${isFav(g)?'fv':''} ${bg?'big':''}" data-act="opengame" data-id="${g.id}">${bg?`<div class="bigtag">🔥 ${esc(bg)}</div>`:''}<div class="gt-top"><span>${fin?'FINAL':esc(g.statusText||'À venir')}${noteMark('game:'+g.id)}</span><span>${isFav(g)?'⭐ ':''}<button class="danger gt-x" data-act="delgame" data-id="${g.id}" title="Supprimer">✕</button></span></div>${side(g.away,g.away.score,wa)}${side(g.home,g.home.score,wh)}${fin&&diff?`<div class="gt-diff">${esc(w)} +${diff}</div>`:''}${nbaChips(S,g)}</div>`; };
   const line=g=>{ const fin=g.status===3, wa=win(g,'a'), wh=win(g,'h');
-    return `<div class="gt-line click ${isFav(g)?'fv':''}" data-act="opengame" data-id="${g.id}"><span class="gt-l ${fin&&!wa?'lose':''}"><b>${esc(g.away.tri)}</b>${teamLogo(g.away.tri,22)}</span><span class="gt-m"><span class="${fin&&!wa?'lose':''}">${esc(String(g.away.score))}</span><i>–</i><span class="${fin&&!wh?'lose':''}">${esc(String(g.home.score))}</span></span><span class="gt-r ${fin&&!wh?'lose':''}">${teamLogo(g.home.tri,22)}<b>${esc(g.home.tri)}</b></span>${fin?'':`<span class="tag live">${esc(g.statusText||'À venir')}</span>`}<button class="danger gt-x" data-act="delgame" data-id="${g.id}" title="Supprimer">✕</button></div>`; };
+    return `<div class="gt-line click ${isFav(g)?'fv':''}" data-act="opengame" data-id="${g.id}"><span class="gt-l ${fin&&!wa?'lose':''}"><b>${esc(g.away.tri)}</b>${nbaRec(S,g,g.away.tri)}${teamLogo(g.away.tri,22)}</span><span class="gt-m"><span class="${fin&&!wa?'lose':''}">${esc(String(g.away.score))}</span><i>–</i><span class="${fin&&!wh?'lose':''}">${esc(String(g.home.score))}</span></span><span class="gt-r ${fin&&!wh?'lose':''}">${teamLogo(g.home.tri,22)}<b>${esc(g.home.tri)}</b>${nbaRec(S,g,g.home.tri)}</span>${fin?'':`<span class="tag live">${esc(g.statusText||'À venir')}</span>`}<button class="danger gt-x" data-act="delgame" data-id="${g.id}" title="Supprimer">✕</button>${nbaChips(S,g)}</div>`; };
   const body=days.map((d,i)=>`<div class="gt-day">${esc(d.lab)} <span class="mut">· ${d.gs.length} match${d.gs.length>1?'s':''}</span></div>${i===0?`<div class="gt-grid">${d.gs.map(tile).join('')}</div>`:`<div class="gt-list">${d.gs.map(line).join('')}</div>`}`).join('');
   let h=`<div class="card"><div class="row" style="margin-bottom:6px"><select id="gTeam"><option value="">Toutes les équipes</option>${tris.map(t=>`<option value="${t}" ${t===ui.gTeam?'selected':''}>${esc(tname(t))}</option>`).join('')}</select><span class="mut">${list.length} match(s) · touche un match pour le box score</span></div>${body||'<p class="empty">Aucun match.</p>'}</div>`;
   return h;
