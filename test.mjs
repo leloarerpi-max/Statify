@@ -11,12 +11,12 @@ const out = (...a) => process.stdout.write(a.join(' ') + '\n');
 let frame = { events: [] }, std = { children: [] }, sent = [], kvFail = false;
 globalThis.fetch = async (url, opt) => {
   url = String(url);
-  if (url.startsWith('https://ntfy.sh')) { const b = JSON.parse(opt.body); sent.push(b); return { ok: true, status: 200 }; }
+  if (url.startsWith('https://api.telegram.org/')) { const b = JSON.parse(opt.body); sent.push({ title: b.text.split('\n')[0], message: b.text.split('\n').slice(1).join('\n') }); return { ok: true, status: 200 }; }
   if (url.includes('/scoreboard')) return { ok: true, status: 200, json: async () => frame };
   if (url.includes('/standings')) return { ok: true, status: 200, json: async () => std };
   return { ok: false, status: 404 };
 };
-const newEnv = cfg => { const m = new Map([['cfg', JSON.stringify(cfg)]]); return { NTFY_TOPIC: 'topic-secret-123456', STATE: { get: async k => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async k => { m.delete(k); } } }; };
+const newEnv = cfg => { const m = new Map([['cfg', JSON.stringify(cfg)]]); return { TELEGRAM_TOKEN: '123:abc', TELEGRAM_CHAT_ID: '42', STATE: { get: async k => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async k => { m.delete(k); } } }; };
 async function wake(env) { const ps = []; await worker.scheduled(null, env, { waitUntil: p => ps.push(p) }); await Promise.all(ps); T += 60e3; const r = sent.splice(0); return r; }
 
 const mk = ({ id = '100', state = 'pre', name = 'STATUS_SCHEDULED', start, h = 0, a = 0, clock = '', details = [], hid = '1', aid = '2', hn = 'PSG', an = 'OM' }) => ({

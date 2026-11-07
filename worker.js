@@ -2,7 +2,7 @@
 // - Se réveille toutes les minutes (déclencheur « Cron »).
 // - Hors match : il ne contacte même pas ESPN (il connaît le calendrier en mémoire).
 // - Quand un de tes matchs approche (30 min avant) ou est en cours : il interroge ESPN toutes les ~20 s pendant la minute.
-// - Envoie les alertes via ntfy.sh : coup d'envoi, buts, score final, multiplex avec évolution du classement.
+// - Envoie les alertes via Telegram : coup d'envoi, buts, score final, multiplex avec évolution du classement.
 // - Statify lui envoie directement tes étoiles dorées (adresse /sync) : aucun fichier à modifier.
 //
 // Réglages à connaître (tout le reste se fait depuis l'appli Statify) :
@@ -19,7 +19,7 @@ const SETTINGS = {
     extraTime: true                                   //   prolongations et tirs au but (foot)
   }
 };
-// Secrets à créer dans Cloudflare : NTFY_TOPIC (nom secret ntfy), SYNC_KEY (mot de passe partagé avec Statify) et NTFY_TOKEN (jeton de ton compte ntfy).
+// Secrets à créer dans Cloudflare : TELEGRAM_TOKEN (jeton du bot, donné par @BotFather), TELEGRAM_CHAT (ton numéro de conversation) et SYNC_KEY (mot de passe partagé avec Statify).
 // Espace de stockage (KV) à lier sous le nom : STATE.
 
 const LGN = { 'fra.1': 'Ligue 1', 'eng.1': 'Premier League', 'esp.1': 'Liga', 'ita.1': 'Serie A', 'ger.1': 'Bundesliga', 'uefa.champions': 'Ligue des champions', 'uefa.europa': 'Europa League', 'uefa.europa.conf': 'Conférence League' };
@@ -61,7 +61,7 @@ export default {
         return reply({ ok: r.ok, status: r.status, taille: html.length, titre: (html.match(/<title>([^<]*)/i) || [])[1] || '', grep: g, nbTrouves: trouves.length, extraits });
       } catch (e) { return reply({ ok: false, error: String(e && e.message || e) }, 502); }
     }
-    if (!env.SYNC_KEY || req.headers.get('x-key') !== env.SYNC_KEY) return reply({ ok: false, error: 'Clé refusée' }, 401);
+    if (!env.SYNC_KEY || (req.headers.get('x-key') !== env.SYNC_KEY && !(u.pathname === '/test' && u.searchParams.get('key') === env.SYNC_KEY))) return reply({ ok: false, error: 'Clé refusée' }, 401);   // /test accepte aussi ?key= pour l'essayer depuis un navigateur
     if (u.pathname === '/sync' && req.method === 'POST') {
       let b; try { b = await req.json(); } catch { return reply({ ok: false, error: 'Données illisibles' }, 400); }
       const cfg = {
@@ -80,7 +80,7 @@ export default {
       return reply({ ok: true, nba: cfg.nba.length, clubs: cfg.foot.ids.length || cfg.foot.teams.length, matches: cfg.foot.matches.length, changed: old !== JSON.stringify(cfg) });
     }
     if (u.pathname === '/test') {
-      const ok = await ntfy(env, '✅ Statify : test', 'Le robot est bien relié à ton téléphone.');
+      const ok = await tgNotify(env, '✅ Statify : test', 'Le robot est bien relié à ton téléphone.');
       return reply({ ok }, ok ? 200 : 502);
     }
     if (u.pathname === '/rdj') {                           // pronostic d'expert RueDesJoueurs pour un match (lecture seule, isolé)
@@ -108,17 +108,19 @@ export default {
   async scheduled(_ev, env, ctx) { ctx.waitUntil(run(env).catch(e => console.error('Erreur robot :', e && e.stack || e))); }
 };
 
-// Jeton ntfy (secret NTFY_TOKEN, facultatif mais conseillé) : sans lui, ntfy limite les envois venant de Cloudflare (erreur 429)
-const hdrNtfy = env => ({ 'Content-Type': 'application/json', ...((env.NTFY_TOKEN || '').trim() ? { Authorization: 'Bearer ' + env.NTFY_TOKEN.trim() } : {}) });
-async function ntfy(env, title, message) {
-  const topic = (env.NTFY_TOPIC || '').trim();
-  if (topic.length < 8) { console.error('NTFY_TOPIC manquant ou trop court'); return false; }
+// Telegram : secrets TELEGRAM_TOKEN et TELEGRAM_CHAT_ID (anciens noms BOT_TOKEN / TELEGRAM_BOT_TOKEN / CHAT_ID acceptés)
+const tgCfg = env => ({ token: String(env.TELEGRAM_TOKEN || env.TELEGRAM_BOT_TOKEN || env.BOT_TOKEN || '').trim(), chat: String(env.TELEGRAM_CHAT_ID || env.TELEGRAM_CHAT || env.CHAT_ID || '').trim() });
+const tgOk = env => { const c = tgCfg(env); return !!(c.token && c.chat); };
+async function tgSend(env, title, message, F = fetch) {
+  const c = tgCfg(env);
+  const r = await F('https://api.telegram.org/bot' + c.token + '/sendMessage', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: c.chat, text: title + '\n' + message }) });
+  if (!r.ok) { let d = ''; try { d = (await r.json()).description || ''; } catch (e) {} console.log('Telegram a répondu', r.status, d); }
+  return r;
+}
+async function tgNotify(env, title, message) {
+  if (!tgOk(env)) { console.error('TELEGRAM_TOKEN ou TELEGRAM_CHAT_ID manquant'); return false; }
   for (let i = 0; i < 3; i++) {
-    try {
-      const r = await fetch('https://ntfy.sh/', { method: 'POST', headers: hdrNtfy(env), body: JSON.stringify({ topic, title, message }) });
-      if (r.ok) return true;
-      console.log('ntfy a répondu', r.status);
-    } catch (e) { console.log('ntfy injoignable :', e.message); }
+    try { const r = await tgSend(env, title, message); if (r.ok) return true; } catch (e) { console.log('Telegram injoignable :', e.message); }
     await sleep(1200);
   }
   return false;
@@ -134,7 +136,7 @@ async function run(env) {
 
   const cfg = JSON.parse((await env.STATE.get('cfg')) || 'null'); reqs++;
   if (!cfg) { console.log("Aucune équipe reçue : ouvre Statify > Cloud > Alertes et touche « Activer »."); return; }
-  if (!(env.NTFY_TOPIC || '').trim() || env.NTFY_TOPIC.trim().length < 8) { console.error('NTFY_TOPIC manquant ou trop court'); return; }
+  if (!tgOk(env)) { console.error('TELEGRAM_TOKEN ou TELEGRAM_CHAT_ID manquant'); return; }
   let st = JSON.parse((await env.STATE.get('st')) || '{}'); reqs++;
   let sched = JSON.parse((await env.STATE.get('sched')) || '{}'); reqs++;
   let savedSt = JSON.stringify(st);
@@ -352,9 +354,9 @@ async function run(env) {
       let ok = false;
       for (let i = 0; i < 3 && !ok && reqs < 48; i++) {
         try {
-          const r = await F('https://ntfy.sh/', { method: 'POST', headers: hdrNtfy(env), body: JSON.stringify({ topic: env.NTFY_TOPIC.trim(), title, message: body }) });
-          ok = r.ok; if (!ok) console.log('ntfy a répondu', r.status);
-        } catch (e) { console.log('ntfy injoignable :', e.message); }
+          const r = await tgSend(env, title, body, F);
+          ok = r.ok;
+        } catch (e) { console.log('Telegram injoignable :', e.message); }
         if (!ok) await sleep(1000);
       }
       if (ok) { sent++; console.log('envoyé :', title, '|', body); }
