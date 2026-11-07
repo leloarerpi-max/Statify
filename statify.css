@@ -535,3 +535,6 @@ a.nrd-open{display:inline-block;padding:9px 14px;border-radius:14px;border:1px s
 .home.edit .hcol.hcover{background:color-mix(in srgb,var(--acc) 10%,transparent);outline:2px dashed var(--acc)}
 .hb.hbover,.hb.full.hbover{box-shadow:0 -5px 0 var(--acc)}.hb.hbover.hbafter,.hb.full.hbover.hbafter{box-shadow:0 5px 0 var(--acc)}
 @media(max-width:700px){.hcols{grid-template-columns:minmax(0,1fr)}.hcol{display:contents}.home.edit .hcol{min-height:0}}
+
+/* « Mes clubs » : colonne de gauche sur grand écran, bloc central sinon (jamais les deux) */
+@media(min-width:1560px){body.rails .fclubs{display:none}}

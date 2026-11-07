@@ -1703,7 +1703,7 @@ function footFavCards(){
 
 /* ---- Colonnes latérales (écrans larges, onglets Accueil / Multiplex / Matchs du foot) ---- */
 function footRails(){
-  const {T,mt}=footIdx(), now=Date.now();
+  const {T,mt}=footIdx(), now=Date.now(), FC=fhomeNorm(), hc=FC.hidden.includes('clubs'), rh=FC.rh;
   const lg=(row)=>`<span class="rl">${footLogo(row.lo,20)||''}</span>`;
   const favs=ffav.map(id=>{ const t=T[id]; if(!t) return '';
     const ms=mt.filter(m=>m.hid===id||m.aid===id).sort((a,b)=>Date.parse(a.d)-Date.parse(b.d)), nx=ms.find(m=>!m.done), last=[...ms].reverse().find(m=>m.done);
@@ -1716,8 +1716,8 @@ function footRails(){
   const sc=m=>`<div class="rr"><div class="rt"><b>${mlink(m,`${esc(m.hn)} ${m.hs}-${m.as} ${esc(m.an)}`)}</b>${m.txt&&m.st==='in'?`<small class="mut">${esc(m.txt)}</small>`:''}</div></div>`;
   const lgn=L?esc(footLgName(fav0)):'';
   return {
-    l:`<div class="card"><h2>⭐ Mes clubs</h2>${favs||'<p class="mut">Aucun club favori : touche ☆ à côté d\'un club dans un classement.</p>'}</div>${stand?`<div class="card"><h2>📊 ${lgn}</h2>${stand}</div>`:''}`,
-    r:`<div class="card"><h2>${live.length?'<span class="livedot"></span> ':'🔴 '}En direct</h2>${live.length?live.map(sc).join(''):'<p class="mut">Aucun match en cours.</p>'}</div>${res.length?`<div class="card"><h2>🏁 Derniers résultats</h2>${res.map(sc).join('')}</div>`:''}`
+    l:`${hc?'':`<div class="card"><h2>⭐ Mes clubs</h2>${favs||'<p class="mut">Aucun club favori : touche ☆ à côté d\'un club dans un classement.</p>'}</div>`}${stand&&!rh.includes('stand')?`<div class="card"><h2>📊 ${lgn}</h2>${stand}</div>`:''}`,
+    r:`${rh.includes('live')?'':`<div class="card"><h2>${live.length?'<span class="livedot"></span> ':'🔴 '}En direct</h2>${live.length?live.map(sc).join(''):'<p class="mut">Aucun match en cours.</p>'}</div>`}${res.length&&!rh.includes('res')?`<div class="card"><h2>🏁 Derniers résultats</h2>${res.map(sc).join('')}</div>`:''}`
   };
 }
 function nbaRails(S){
@@ -1751,11 +1751,12 @@ const KEYFH='suivi-foot-home';
 const FHOME_HIDE0=['tonight','kpis','matches','scorers'];   // masqués par défaut : déjà dans Multiplex (Ce soir), Matchs, Joueurs / Records ; réactivables avec ⚙ Personnaliser
 let fhomeCfg=loadJ(KEYFH,{order:FHOME_BLOCKS.map(b=>b[0]),hidden:[...FHOME_HIDE0]});
 try{ if(!localStorage.getItem('suivi-foot-home-v2')){ fhomeCfg.hidden=[...new Set([...(fhomeCfg.hidden||[]),...FHOME_HIDE0])]; saveJ(KEYFH,fhomeCfg); localStorage.setItem('suivi-foot-home-v2','1'); } }catch(e){}
-function fhomeNorm(){ const ids=FHOME_BLOCKS.map(b=>b[0]); const o=(fhomeCfg.order||[]).filter(i=>ids.includes(i)); for(const i of ids) if(!o.includes(i)){ if(i==='multi') o.unshift(i); else o.push(i); } return {order:o,hidden:(fhomeCfg.hidden||[]).filter(i=>ids.includes(i))}; }
+function fhomeNorm(){ const ids=FHOME_BLOCKS.map(b=>b[0]); const o=(fhomeCfg.order||[]).filter(i=>ids.includes(i)); for(const i of ids) if(!o.includes(i)){ if(i==='multi') o.unshift(i); else o.push(i); } return {order:o,hidden:(fhomeCfg.hidden||[]).filter(i=>ids.includes(i)),rh:fhomeCfg.rh||[]}; }
 function fhomeEditor(cfg){
   const lab=Object.fromEntries(FHOME_BLOCKS);
-  return `<div class="card"><h2>Personnaliser l'accueil foot</h2><p class="mut">Coche les blocs à afficher et change leur ordre avec les flèches (mets tes blocs préférés en premier).</p>${cfg.order.map((id,i)=>`<div class="row hrow"><label><input type="checkbox" data-act="fhometoggle" data-id="${id}" ${cfg.hidden.includes(id)?'':'checked'}> ${esc(lab[id])}</label><button class="sec" data-act="fhomemove" data-id="${id}" data-d="-1" ${i===0?'disabled':''}>↑</button><button class="sec" data-act="fhomemove" data-id="${id}" data-d="1" ${i===cfg.order.length-1?'disabled':''}>↓</button></div>`).join('')}<div class="row" style="margin-top:10px"><button data-act="fhomeedit">Terminé</button><button class="sec" data-act="fhomereset">Tout réinitialiser</button></div></div>`;
+  return `<div class="card"><h2>Personnaliser l'accueil foot</h2><p class="mut">Coche les blocs à afficher et change leur ordre avec les flèches (mets tes blocs préférés en premier).</p>${cfg.order.map((id,i)=>`<div class="row hrow"><label><input type="checkbox" data-act="fhometoggle" data-id="${id}" ${cfg.hidden.includes(id)?'':'checked'}> ${esc(lab[id])}</label><button class="sec" data-act="fhomemove" data-id="${id}" data-d="-1" ${i===0?'disabled':''}>↑</button><button class="sec" data-act="fhomemove" data-id="${id}" data-d="1" ${i===cfg.order.length-1?'disabled':''}>↓</button></div>`).join('')}<h3 style="margin:14px 0 4px">Colonnes latérales (grands écrans)</h3><p class="mut" style="margin:0 0 4px">« Mes clubs » suit le bloc du même nom ci-dessus : sur grand écran il passe dans la colonne de gauche.</p>${FRAIL.map(([id,t])=>`<div class="row hrow"><label><input type="checkbox" data-act="frailtoggle" data-id="${id}" ${(cfg.rh||[]).includes(id)?'':'checked'}> ${esc(t)}</label></div>`).join('')}<div class="row" style="margin-top:10px"><button data-act="fhomeedit">Terminé</button><button class="sec" data-act="fhomereset">Tout réinitialiser</button></div></div>`;
 }
+const FRAIL=[['stand','📊 Classement'],['live','🔴 En direct'],['res','🏁 Derniers résultats']];
 function footHome(){
   const {mt,done,P}=footIdx(), pl=Object.values(P), lg=ui.fLg&&ui.fLg!=='mine'?ui.fLg:'';
   const cfg=fhomeNorm();
@@ -1767,7 +1768,7 @@ function footHome(){
   const goals=done.reduce((s,m)=>s+m.hs+m.as,0);
   FB.kpis=`<div class="grid"><div class="kpi"><span class="mut">Matchs joués</span><b>${done.length}</b></div><div class="kpi"><span class="mut">Buts / match</span><b>${f1(fdiv(goals,done.length))}</b></div><div class="kpi"><span class="mut">Championnats</span><b>${Object.keys(foot.leagues).length}</b></div><div class="kpi"><span class="mut">Joueurs suivis</span><b>${pl.length}</b></div></div>`;
   FB.tonight=tonightFoot();
-  FB.clubs=`<div class="card"><h2>⭐ Mes clubs</h2>${footFavCards()}</div>`;
+  FB.clubs=`<div class="fclubs"><div class="card"><h2>⭐ Mes clubs</h2>${footFavCards()}</div></div>`;
   const bg=footBig(); if(bg.length) FB.big=`<div class="card"><h2>🔥 À ne pas manquer (8 prochains jours)</h2>${bg.map(i=>`<div class="alert"><b>${mlink(i.m,`${footLogo(i.m.hl,18)}${esc(i.m.hn)} - ${footLogo(i.m.al,18)}${esc(i.m.an)}`)}</b> <span class="mut">${esc(footLgName(i.m.lg))} · ${esc(fmtDT(i.m.d))}</span><br>${i.tags.map(t=>`<span class="chip">${esc(t)}</span>`).join(' ')}</div>`).join('')}</div>`;
   if(ffavP.length){ FB.players=`<div class="card"><h2>⭐ Mes joueurs</h2><div class="scroll"><table><thead><tr><th class="l">Joueur</th><th>MJ</th><th>Buts</th><th>PD</th><th>Tirs</th></tr></thead><tbody>${ffavP.map(id=>{ const p=P[id]; return p?`<tr><td class="l">${fpstar(id)}${footAv(p.id,p.n,p.tco,24)}${plink(p.id,p.n)} <span class="mut">${esc(p.tn)}</span></td><td>${p.gp}</td><td><b>${p.g}</b></td><td>${p.a}</td><td>${p.sh}</td></tr>`:`<tr><td class="l">${esc(id)}</td><td colspan="4" class="mut">pas encore de stats</td></tr>`; }).join('')}</tbody></table></div></div>`; }
   FB.matches=`<div class="card"><div class="row between"><h2 style="margin:0">Matchs</h2>${footLgSel('fLg',ui.fLg,true,true)}</div>${footLists(footMatches(),8,!ui.fLg||ui.fLg==='mine')}</div>`;
@@ -2613,7 +2614,8 @@ function toggleFav(type,id,name){
   else if(a==='fhomeedit'){ ui.fHomeEdit=!ui.fHomeEdit; render(); }
   else if(a==='fhometoggle'){ const cf=fhomeNorm(), i=cf.hidden.indexOf(id); if(i>=0) cf.hidden.splice(i,1); else cf.hidden.push(id); fhomeCfg=cf; saveJ(KEYFH,fhomeCfg); render(); }
   else if(a==='fhomemove'){ const cf=fhomeNorm(), i=cf.order.indexOf(id), j=i+(+el.dataset.d); if(i>=0&&j>=0&&j<cf.order.length){ [cf.order[i],cf.order[j]]=[cf.order[j],cf.order[i]]; fhomeCfg=cf; saveJ(KEYFH,fhomeCfg); render(); } }
-  else if(a==='fhomereset'){ fhomeCfg={order:FHOME_BLOCKS.map(b=>b[0]),hidden:[...FHOME_HIDE0]}; saveJ(KEYFH,fhomeCfg); render(); }
+  else if(a==='frailtoggle'){ const cf=fhomeNorm(), i=cf.rh.indexOf(id); if(i>=0) cf.rh.splice(i,1); else cf.rh.push(id); fhomeCfg=cf; saveJ(KEYFH,fhomeCfg); render(); }
+  else if(a==='fhomereset'){ fhomeCfg={order:FHOME_BLOCKS.map(b=>b[0]),hidden:[...FHOME_HIDE0],rh:[]}; saveJ(KEYFH,fhomeCfg); render(); }
   else if(a==='homeedit'){ ui.homeEdit=!ui.homeEdit; render(); }
   else if(a==='hometoggle'){ const cf=homeCfgNorm(), i=cf.hidden.indexOf(id); if(i>=0) cf.hidden.splice(i,1); else cf.hidden.push(id); homeCfg=cf; saveJ(KEYH,homeCfg); render(); }
   else if(a==='homemove'){ const cf=homeCfgNorm(), i=cf.order.indexOf(id), j=i+(+el.dataset.d); if(i>=0&&j>=0&&j<cf.order.length){ [cf.order[i],cf.order[j]]=[cf.order[j],cf.order[i]]; homeCfg=cf; saveJ(KEYH,homeCfg); render(); } }
