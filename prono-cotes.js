@@ -153,6 +153,6 @@
   try { const r1 = render; render = function () { const x = r1.apply(this, arguments); try { majPanneau(); } catch (e) {} return x; }; } catch (e) {}
   // règlement automatique toutes les 5 minutes tant que l'onglet Tennis est ouvert
   setInterval(() => { if (inTennis() && !document.hidden) regler(false); }, 5 * 60e3);
-  const css = document.createElement('style'); css.textContent = 'body[data-sport="tennis"] .foot-only,body[data-sport="tennis"] .qs-opts{display:none!important}'; document.head.appendChild(css);
+  const css = document.createElement('style'); css.textContent = 'body[data-sport="tennis"] .foot-only,body[data-sport="tennis"] .qs-opts{display:none!important}#trackerViewContent>#tnPicker{grid-column:1/-1;margin-top:0!important}'; document.head.appendChild(css);
   window.addEventListener('load', () => { monter(); majPanneau(); });
 })();
