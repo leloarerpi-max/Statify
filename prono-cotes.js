@@ -4,7 +4,7 @@
    Utilise la même adresse de robot que l'ancien onglet Tennis (clé « prono-tennis-robot »). */
 (function () {
   'use strict';
-  const KEY_ROBOT = 'prono-tennis-robot', KEY_SEUIL = 'prono-cotes-seuil', KEY_MISE = 'prono-cotes-mise';
+  const KEY_ROBOT = 'prono-tennis-robot', KEY_SEUIL = 'prono-cotes-seuil', KEY_MISE = 'prono-cotes-mise', KEY_AUTO = 'prono-cotes-auto';
   const S = { robot: { url: '', key: '' }, off: 0, days: {}, busy: false, err: '', copies: [], regBusy: false };
   try { Object.assign(S.robot, JSON.parse(localStorage.getItem(KEY_ROBOT) || '{}')); } catch (e) {}
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -30,7 +30,7 @@
     const iso = isoOf(S.off), d = S.days[iso];
     if (!force && d && Date.now() - d._t < 5 * 60e3) { majPanneau(); return; }
     S.busy = true; S.err = ''; majPanneau();
-    try { S.days[iso] = await lireJour(iso); }
+    try { S.days[iso] = await lireJour(iso); if (inTennis() && autoOn()) genCombos(iso, false); }
     catch (e) { S.err = e.message === 'Failed to fetch' ? "Robot injoignable : vérifie l'adresse et ta connexion." : e.message; }
     S.busy = false; majPanneau();
   }
@@ -46,15 +46,35 @@
     if (ex) { if (!confirm('Tu as déjà un pari sur ce match (' + ex.prono + '). En ajouter un autre ?')) return; }
     state.tennis.unshift(nouveauPari(iso, m, n, num(KEY_MISE, 1))); saveState();
   };
-  window.cotesCombine = (a, b) => {
-    const P = S.copies[a]; if (!P) return;
-    const mise = num(KEY_MISE, 1), ids = [];
-    [P.a, P.b].forEach(x => { let bet = betOf(mkKey(P.iso, x.m)); if (!bet) { bet = nouveauPari(P.iso, x.m, x.n, mise); state.tennis.unshift(bet); } ids.push(bet.id); });
-    if (state.combos.tennis.some(c => c.legIds && c.legIds.length === 2 && ids.every(id => c.legIds.includes(id)))) { alert('Ce combiné existe déjà.'); return; }
-    const combo = { id: Date.now() + Math.floor(Math.random() * 1000), stake: mise, legIds: ids, createdAt: new Date().toISOString() };
-    ids.forEach(id => { const bet = state.tennis.find(x => x.id === id); if (bet) bet.comboId = combo.id; });
-    state.combos.tennis.push(combo); saveState();
-  };
+  // Combinés automatiques : parmi les favoris à cote basse (≤ seuil) du jour, on forme des paires en associant les meilleures cotes
+  // entre elles (1re avec 2e, 3e avec 4e…). Un match / un joueur ne sert qu'une seule fois, et jamais s'il est déjà dans un combiné ou a déjà un pari.
+  const autoOn = () => { try { return localStorage.getItem(KEY_AUTO) !== '0'; } catch (e) { return true; } };
+  function genCombos(iso, manuel) {
+    const D = S.days[iso]; if (!D || iso < isoOf(0)) return 0;
+    const seuil = num(KEY_SEUIL, 1.5), mise = num(KEY_MISE, 1), flag = 'prono-cotes-auto-' + iso;
+    if (!manuel) { try { if (localStorage.getItem(flag)) return 0; } catch (e) {} }
+    const dejaCombine = new Set(), dejaPari = new Set();
+    const legIds = new Set(); (state.combos.tennis || []).forEach(c => (c.legIds || []).forEach(id => legIds.add(id)));
+    (state.tennis || []).forEach(b => { if (b.date !== iso || !b.tn) return; dejaPari.add(norm(b.tn.j1) + '|' + norm(b.tn.j2)); if (b.comboId || legIds.has(b.id)) { dejaCombine.add(norm(b.tn.j1)); dejaCombine.add(norm(b.tn.j2)); } });
+    const cand = (D.matchs || []).filter(m => m.w !== 1 && m.w !== 2 && +m.c1 > 1 && +m.c2 > 1)
+      .map(m => { const n = +m.c1 <= +m.c2 ? 1 : 2; return { m, n, c: n === 1 ? +m.c1 : +m.c2 }; })
+      .filter(x => x.c <= seuil && !dejaPari.has(norm(x.m.j1) + '|' + norm(x.m.j2)) && !dejaCombine.has(norm(x.m.j1)) && !dejaCombine.has(norm(x.m.j2)))
+      .sort((a, b) => b.c - a.c);
+    let n = 0;
+    for (let i = 0; i + 1 < cand.length; i += 2) {
+      const ids = [];
+      [cand[i], cand[i + 1]].forEach(x => { const bet = nouveauPari(iso, x.m, x.n, mise); state.tennis.unshift(bet); ids.push(bet.id); });
+      const combo = { id: Date.now() + Math.floor(Math.random() * 100000), stake: mise, legIds: ids, createdAt: new Date().toISOString(), auto: true };
+      ids.forEach(id => { const bet = state.tennis.find(x => x.id === id); if (bet) bet.comboId = combo.id; });
+      state.combos.tennis.push(combo); n++;
+    }
+    if (cand.length >= 2) { try { localStorage.setItem(flag, '1'); } catch (e) {} }
+    if (n) saveState();
+    if (manuel) alert(n ? n + ' combiné(s) créé(s).' : 'Aucun combiné possible : il faut au moins 2 matchs avec un favori ≤ ' + f2(seuil) + ' pas encore utilisés.');
+    return n;
+  }
+  window.cotesGenerer = () => genCombos(isoOf(S.off), true);
+  window.cotesAuto = on => { try { localStorage.setItem(KEY_AUTO, on ? '1' : '0'); } catch (e) {} if (on) genCombos(isoOf(S.off), false); majPanneau(); };
 
   /* ---------- règlement automatique d'après les résultats du robot ---------- */
   async function regler(manuel) {
@@ -82,7 +102,7 @@
   function vue() {
     const seuil = num(KEY_SEUIL, 1.5), mise = num(KEY_MISE, 1), iso = isoOf(S.off);
     const chip = (o, t) => `<button type="button" onclick="cotesJour(${o})" style="${BD};border-radius:999px;padding:3px 12px;font-weight:700;font-size:12px;${S.off === o ? 'background:#1d4ed8;color:#fff;border-color:#1d4ed8' : ''}">${t}</button>`;
-    const ctl = `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0;font-size:12px">${chip(0, "Aujourd'hui")}${chip(1, 'Demain')}<label>Combinés : favori ≤ <input type="number" step="0.05" min="1" value="${seuil}" onchange="cotesReg('${KEY_SEUIL}',this.value)" style="width:64px;${BD};border-radius:8px;padding:2px 6px"></label><label>Mise <input type="number" step="0.5" min="0.5" value="${mise}" onchange="cotesReg('${KEY_MISE}',this.value)" style="width:64px;${BD};border-radius:8px;padding:2px 6px"> €</label><button type="button" onclick="cotesCharger(true)" style="${BD};border-radius:8px;padding:2px 10px;font-weight:700">↻ Cotes</button><button type="button" onclick="cotesRegler()" style="${BD};border-radius:8px;padding:2px 10px;font-weight:700" title="Lit les résultats et règle tes paris en cours">✓ Régler d’après les résultats</button></div>`;
+    const ctl = `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0;font-size:12px">${chip(0, "Aujourd'hui")}${chip(1, 'Demain')}<label title="Chaque jour, le tennis forme tout seul des combinés de 2 matchs avec les favoris à cote basse"><input type="checkbox" ${autoOn() ? 'checked' : ''} onchange="cotesAuto(this.checked)"> Combinés auto</label><label>Favori ≤ <input type="number" step="0.05" min="1" value="${seuil}" onchange="cotesReg('${KEY_SEUIL}',this.value)" style="width:64px;${BD};border-radius:8px;padding:2px 6px"></label><label>Mise <input type="number" step="0.5" min="0.5" value="${mise}" onchange="cotesReg('${KEY_MISE}',this.value)" style="width:64px;${BD};border-radius:8px;padding:2px 6px"> €</label><button type="button" onclick="cotesGenerer()" style="${BD};border-radius:8px;padding:2px 10px;font-weight:700">⚡ Générer</button><button type="button" onclick="cotesCharger(true)" style="${BD};border-radius:8px;padding:2px 10px;font-weight:700">↻ Cotes</button><button type="button" onclick="cotesRegler()" style="${BD};border-radius:8px;padding:2px 10px;font-weight:700" title="Lit les résultats et règle tes paris en cours">✓ Régler d’après les résultats</button></div>`;
     if (!S.robot.url || !S.robot.key) return `<p style="font-size:12px;margin:6px 0">Renseigne ton robot Cloudflare pour lire les matchs et les cotes :</p><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="cotesUrl" placeholder="https://statify-robot.xxx.workers.dev" value="${esc(S.robot.url)}" style="flex:1;min-width:220px;${BD};border-radius:8px;padding:5px 8px"><input id="cotesKey" type="password" placeholder="SYNC_KEY" value="${esc(S.robot.key)}" style="width:160px;${BD};border-radius:8px;padding:5px 8px"><button type="button" onclick="cotesSaveRobot()" style="${BD};border-radius:8px;padding:5px 12px;font-weight:700">Enregistrer</button></div>`;
     const D = S.days[iso];
     if (S.busy && !D) return ctl + '<p style="font-size:12px;opacity:.7">Chargement des matchs…</p>';
@@ -93,12 +113,7 @@
     const parT = {}; ms.forEach(x => { (parT[x.m.tournoi || 'Tennis'] = parT[x.m.tournoi || 'Tennis'] || []).push(x); });
     const btn = (x, n) => { const m = x.m, c = n === 1 ? m.c1 : m.c2, who = n === 1 ? m.j1 : m.j2, ex = betOf(mkKey(iso, m)), pris = ex && ex.tn.p === n; return `<button type="button" onclick="cotesPari('${iso}',${x.i},${n})" ${c > 1 ? '' : 'disabled'} title="Ajouter « Victoire ${esc(who)} »" style="${BD};border-radius:10px;padding:4px 10px;font-size:12.5px;text-align:left;${pris ? 'background:#16a34a;color:#fff;border-color:#16a34a;' : ''}${c > 1 ? '' : 'opacity:.4;'}"><b>${esc(who)}</b> ${c > 1 ? '<span style="font-weight:800">' + f2(c) + '</span>' : '<span style="opacity:.6">–</span>'}${pris ? ' ✓' : ''}</button>`; };
     const liste = Object.keys(parT).map(t => `<div style="font-size:11px;font-weight:800;opacity:.65;margin:10px 0 3px;text-transform:uppercase">${esc(t)}</div>` + parT[t].map(x => `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;flex-wrap:wrap"><span style="width:42px;font-size:11px;opacity:.7">${esc(x.m.heure || '')}</span>${btn(x, 1)}<span style="opacity:.5;font-size:11px">vs</span>${btn(x, 2)}</div>`).join('')).join('');
-    // combinés de 2 matchs sur les cotes basses
-    const fav = ms.filter(x => +x.m.c1 > 1 && +x.m.c2 > 1).map(x => { const n = +x.m.c1 <= +x.m.c2 ? 1 : 2; return { m: x.m, n, fav: n === 1 ? x.m.j1 : x.m.j2, c: n === 1 ? +x.m.c1 : +x.m.c2 }; }).filter(x => x.c <= seuil).sort((a, b) => a.c - b.c).slice(0, 12);
-    const P = []; for (let i = 0; i < fav.length; i++) for (let j = i + 1; j < fav.length; j++) P.push({ a: fav[i], b: fav[j], c: fav[i].c * fav[j].c, iso });
-    P.sort((a, b) => a.c - b.c); const top = P.slice(0, 8); S.copies = top;
-    const combos = top.length ? top.map((p, i) => `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--line,#eef2f7);font-size:13px"><span style="flex:1"><b>${esc(p.a.fav)}</b> + <b>${esc(p.b.fav)}</b></span><b>${f2(p.c)}</b><span style="color:#16a34a;font-weight:800;font-size:12px">+${f2((p.c - 1) * mise)} €</span><button type="button" onclick="cotesCombine(${i})" style="${BD};border-radius:8px;padding:2px 10px;font-weight:700">Créer</button></div>`).join('') : `<p style="font-size:12px;opacity:.7;margin:4px 0">${fav.length < 2 ? 'Moins de 2 matchs avec un favori ≤ ' + f2(seuil) + ' : monte le seuil.' : ''}</p>`;
-    return ctl + liste + `<div style="font-weight:800;font-size:12px;margin:14px 0 2px">⚡ Combinés de 2 matchs sur les cotes basses</div>${combos}<div style="font-size:11px;opacity:.65;margin-top:6px">Matchs et cotes : Tennis Explorer (ATP / WTA, sans qualifications) via ton robot${D.perime ? ' · ⚠️ données mémorisées' : ''}</div>`;
+    return ctl + liste + `<div style="font-size:11px;opacity:.65;margin-top:10px">Combinés auto : les favoris à cote basse sont associés deux par deux (les meilleures cotes ensemble), un joueur n’est jamais dans deux combinés. · Matchs et cotes : Tennis Explorer (ATP / WTA, sans qualifications) via ton robot${D.perime ? ' · ⚠️ données mémorisées' : ''}</div>`;
   }
   function monter() {
     let el = document.getElementById('tnPicker'); if (el) return el;
