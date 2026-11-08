@@ -2,7 +2,7 @@
    Utilise la même adresse de robot que l'ancien onglet Tennis (clé « prono-tennis-robot »). Aucun pari n'est créé : on copie le texte à coller. */
 (function () {
   'use strict';
-  const KEY_ROBOT = 'prono-tennis-robot', KEY_SEUIL = 'prono-cotes-seuil', KEY_MISE = 'prono-cotes-mise', KEY_OPEN = 'prono-cotes-open';
+  const KEY_ROBOT = 'prono-tennis-robot', KEY_SEUIL = 'prono-cotes-seuil', KEY_MISE = 'prono-cotes-mise';
   const S = { robot: { url: '', key: '' }, day: null, busy: false, err: '', copies: [] };
   try { Object.assign(S.robot, JSON.parse(localStorage.getItem(KEY_ROBOT) || '{}')); } catch (e) {}
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -50,18 +50,25 @@
   window.cotesSaveRobot = () => { const u = (document.getElementById('cotesUrl') || {}).value || '', k = (document.getElementById('cotesKey') || {}).value || ''; S.robot = { url: u.trim(), key: k.trim() }; try { localStorage.setItem(KEY_ROBOT, JSON.stringify(S.robot)); } catch (e) {} charger(true); };
   window.cotesCopier = i => { const t = S.copies[i]; if (!t) return; try { navigator.clipboard.writeText(t); } catch (e) {} const b = document.activeElement; if (b && b.tagName === 'BUTTON') { b.textContent = '✓'; setTimeout(() => { b.textContent = '📋'; }, 1200); } };
 
+  const ACTIF = 'px-4 py-2 rounded-xl transition bg-blue-600 text-white shadow-sm font-bold text-sm flex items-center gap-2';
+  const INACTIF = 'px-4 py-2 rounded-xl transition text-slate-600 hover:text-slate-900 font-bold text-sm flex items-center gap-2';
   function monter() {
-    if (document.getElementById('cotesTennis')) return;
-    const ancre = document.getElementById('resumeJour'); if (!ancre) return;
-    const d = document.createElement('details'); d.id = 'cotesTennis';
-    d.style.cssText = 'margin:10px 0;padding:10px 14px;border-radius:14px;background:var(--card,#fff);' + BD;
-    let ouvert = true; try { ouvert = localStorage.getItem(KEY_OPEN) !== '0'; } catch (e) {}
-    d.open = ouvert;
-    d.innerHTML = '<summary style="cursor:pointer;font-weight:800;font-size:14px">🎾 Cotes tennis du jour · combinés cotes basses</summary><div class="ct-body"></div>';
-    d.addEventListener('toggle', () => { try { localStorage.setItem(KEY_OPEN, d.open ? '1' : '0'); } catch (e) {} if (d.open && !S.day) charger(false); });
-    ancre.parentNode.insertBefore(d, ancre.nextSibling);
-    rendre(); if (d.open) charger(false);
+    const zone = document.getElementById('tennisCotesView'); if (!zone || document.getElementById('cotesTennis')) return;
+    zone.innerHTML = '<div id="cotesTennis" style="padding:12px 14px;border-radius:14px;background:var(--card,#fff);' + BD + '"><div style="font-weight:800;font-size:15px">🎾 Cotes tennis du jour · combinés cotes basses</div><div class="ct-body"></div></div>';
+    rendre();
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', monter); else monter();
-  window.addEventListener('load', monter);
+  // Onglet « Tennis » : on enveloppe switchView (défini dans prono.js) pour afficher / masquer notre zone
+  const sv0 = window.switchView;
+  window.switchView = function (view) {
+    const zone = document.getElementById('tennisCotesView'), bt = document.getElementById('btnViewTennis');
+    if (view === 'tennis') {
+      if (sv0) sv0('tracker');
+      const t = document.getElementById('btnViewTracker'), tc = document.getElementById('trackerViewContent'), ac = document.getElementById('analyzerViewContent');
+      if (tc) tc.classList.add('hidden'); if (ac) ac.classList.add('hidden'); if (t) t.className = INACTIF;
+      if (zone) zone.classList.remove('hidden'); if (bt) bt.className = ACTIF;
+      monter(); charger(false); return;
+    }
+    if (zone) zone.classList.add('hidden'); if (bt) bt.className = INACTIF;
+    return sv0 ? sv0.apply(this, arguments) : undefined;
+  };
 })();
