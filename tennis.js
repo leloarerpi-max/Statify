@@ -371,7 +371,7 @@ function drawOf(t){ let ev=currentEvent(), key=ev?t+':'+ev.id:'', D=key&&S.draw[
   return {ev,key,D,past,all:(D?Object.values(D.ms||{}):[]).filter(m=>S.qual||!isQual(m))}; }
 const TZ=['L','C','R'], TZN={L:'Colonne gauche',C:'Centre',R:'Colonne droite'}, KZ='suivi-tennis-zones';
 const tmv=r=>r.pv==null?'<span class="mv eq">·</span>':r.pv>r.rk?`<span class="mv up">▲${r.pv-r.rk}</span>`:r.pv<r.rk?`<span class="mv dn">▼${r.rk-r.pv}</span>`:'<span class="mv eq">=</span>';
-const TB_LABEL={lrank:'🌍 Classement ATP en direct (flèches)',live:'🔴 En direct',today:"⏰ À venir aujourd'hui",results:'🏁 Résultats récents',mine:'⭐ Mes joueurs',bracket:'🌳 Tableau du tournoi (arbre)',rank:'📊 Classement (ESPN)',stats:'📈 Faits marquants (Stats ATP)'};
+const TB_LABEL={cotes:'💶 Cotes & combinés (cotes basses)',lrank:'🌍 Classement ATP en direct (flèches)',live:'🔴 En direct',today:"⏰ À venir aujourd'hui",results:'🏁 Résultats récents',mine:'⭐ Mes joueurs',bracket:'🌳 Tableau du tournoi (arbre)',rank:'📊 Classement (ESPN)',stats:'📈 Faits marquants (Stats ATP)'};
 const TSIZE=['today','results','rank','lrank'];
 let tz=jl(KZ,null);
 const tzDefault=()=>({L:['mine','lrank'],C:['live','today','bracket'],R:['results','stats'],n:{}});
@@ -393,6 +393,21 @@ function tzBlock(id){ const t=myTour(), ms=allMatches(t), all=tz.n[id]==='all';
   if(id==='rank'){ const R=S.cache.rank[t]; if(!R) return box('📊 Classement '+t.toUpperCase(),'<p class="mut" style="margin:0">Classement en chargement…</p>');
     const rows=R.rows.slice(0,all?50:10).map(r=>`<div class="rr${S.fav[r.id]?' fv':''}"><span class="rk">${r.rk}</span>${tmv(r)}<div class="rt"><b>${esc(r.n)}</b></div><b class="rp">${r.pts!=null?r.pts.toLocaleString('fr-FR'):'–'}</b></div>`).join('');
     return box('📊 Classement '+t.toUpperCase(),rows); }
+  if(id==='cotes'){ const T=window.__tennis, E=T&&T.etat(), d0=new Date(), iso=d0.getFullYear()+'-'+String(d0.getMonth()+1).padStart(2,'0')+'-'+String(d0.getDate()).padStart(2,'0');
+    const gv=(k,d)=>{ try{ const v=parseFloat(localStorage.getItem(k)); return v>0?v:d; }catch(e){ return d; } }, seuil=gv('suivi-tennis-seuil',1.5), mise=gv('suivi-tennis-mise',1), f2=n=>(+n).toFixed(2).replace('.',',');
+    const ctl=`<div class="row" style="gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:12px"><label>Cote du favori ≤ <input type="number" step="0.05" min="1" value="${seuil}" data-cote="seuil" style="width:64px"></label><label>Mise <input type="number" step="0.5" min="0.5" value="${mise}" data-cote="mise" style="width:64px"> €</label></div>`;
+    if(!E||!E.robot||!E.robot.url) return box('💶 Cotes & combinés',`<p class="mut" style="margin:0">Les cotes viennent de ton robot (Tennis Explorer). Renseigne-le dans l'onglet Stats ATP.</p>`);
+    const D=E.days&&E.days[iso];
+    if(!D&&!S.cotesT&&window.tennisCharger){ S.cotesT=1; E.jour=iso; Promise.resolve(window.tennisCharger(false)).then(()=>{ try{ window.tennisRender&&window.tennisRender(); }catch(e){} }); }
+    if(!D||!(D.matchs||[]).length) return box('💶 Cotes & combinés',ctl+`<p class="mut" style="margin:0">${D?'Aucun match avec cotes aujourd’hui.':'Chargement des cotes…'}</p>`);
+    const ok=(D.matchs||[]).filter(m=>m.w!==1&&m.w!==2&&+m.c1>1&&+m.c2>1).map(m=>{ const n=m.c1<=m.c2?1:2; return {m,n,fav:n===1?m.j1:m.j2,c:n===1?+m.c1:+m.c2}; }).sort((a,b)=>a.c-b.c);
+    const bas=ok.filter(x=>x.c<=seuil).slice(0,12);
+    const rows=ok.slice(0,12).map(x=>`<div class="rr${x.c<=seuil?'':' mut'}"><span class="rk">${esc(x.m.heure||'')}</span><div class="rt"><b>${esc(x.fav)}</b> <span class="mut">vs ${esc(x.n===1?x.m.j2:x.m.j1)} · ${esc(x.m.tournoi||'')}</span></div><b class="rp">${f2(x.c)}</b></div>`).join('');
+    const P=[]; for(let i=0;i<bas.length;i++) for(let j=i+1;j<bas.length;j++) P.push({a:bas[i],b:bas[j],c:bas[i].c*bas[j].c});
+    P.sort((a,b)=>a.c-b.c); const top=P.slice(0,8);
+    const combos=top.length?top.map((p,i)=>`<div class="rr"><div class="rt"><b>${esc(p.a.fav)}</b> + <b>${esc(p.b.fav)}</b></div><b class="rp">${f2(p.c)}</b><span class="mv up" title="gain net pour ${f2(mise)} €">+${f2((p.c-1)*mise)} €</span><button class="sec" data-tn="cpcombo" data-i="${i}" title="Copier pour PronoTracker">📋</button></div>`).join(''):`<p class="mut" style="margin:6px 0 0">${bas.length<2?'Moins de 2 matchs sous '+f2(seuil)+' : monte le seuil pour voir des combinés.':''}</p>`;
+    S._cb=top.map(p=>[p.a,p.b].map(x=>`${iso} | ${x.m.j1} vs ${x.m.j2} | ${x.m.tournoi||'Tennis'} | Vainqueur du match | ${x.fav} | ${mise} | ${x.c}`).join('\n'));
+    return box('💶 Cotes & combinés (cotes basses)',ctl+rows+`<h3 style="font-size:12px;margin:10px 0 4px">Combinés de 2 matchs (du plus bas au plus haut)</h3>`+combos+`<div class="mut" style="font-size:11px;margin-top:6px">Cotes Tennis Explorer · aujourd’hui · ${ok.length} match(s) avec cotes</div>`); }
   if(id==='lrank'){ const T=window.__tennis, C=T&&T.etat().cl, cfg=T&&T.etat().robot&&T.etat().robot.url;
     if(C&&!C.l.length&&cfg&&!S.lrT&&window.tennisClassement){ S.lrT=1; Promise.resolve(window.tennisClassement(false)).then(()=>{ try{ window.tennisRender&&window.tennisRender(); }catch(e){} }); }
     if(!C||!C.l.length) return box('🌍 Classement ATP en direct',`<p class="mut" style="margin:0">${cfg?'Chargement du classement en direct…':'Classement live indisponible : renseigne le robot (réglage en bas de l’onglet Stats ATP). Classement ESPN avec flèches disponible via le bloc « Classement (ESPN) ».'}</p>`);
@@ -448,6 +463,7 @@ document.addEventListener('click',e=>{ if(ui.sport!=='tennis') return;
   else if(a==='tzadd'){ tzInit(); const sv=document.getElementById('tzAddSel'), zv=document.getElementById('tzAddZone'), id=sv&&sv.value, z=zv&&zv.value; if(id&&TZ.includes(z)&&!tzPlaced().includes(id)){ tz[z].push(id); tzSave(); render(); } }
   else if(a==='tzsize'){ tzInit(); const id=el.dataset.id; tz.n={...tz.n,[id]:tz.n[id]==='all'?'8':'all'}; tzSave(); render(); }
   else if(a==='tzreset'){ tz=tzDefault(); tzSave(); render(); }
+  else if(a==='cpcombo'){ const t=(S._cb||[])[+el.dataset.i]; if(t){ try{ navigator.clipboard.writeText(t); say('📋 Combiné copié (colle-le dans PronoTracker)','ok'); }catch(e){} } }
   else if(a==='qual'){ S.qual=!S.qual; S.more=0; savePref(); render(); }
   else if(a==='day'){ S.day=+v; S.more=0; render(); }
   else if(a==='mine'){ S.mine=!S.mine; savePref(); render(); }
@@ -472,3 +488,5 @@ document.addEventListener('click',e=>{ if(ui.sport!=='tennis') return;
 document.addEventListener('change',e=>{ if(ui.sport!=='tennis') return; const el=e.target.closest&&e.target.closest('#view [data-tn-sel]'); if(!el) return;
   if(el.dataset.tnSel==='rankn'){ S.rankN=+el.value; savePref(); render(); } else if(el.dataset.tnSel==='ev'){ S.evSel=el.value; render(); } });
 })();
+
+document.addEventListener('change',e=>{ const el=e.target&&e.target.closest&&e.target.closest('[data-cote]'); if(!el) return; const v=parseFloat(el.value); if(!(v>0)) return; try{ localStorage.setItem(el.dataset.cote==='mise'?'suivi-tennis-mise':'suivi-tennis-seuil',String(v)); }catch(x){} try{ render(); }catch(x){} });
