@@ -1,5 +1,5 @@
-const C='statify-v80';
-const ASSETS=['./','index.html','backup.js','xlsx.js','statify.css','statify.js','tennis.js','tennis-ball.mp3','prono.html','prono.css','prono.js','prono-tennis.js','prono-tennis-joueurs.js','prono-combos-auto.js','chart.umd.min.js','fa.css','fa-solid-900.woff2','manifest.webmanifest','icon-192.png','icon-512.png','icon-180.png'];
+const C='statify-v81';
+const ASSETS=['./','index.html','backup.js','xlsx.js','statify.css','statify.js','tennis.js','tennis-ball.mp3','prono.html','prono.css','prono.js','prono-cotes.js','prono-tennis.js','prono-tennis-joueurs.js','prono-combos-auto.js','chart.umd.min.js','fa.css','fa-solid-900.woff2','manifest.webmanifest','icon-192.png','icon-512.png','icon-180.png'];
 // un fichier manquant ne doit pas faire échouer toute l'installation
 self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>Promise.all(ASSETS.map(a=>c.add(a).catch(()=>{})))).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
