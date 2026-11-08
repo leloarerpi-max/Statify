@@ -4,16 +4,15 @@
     try { if (window.Chart) { Chart.defaults.color = chartTick(); Chart.defaults.borderColor = chartGrid(); } } catch (e) {}
     let currentSport = 'football';
     let state = JSON.parse(localStorage.getItem('prono_tracker_multisport_data')) || { football: [] };
-    // Le tennis n'existe plus dans l'appli : on purge toute donnée tennis restante.
-    delete state.tennis;
-    if (state.combos) delete state.combos.tennis;
     if (!state.combos) state.combos = {};
+    if (!Array.isArray(state.tennis)) state.tennis = [];
+    if (!Array.isArray(state.combos.tennis)) state.combos.tennis = [];
     if (!Array.isArray(state.combos.football)) state.combos.football = [];
     // Toute mise à 0 (ou absente) passe à 1 € : paris simples ET combinés, football.
     // Renvoie le nombre de mises corrigées.
     function corrigerMisesNulles() {
       let n = 0;
-      ['football'].forEach(sp => {
+      ['football', 'tennis'].forEach(sp => {
         (state[sp] || []).forEach(b => {
           if (!(parseFloat(b.stake) > 0)) { b.stake = 1; n++; }
         });
@@ -1077,8 +1076,10 @@
     }
     try { if (localStorage.getItem('pronotracker_formReplie') !== '0') document.addEventListener('DOMContentLoaded', () => basculerFormulaire(true)); } catch (e) {}
 
+    const TENNIS_MARKETS = ["Vainqueur du match", "Vainqueur du 1er set", "Handicap jeux", "Total jeux", "Nombre de sets", "Autre"];
     function switchSport(sport) {
-      currentSport = 'football';
+      currentSport = sport === 'tennis' ? 'tennis' : 'football';
+      try { document.body.dataset.sport = currentSport; } catch (e) {}
       // Ne PAS réinitialiser currentCompFilters ici : cette fonction sert aussi d'init au
       // chargement de la page (window.onload), et les championnats inclus/exclus doivent
       // survivre à un rechargement.
@@ -1094,16 +1095,17 @@
 
       const marketSelect = document.getElementById('marketInput');
       marketSelect.innerHTML = '';
-      const markets = footballMarkets;
+      const markets = currentSport === 'tennis' ? TENNIS_MARKETS : footballMarkets;
 
       document.getElementById('headerSubtitle').textContent = "Suivi de performance";
       document.getElementById('formTitle').innerHTML = `<i class="fa-solid fa-plus-circle text-blue-600"></i> Ajouter un Pari`;
       document.getElementById('dailySectionTitle').innerHTML = `<i class="fa-solid fa-calendar-day text-emerald-600"></i> Bilan Quotidien Jour par Jour`;
       document.getElementById('labelMatch').textContent = "Match / Affiche";
-      document.getElementById('labelComp').textContent = "Championnat";
-      document.getElementById('matchInput').placeholder = "Ex: PSG vs OM";
-      document.getElementById('compInput').placeholder = "Ex: Ligue 1";
-      document.getElementById('footballCategoryCard').classList.remove('hidden');
+      document.getElementById('labelComp').textContent = currentSport === 'tennis' ? "Tournoi" : "Championnat";
+      document.getElementById('matchInput').placeholder = currentSport === 'tennis' ? "Ex: Sinner J. vs Alcaraz C." : "Ex: PSG vs OM";
+      document.getElementById('compInput').placeholder = currentSport === 'tennis' ? "Ex: Paris Masters" : "Ex: Ligue 1";
+      document.getElementById('pronoInput').placeholder = currentSport === 'tennis' ? "Ex: Victoire Sinner" : "Ex: Victoire PSG";
+      document.getElementById('footballCategoryCard').classList.toggle('hidden', currentSport === 'tennis');
 
       markets.forEach(m => marketSelect.innerHTML += `<option value="${m}">${m}</option>`);
       populateCompFilterOptions();
@@ -6025,7 +6027,19 @@ function rgMajResume() {
     const mC = attC.reduce((s, c) => s + (c.stake || 0), 0), gC = attC.reduce((s, c) => s + (comboOdds(currentSport, c) - 1) * (c.stake || 0), 0);
     const f = v => v.toFixed(2).replace('.', ',') + ' €';
     e.innerHTML = `<b>Aujourd'hui :</b> ${liste.length} pari${liste.length > 1 ? 's' : ''}, ${combos.length} combiné${combos.length > 1 ? 's' : ''} <span class="rj-sep">·</span> <b>Gain potentiel</b> solo <span class="pos">+${f(gS)}</span> (mise ${f(mS)}) <span class="rj-sep">·</span> combinés <span class="pos">+${f(gC)}</span> (mise ${f(mC)})`;
-    e.style.display = (liste.length || combos.length) ? '' : 'none';
+    // Projection : total « si tout est bon » aujourd'hui + les jours suivants (paris déjà dans un combiné non comptés en solo)
+    const dansCombo = new Set(); (state.combos[currentSport] || []).forEach(c => (c.legIds || []).forEach(id => dansCombo.add(String(id))));
+    const jr = {}, J = d => jr[d] = jr[d] || { ms: 0, gs: 0, mc: 0, gc: 0 };
+    (state[currentSport] || []).filter(b => b.status === 'Pending' && b.date >= auj && !dansCombo.has(String(b.id)) && !b.comboId && (b.stake || 0) > 0).forEach(b => { const j = J(b.date); j.ms += b.stake; j.gs += ((b.odds || 1) - 1) * b.stake; });
+    (state.combos[currentSport] || []).forEach(c => { if (comboStatus(currentSport, c) !== 'Pending') return; const d = comboLegs(currentSport, c).reduce((mx, l) => (l.date && l.date > mx ? l.date : mx), ''); if (d < auj) return; const j = J(d), st = c.stake || 0; j.mc += st; j.gc += (comboOdds(currentSport, c) - 1) * st; });
+    const jFr = d => { const x = new Date(d + 'T12:00:00'); return isNaN(x) ? d : x.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }); };
+    const ligne = (lib, j) => { const m = j.ms + j.mc, g = j.gs + j.gc; return `<div style="margin-top:4px"><b>${lib}</b> si tout est bon : <span class="pos">+${f(g)}</span> <span class="mut">(mise ${f(m)} · retour ${f(m + g)})</span></div>`; };
+    const jours = Object.keys(jr).sort();
+    let proj = '';
+    if (jr[auj]) proj += ligne('🎯 Aujourd\'hui', jr[auj]);
+    jours.filter(d => d > auj).slice(0, 4).forEach(d => { proj += ligne(jFr(d), jr[d]); });
+    e.innerHTML += proj;
+    e.style.display = (liste.length || combos.length || proj) ? '' : 'none';
   } catch (x) {}
 }
 document.addEventListener('change', ev => {
