@@ -295,10 +295,15 @@ function ntBanner(title,body,full){
       const det=String(body||'').replace(/^[^\p{L}\d]+/u,'').replace(/^BREAK ! /i,'').replace(/^Break décisif · /i,''); x.font='600 26px "Segoe UI",Arial,sans-serif'; x.fillStyle='#fff';
       const words=det.split(' '), ln=[]; let cur=''; for(const w of words){ const t=cur?cur+' '+w:w; if(x.measureText(t).width>W-60&&cur){ ln.push(cur); cur=w; } else cur=t; } if(cur) ln.push(cur);
       ln.slice(0,3).forEach((t,i)=>x.fillText(t,30,226+i*34)); }
-    return cv.toDataURL('image/png'); }catch(e){ return ''; } }
-const NTS={send(title,body,tag){ ntSound(); const o={body,tag,icon:'icon-192.png'}; if(NT.col){ const im=ntBanner(title,body,NT.big); if(im){ o.image=im; if(NT.big){ o.body=''; title='🎾 Tennis'; } } }
-  const direct=()=>{ try{ const n=new Notification(title,{body:o.body,tag,image:o.image}); n.onclick=()=>{ try{ window.focus(); }catch(e){} n.close(); }; NT.last='ok (page)'; }catch(e){ NT.last='erreur : '+(e.message||e); } };
-  try{ if(navigator.serviceWorker&&navigator.serviceWorker.getRegistration) navigator.serviceWorker.getRegistration().then(r=>{ if(r&&r.active&&r.showNotification) return r.showNotification(title,o).then(()=>{ NT.last='ok (service worker)'; }); direct(); }).catch(direct); else direct(); }catch(e){ direct(); } }};
+    return cv.toDataURL('image/jpeg',.88); }catch(e){ return ''; } }
+const NTS={send(title,body,tag){ ntSound(); const plain={body,tag,icon:'icon-192.png'}; let o=plain, t2=title;
+  if(NT.col){ const im=ntBanner(title,body,NT.big); if(im){ o=Object.assign({},plain,{image:im}); if(NT.big){ o.body=''; t2='🎾 Tennis'; } } }
+  // dernier recours : la page elle-même ; en cas d'échec avec l'image, on renvoie la version simple (une alerte ne doit jamais se perdre)
+  const direct=(opt,tt)=>{ try{ const n=new Notification(tt,opt); n.onclick=()=>{ try{ window.focus(); }catch(e){} n.close(); }; NT.last='ok (page)'; }catch(e){ if(opt!==plain){ direct(plain,title); } else NT.last='erreur : '+(e.message||e); } };
+  const viaSw=(r,opt,tt)=>r.showNotification(tt,opt).then(()=>{ NT.last='ok (service worker)'; });
+  try{ if(navigator.serviceWorker&&navigator.serviceWorker.getRegistration) navigator.serviceWorker.getRegistration().then(r=>{
+      if(r&&r.active&&r.showNotification) return viaSw(r,o,t2).catch(()=>{ if(o===plain) throw 0; return viaSw(r,plain,title); });
+      direct(o,t2); }).catch(()=>direct(o,t2)); else direct(o,t2); }catch(e){ direct(o,t2); } }};
 let ntSeq=0;
 const sumG=a=>a.reduce((s,x)=>s+x,0), ntOther=s=>s==='a'?'b':s==='b'?'a':'';
 const setDone=(x,y)=>{ const hi=Math.max(x,y), lo=Math.min(x,y); return (hi>=6&&hi-lo>=2)||(hi===7&&lo>=5); };
