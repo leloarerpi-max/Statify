@@ -255,7 +255,7 @@ function diagPaste(kind){ const el=document.getElementById('tnPaste'), txt=el?el
 /* ---------- 11b. Notifications (ordinateur, navigateur ouvert) ---------- */
 // Pour les joueurs suivis (☆) : début, chaque jeu (🔥 BREAK si le service est perdu), fin de set, fin de match.
 // Fonctionne tant que Statify est ouvert (onglet ou appli, même réduit), quel que soit le sport affiché. Réglages propres à cet appareil (non synchronisés).
-const NT0=jl(K.notif,{}), NT={on:!!NT0.on,snd:NT0.snd!==false,col:NT0.col!==false,big:NT0.big!==false,scope:['fav','pick'].includes(NT0.scope)?NT0.scope:'all',start:NT0.start!==false,game:NT0.game!==false,set:NT0.set!==false,end:NT0.end!==false};
+const NT0=jl(K.notif,{}), NT={on:!!NT0.on,snd:NT0.snd!==false,scope:['fav','pick'].includes(NT0.scope)?NT0.scope:'all',start:NT0.start!==false,game:NT0.game!==false,set:NT0.set!==false,end:NT0.end!==false};
 const saveNt=()=>js_(K.notif,NT);
 const NT_API=typeof Notification!=='undefined', NT_PHONE=!!(window.matchMedia&&matchMedia('(hover:none) and (pointer:coarse)').matches), NT_OK=NT_API&&!NT_PHONE;
 const ntActive=()=>NT_OK&&NT.on&&Notification.permission==='granted';
@@ -269,41 +269,9 @@ function ntSound(force){ if(!force&&(!NT.snd||Date.now()-ntSndT<1500)) return; n
 // les navigateurs n'autorisent un son qu'après un clic dans la page : on « débloque » l'audio au premier clic
 const ntUnlock=()=>{ document.removeEventListener('pointerdown',ntUnlock,true); document.removeEventListener('keydown',ntUnlock,true); try{ const a=ntAudio(), v=a.volume; a.volume=0; const p=a.play(); const done=()=>{ a.pause(); a.currentTime=0; a.volume=v; }; if(p&&p.then) p.then(done).catch(()=>{ a.volume=v; }); else done(); }catch(e){} };
 document.addEventListener('pointerdown',ntUnlock,true); document.addEventListener('keydown',ntUnlock,true);
-// bandeau coloré affiché dans la notification (une notification de navigateur n'accepte pas de fond coloré, mais bien une image) :
-// dégradé selon le type d'alerte (début, jeu, break, set, victoire, défaite…) dessiné ici même, sans fichier à ajouter
-function ntLook(title,body){
-  const t=String(title||''), b=String(body||''), brk=/break/i.test(b);
-  if(/^✅/.test(t)) return {c1:'#16a34a',c2:'#065f46',emo:'🏆',lab:'VICTOIRE'};
-  if(/^❌/.test(t)) return {c1:'#dc2626',c2:'#7f1d1d',emo:'💔',lab:'DÉFAITE'};
-  if(/^🏁/.test(t)) return {c1:'#f59e0b',c2:'#92400e',emo:'🏁',lab:'MATCH TERMINÉ'};
-  if(/Début du match/i.test(b)) return {c1:'#2563eb',c2:'#1e3a8a',emo:'▶️',lab:'DÉBUT DU MATCH'};
-  if(/set/i.test(b)&&/(remporte|terminé)/i.test(b)) return brk?{c1:'#f97316',c2:'#9a3412',emo:'🔥',lab:'BREAK DÉCISIF · SET'}:{c1:'#7c3aed',c2:'#4c1d95',emo:'✅',lab:'SET'};
-  if(brk) return {c1:'#f97316',c2:'#b91c1c',emo:'🔥',lab:'BREAK !'};
-  return {c1:'#0d9488',c2:'#134e4a',emo:'🎾',lab:'JEU'};
-}
-function ntBanner(title,body,full){
-  try{ const L=ntLook(title,body), W=720, H=360, cv=document.createElement('canvas'); cv.width=W; cv.height=H; const x=cv.getContext('2d');
-    const g=x.createLinearGradient(0,0,W,H); g.addColorStop(0,L.c1); g.addColorStop(1,L.c2); x.fillStyle=g; x.fillRect(0,0,W,H);
-    x.fillStyle='rgba(255,255,255,.10)'; x.beginPath(); x.arc(W-70,-10,170,0,7); x.fill(); x.beginPath(); x.arc(40,H+30,120,0,7); x.fill();
-    x.textBaseline='middle'; x.fillStyle='#fff'; x.font='110px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif'; x.fillText(L.emo,40,full?126:H/2-6);
-    const fit=(txt,w,px,wt)=>{ let p=px; do{ x.font=wt+' '+p+'px "Segoe UI",Arial,sans-serif'; p-=2; }while(x.measureText(txt).width>w&&p>14); };
-    x.shadowColor='rgba(0,0,0,.35)'; x.shadowBlur=8; fit(L.lab,W-190-24,60,800); x.fillText(L.lab,185,full?96:H/2-40);
-    x.shadowBlur=0; x.fillStyle='rgba(255,255,255,.92)'; const sub=String(title||'').replace(/^[^\p{L}\d]+/u,'').split(' · ')[0];
-    if(!full){ fit(sub,W-185-24,36,600); x.fillText(sub,185,H/2+30); }
-    else{ // tout dans le bandeau : joueurs en haut, détail (score…) sur 2 lignes dessous
-      fit(sub,W-185-24,34,700); x.fillText(sub,185,152);
-      const det=String(body||'').replace(/^[^\p{L}\d]+/u,'').replace(/^BREAK ! /i,'').replace(/^Break décisif · /i,''); x.font='600 26px "Segoe UI",Arial,sans-serif'; x.fillStyle='#fff';
-      const words=det.split(' '), ln=[]; let cur=''; for(const w of words){ const t=cur?cur+' '+w:w; if(x.measureText(t).width>W-60&&cur){ ln.push(cur); cur=w; } else cur=t; } if(cur) ln.push(cur);
-      ln.slice(0,3).forEach((t,i)=>x.fillText(t,30,226+i*34)); }
-    return cv.toDataURL('image/jpeg',.88); }catch(e){ return ''; } }
-const NTS={send(title,body,tag){ ntSound(); const plain={body,tag,icon:'icon-192.png'}; let o=plain, t2=title;
-  if(NT.col){ const im=ntBanner(title,body,NT.big); if(im){ o=Object.assign({},plain,{image:im}); if(NT.big){ o.body=''; t2='🎾 Tennis'; } } }
-  // dernier recours : la page elle-même ; en cas d'échec avec l'image, on renvoie la version simple (une alerte ne doit jamais se perdre)
-  const direct=(opt,tt)=>{ try{ const n=new Notification(tt,opt); n.onclick=()=>{ try{ window.focus(); }catch(e){} n.close(); }; NT.last='ok (page)'; }catch(e){ if(opt!==plain){ direct(plain,title); } else NT.last='erreur : '+(e.message||e); } };
-  const viaSw=(r,opt,tt)=>r.showNotification(tt,opt).then(()=>{ NT.last='ok (service worker)'; });
-  try{ if(navigator.serviceWorker&&navigator.serviceWorker.getRegistration) navigator.serviceWorker.getRegistration().then(r=>{
-      if(r&&r.active&&r.showNotification) return viaSw(r,o,t2).catch(()=>{ if(o===plain) throw 0; return viaSw(r,plain,title); });
-      direct(o,t2); }).catch(()=>direct(o,t2)); else direct(o,t2); }catch(e){ direct(o,t2); } }};
+const NTS={send(title,body,tag){ ntSound(); const o={body,tag,icon:'icon-192.png'};
+  const direct=()=>{ try{ const n=new Notification(title,{body,tag}); n.onclick=()=>{ try{ window.focus(); }catch(e){} n.close(); }; NT.last='ok (page)'; }catch(e){ NT.last='erreur : '+(e.message||e); } };
+  try{ if(navigator.serviceWorker&&navigator.serviceWorker.getRegistration) navigator.serviceWorker.getRegistration().then(r=>{ if(r&&r.active&&r.showNotification) return r.showNotification(title,o).then(()=>{ NT.last='ok (service worker)'; }); direct(); }).catch(direct); else direct(); }catch(e){ direct(); } }};
 let ntSeq=0;
 const sumG=a=>a.reduce((s,x)=>s+x,0), ntOther=s=>s==='a'?'b':s==='b'?'a':'';
 const setDone=(x,y)=>{ const hi=Math.max(x,y), lo=Math.min(x,y); return (hi>=6&&hi-lo>=2)||(hi===7&&lo>=5); };
@@ -384,7 +352,7 @@ function ntCard(){ if(!NT_OK) return `<div class="card"><h2 style="margin:0">�
       :NT.scope==='fav'&&!Object.keys(S.fav).length&&!Object.keys(S.starM).length?'Suis au moins un joueur avec ☆, ou étoile un match, pour recevoir des alertes.'
     :'Actives tant que Statify reste ouvert (onglet ou application, même réduit, quel que soit le sport affiché). Le 🔥 BREAK apparaît quand ESPN indique qui sert.';
   return `<div class="card"><div class="row between" style="gap:10px;flex-wrap:wrap;align-items:center"><h2 style="margin:0">🔔 Notifications sur cet ordinateur</h2><button class="${on?'':'sec '}fbtn" data-tn="nton">${on?'Activées':'Activer'}</button></div>
-    <p class="mut" style="margin:8px 0 0;font-size:13px">${txt}</p>${on?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="${NT.scope==='all'?'':'sec '}fbtn" data-tn="ntscope" data-v="all">Tous les matchs en direct</button><button class="${NT.scope==='fav'?'':'sec '}fbtn" data-tn="ntscope" data-v="fav">Mes joueurs + matchs ★</button><button class="${NT.scope==='pick'?'':'sec '}fbtn" data-tn="ntscope" data-v="pick">Matchs ★ seulement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${opt('start','Début')}${opt('game','Chaque jeu')}${opt('set','Chaque set')}${opt('end','Fin du match')}<button class="${NT.snd?'':'sec '}fbtn" data-tn="ntopt" data-v="snd">${NT.snd?'🔊 Son':'🔇 Son'}</button><button class="${NT.col?'':'sec '}fbtn" data-tn="ntopt" data-v="col">${NT.col?'🎨 Couleurs':'⬜ Couleurs'}</button><button class="${NT.big&&NT.col?'':'sec '}fbtn" data-tn="ntopt" data-v="big" title="Tout le texte dans le bandeau coloré ; la partie grise ne garde qu'un titre">🖼️ Tout dans le bandeau</button><button class="sec fbtn" data-tn="ntsnd">Tester le son</button><button class="sec fbtn" data-tn="nttest" title="Chaque clic envoie un autre type d'alerte : début, jeu, break, set, victoire, défaite">Tester la notification (${(NT.tcy||0)%7+1}/7)</button></div>${NT.stat?`<p class="mut" style="margin:8px 0 0;font-size:12px">Surveillance : ${NT.stat.n} match${NT.stat.n>1?'s':''} · dernière lecture d\'ESPN à ${new Date(NT.stat.t).toLocaleTimeString('fr-FR',{timeZone:'Europe/Paris'})}</p>`:'<p class="mut" style="margin:8px 0 0;font-size:12px">Surveillance : pas encore de lecture depuis l\'ouverture de la page.</p>'}${NT.lastSnd?`<p class="mut" style="margin:8px 0 0;font-size:12px">${esc(NT.lastSnd)}</p>`:''}${NT.last?`<p class="mut" style="margin:8px 0 0;font-size:12px">Dernier essai : ${esc(NT.last)}. Si rien n'apparaît à l'écran alors que c'est « ok » : Windows → Paramètres → Système → Notifications → active ton navigateur et coupe « Ne pas déranger » / « Assistant de concentration » ; sur Mac : Réglages → Notifications → ton navigateur.</p>`:''}`:''}</div>`; }
+    <p class="mut" style="margin:8px 0 0;font-size:13px">${txt}</p>${on?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:8px"><button class="${NT.scope==='all'?'':'sec '}fbtn" data-tn="ntscope" data-v="all">Tous les matchs en direct</button><button class="${NT.scope==='fav'?'':'sec '}fbtn" data-tn="ntscope" data-v="fav">Mes joueurs + matchs ★</button><button class="${NT.scope==='pick'?'':'sec '}fbtn" data-tn="ntscope" data-v="pick">Matchs ★ seulement</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${opt('start','Début')}${opt('game','Chaque jeu')}${opt('set','Chaque set')}${opt('end','Fin du match')}<button class="${NT.snd?'':'sec '}fbtn" data-tn="ntopt" data-v="snd">${NT.snd?'🔊 Son':'🔇 Son'}</button><button class="sec fbtn" data-tn="ntsnd">Tester le son</button><button class="sec fbtn" data-tn="nttest">Tester la notification</button></div>${NT.stat?`<p class="mut" style="margin:8px 0 0;font-size:12px">Surveillance : ${NT.stat.n} match${NT.stat.n>1?'s':''} · dernière lecture d\'ESPN à ${new Date(NT.stat.t).toLocaleTimeString('fr-FR',{timeZone:'Europe/Paris'})}</p>`:'<p class="mut" style="margin:8px 0 0;font-size:12px">Surveillance : pas encore de lecture depuis l\'ouverture de la page.</p>'}${NT.lastSnd?`<p class="mut" style="margin:8px 0 0;font-size:12px">${esc(NT.lastSnd)}</p>`:''}${NT.last?`<p class="mut" style="margin:8px 0 0;font-size:12px">Dernier essai : ${esc(NT.last)}. Si rien n'apparaît à l'écran alors que c'est « ok » : Windows → Paramètres → Système → Notifications → active ton navigateur et coupe « Ne pas déranger » / « Assistant de concentration » ; sur Mac : Réglages → Notifications → ton navigateur.</p>`:''}`:''}</div>`; }
 
 /* ---------- 12. Affichage principal + clics ---------- */
 
@@ -520,7 +488,7 @@ document.addEventListener('click',e=>{ if(ui.sport!=='tennis') return;
   else if(a==='ntscope'){ NT.scope=v; saveNt(); js_(K.snap,{}); ntPoll(true); render(); }
   else if(a==='ntopt'){ NT[v]=!NT[v]; saveNt(); render(); }
   else if(a==='ntsnd'){ NT.lastSnd='son : essai…'; fetch('tennis-ball.mp3',{method:'HEAD',cache:'no-store'}).then(r=>{ if(!r.ok){ NT.lastSnd='son : fichier tennis-ball.mp3 introuvable (HTTP '+r.status+') : mets-le dans le même dossier que index.html'; redraw(); } }).catch(()=>{}); ntSound(true); }
-  else if(a==='nttest'){ NT.last='envoi…'; const EX=[['🎾 C. Alcaraz – J. Sinner','▶️ Début du match · Paris Masters · Court Central (test)'],['🎾 C. Alcaraz – J. Sinner','Jeu C. Alcaraz (service tenu) · 2e set : 3-2 · sets 1-0 (test)'],['🎾 C. Alcaraz – J. Sinner','🔥 BREAK ! Jeu C. Alcaraz · 2e set : 3-2 · sets 1-0 (test)'],['🎾 C. Alcaraz – J. Sinner','✅ C. Alcaraz remporte le 1er set 6-4 · C. Alcaraz mène 1 set à 0 (test)'],['🎾 C. Alcaraz – J. Sinner','🔥 Break décisif · C. Alcaraz remporte le 2e set 7-5 · C. Alcaraz mène 2 sets à 0 (test)'],['✅ C. Alcaraz bat J. Sinner','6-4 7-5 6-3 · Paris Masters · Finale (test)'],['❌ J. Sinner perd contre C. Alcaraz','6-4 7-5 6-3 · Paris Masters · Finale (test)']]; const ex=EX[(NT.tcy||0)%EX.length]; NT.tcy=((NT.tcy||0)+1)%EX.length; NTS.send(ex[0],ex[1],'tn-test-'+Date.now()); render(); setTimeout(()=>{ if(ui.sport==='tennis') render(); },700); }
+  else if(a==='nttest'){ NT.last='envoi…'; NTS.send('🎾 C. Alcaraz – J. Sinner','🔥 BREAK ! Jeu C. Alcaraz · 2e set : 3-2 · sets 1-0 (test)','tn-test-'+Date.now()); render(); setTimeout(()=>{ if(ui.sport==='tennis') render(); },700); }
   else if(a==='refresh') tennisRefresh(true);
   else if(a==='drawdays'){ const ev=boardEvents(myTour(),0).find(x=>x.id===el.dataset.id)||currentEvent(); if(ev) loadDraw(myTour(),ev); }
   else if(a==='diag'){ S.diag=S.diag||{}; render(); window.scrollTo(0,0); } else if(a==='diagx'){ S.diag=null; render(); }
