@@ -48,12 +48,12 @@ const saveFav = () => saveJ(KEYF,fav);
 
 const ui = {tab:'home', openGame:null, openPlayer:null, openTeam:null, gTeam:'',
   pMode:'avg', pSort:{k:'pts',d:-1}, pTeam:'', pSearch:'', pMin:1, pFav:false,
-  cmpMode:'players', cmpA:'', cmpB:'', confF:'EW', recMin:1, schedFav:false, raceF:'E', sport:(()=>{ try{ const v=localStorage.getItem('suivi-sport'); return v==='foot'||v==='tennis'?v:'nba'; }catch(e){ return 'nba'; } })(), ftab:'home', fLg:'', fPer:0, calEarly:false, calTeam:'', calWhen:'up', calMonth:'', weekMin:2, homeEdit:false, rkT:null};
+  cmpMode:'players', cmpA:'', cmpB:'', confF:'EW', recMin:1, schedFav:false, raceF:'E', sport:(()=>{ try{ const v=localStorage.getItem('suivi-sport'); return v==='foot'||v==='tennis'||v==='euro'?v:'nba'; }catch(e){ return 'nba'; } })(), ftab:'home', fLg:'', fPer:0, calEarly:false, calTeam:'', calWhen:'up', calMonth:'', weekMin:2, homeEdit:false, rkT:null};
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let sayT=null, sayMute=false;
-function say(t, cls='mut'){ if(sayMute) return; const m=$('#msg'); m.className='nbaonly '+cls; m.innerHTML=t; clearTimeout(sayT); if(t) sayT=setTimeout(()=>{ m.innerHTML=''; const f=document.getElementById('fmsg'); if(f){ f.innerHTML=''; f.style.display='none'; } },/err|warn/.test(cls)?20000:7000); const f=document.getElementById('fmsg'); if(f){ f.className=cls; f.innerHTML=t; f.style.display=ui.sport==='foot'&&t?'block':'none'; } }
+function say(t, cls='mut'){ if(sayMute) return; const m=$('#msg'); m.className='nbaonly '+cls; m.innerHTML=t; clearTimeout(sayT); if(t) sayT=setTimeout(()=>{ m.innerHTML=''; const f=document.getElementById('fmsg'); if(f){ f.innerHTML=''; f.style.display='none'; } },/err|warn/.test(cls)?20000:7000); const f=document.getElementById('fmsg'); if(f){ f.className=cls; f.innerHTML=t; f.style.display=(ui.sport==='foot'||ui.sport==='euro')&&t?'block':'none'; } }
 const f1 = x => Number.isFinite(x) ? x.toFixed(1) : '–';
 const pc = (a,b) => b>0 ? (100*a/b).toFixed(1)+'%' : '–';
 const pcn = (a,b) => b>0 ? 100*a/b : -1;
@@ -419,7 +419,7 @@ function renderBackup(){
 
 function renderSync(){
   const el=document.getElementById('syncBar'); if(!el) return;
-  if(ui.sport==='tennis'){ el.innerHTML=''; return; }   // la barre « Actualiser la NBA » ne concerne pas le tennis
+  if(ui.sport==='tennis'||ui.sport==='euro'){ el.innerHTML=''; window._ftSy=''; ftRender(); return; }   // la barre « Actualiser la NBA » ne concerne ni le tennis ni l'Euroligue
   if(ui.sport==='foot'){ el.innerHTML=''; window._ftSy=''; ftRender(); return; }
   const times=Object.values(games).filter(g=>g.status===3).map(tms).filter(Boolean);
   const btn='<button data-act="nbarefresh" style="margin-right:8px">🔄 Actualiser la NBA</button>';
@@ -1452,7 +1452,7 @@ function viewCal(S){
 }
 
 /* ================= Foot (ESPN) : données ================= */
-function closeModals(){ ui.nLive=null; ui.openPlayer=ui.openTeam=ui.openGame=ui.fMatch=ui.fPlayer=ui.fTeam=ui.newsRead=null; }
+function closeModals(){ try{ window.euroClose&&window.euroClose(); }catch(e){} ui.nLive=null; ui.openPlayer=ui.openTeam=ui.openGame=ui.fMatch=ui.fPlayer=ui.fTeam=ui.newsRead=null; }
 function setSport(x){ const ch=ui.sport!==x; ui.sport=x; try{ localStorage.setItem('suivi-sport',x); }catch(e){} if(ch) setTimeout(()=>{ try{ liveRender(); }catch(e){} },400); }
 const KEYFO='suivi-foot-v1', KEYFF='suivi-foot-fav', KEYFP='suivi-foot-favp', KEYSP='suivi-sport';
 const FLG=[['fra.1','Ligue 1'],['eng.1','Premier League'],['esp.1','Liga'],['ita.1','Serie A'],['ger.1','Bundesliga'],['uefa.champions','Ligue des champions'],['uefa.europa','Europa League'],['uefa.europa.conf','Conférence League']];
@@ -2553,6 +2553,16 @@ function render(){
     return;
   }
   document.body.classList.remove('sport-tennis');
+  if(ui.sport==='euro'){   // Euroligue : écran dessiné par euroleague.js (même principe que le tennis)
+    if(typeof euroRender!=='function') return;
+    try{ document.body.classList.remove('sport-foot'); document.body.classList.add('sport-euro');
+      document.body.classList.remove('rails','rails-nba');
+      document.querySelectorAll('#sportSeg button').forEach(b=>b.classList.toggle('on',b.dataset.sport===ui.sport));
+      euroRender(); try{ renderBackup(); renderSync(); }catch(e){} }catch(e){ console.error(e); $('#view').innerHTML='<div class="card err">Erreur d\'affichage Euroligue : '+esc(e.message)+'</div>'; }
+    try{ liveRender(); }catch(e){}
+    return;
+  }
+  document.body.classList.remove('sport-euro');
   try{
     const S=buildStats(); S.prev=prevStats();
     const FT=ui.sport==='foot', TT=FT?FTABS:TABS, cur=FT?ui.ftab:ui.tab;
@@ -2770,7 +2780,7 @@ $('#fileImport').onchange=async e=>{
   }catch(err){ say('Fichier invalide.','err'); }
 };
 $('#btnMore').onclick=()=>document.body.classList.toggle('menu-open');
-$('#btnRefresh').onclick=()=>{ if(ui.sport==='tennis'){ if(typeof tennisRefresh==='function') tennisRefresh(true); return; } if(ui.sport==='foot'){ if(footBusy) return; ui.fMenu=true; render(); window.scrollTo({top:0,behavior:'smooth'}); } else nbaRefresh(); };
+$('#btnRefresh').onclick=()=>{ if(ui.sport==='euro'){ if(typeof euroRefresh==='function') euroRefresh(true); return; } if(ui.sport==='tennis'){ if(typeof tennisRefresh==='function') tennisRefresh(true); return; } if(ui.sport==='foot'){ if(footBusy) return; ui.fMenu=true; render(); window.scrollTo({top:0,behavior:'smooth'}); } else nbaRefresh(); };
 ['#msg','#fmsg'].forEach(q=>{ const n=$(q); if(n) n.addEventListener('click',()=>{ n.innerHTML=''; n.style.display='none'; }); });
 window.addEventListener('afterprint',()=>document.body.classList.remove('print-one'));
 $('#welcome').addEventListener('click',e=>{ if(e.target.id==='welcome') closeWelcome(); });
@@ -2816,7 +2826,7 @@ $('#gs').addEventListener('click',e=>{
 });
 
 /* ================= Cloud (GitHub Gist privé) ================= */
-const CLOUD_KEYS=['prono-tennis-robot','suivi-tennis-fav','suivi-nba-v1','suivi-nba-fav','suivi-nba-sched','suivi-nba-notes','suivi-nba-home','suivi-nba-lead','suivi-foot-v1','suivi-foot-fav','suivi-foot-favp','suivi-foot-home','suivi-multi-pick','suivi-live-fav','suivi-notif-fav'];
+const CLOUD_KEYS=['prono-tennis-robot','suivi-tennis-fav','suivi-euro-fav','suivi-nba-v1','suivi-nba-fav','suivi-nba-sched','suivi-nba-notes','suivi-nba-home','suivi-nba-lead','suivi-foot-v1','suivi-foot-fav','suivi-foot-favp','suivi-foot-home','suivi-multi-pick','suivi-live-fav','suivi-notif-fav'];
 const KEYC='suivi-cloud';
 let cloud=loadJ(KEYC,{tok:'',gid:'',auto:false,last:0,sig:''});
 const cloudSave=()=>{ try{ localStorage.setItem(KEYC,JSON.stringify(cloud)); }catch(e){} };
@@ -3102,7 +3112,7 @@ function liveFootRow(x,mine,rk,go,fl,barHtml,lg){
 }
 function liveRender(){
   const box=document.getElementById('liveBox'); if(!box) return;
-  if(ui.sport==='tennis'){ box.innerHTML=''; return; }
+  if(ui.sport==='tennis'||ui.sport==='euro'){ box.innerHTML=''; return; }
   const want=ui.sport==='foot'?'f':'n', ALL=(liveData.items||[]).filter(x=>x.st==='in'&&x.k===want); if(!ALL.length||(ui.sport==='foot'&&ui.ftab==='home'&&fzPlaced().includes('multi'))){ box.innerHTML=''; return; }
   // foot : on ne montre ici que mes clubs (étoile, étoile dorée, matchs choisis) ; les autres matchs en cours sont dans le Multiplex
   const mineF=x=>ffav.includes(x.h.id)||ffav.includes(x.a.id)||nfav.foot.includes(x.h.id)||nfav.foot.includes(x.a.id)||!!mpick[x.id];
@@ -3220,7 +3230,7 @@ function liveNeed(){
 }
 let liveFull=0, liveSig='', liveRen=0, liveFail=0, liveTry=0;
 function liveTick(){
-  if(document.hidden||ui.sport==='tennis') return; const now=Date.now(), age=now-liveLast;
+  if(document.hidden||ui.sport==='tennis'||ui.sport==='euro') return; const now=Date.now(), age=now-liveLast;
   // 1 échec isolé : on garde le rythme ; échecs répétés ou refus d'ESPN : 30 s, 1 min, 2 min… (max 5 min)
   if(liveFail>=2&&now-liveTry<Math.min(3e5,15e3*2**(liveFail-1))){ liveRender(); return; }
   const soon=x=>{ const t=Date.parse(x.d); return x.st==='pre'&&t&&t<=now+15*6e4&&t>=now-45*6e4; };

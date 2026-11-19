@@ -187,6 +187,8 @@
   #msg:empty{display:none}
   body.sport-foot .nbaonly,body.sport-foot #leaders,body.sport-foot #btnTv,body.sport-foot #btnXlsx,body.sport-foot #btnLead{display:none!important}
   body.sport-tennis .nbaonly,body.sport-tennis #leaders,body.sport-tennis #btnTv,body.sport-tennis #btnXlsx,body.sport-tennis #btnLead{display:none!important}
+  body.sport-euro .nbaonly,body.sport-euro #leaders,body.sport-euro #btnTv,body.sport-euro #btnXlsx,body.sport-euro #btnLead{display:none!important}
+  body.sport-euro .el-teams{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}body.sport-euro table.st tr.fv td:nth-child(2){font-weight:700}
   .hdrmore{display:contents}#btnMore{display:none}
   body.sport-foot.lead header::after{display:none}
   tr.favrow td:first-child{box-shadow:inset 3px 0 var(--warn)}
@@ -622,3 +624,5 @@ a.nrd-open{display:inline-block;padding:9px 14px;border-radius:14px;border:1px s
 .gt-chips .cp{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;border:1px solid var(--line)}
 .gt-chips .cp.up{color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,transparent)}.gt-chips .cp.dn{color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent)}.gt-chips .cp.ev{color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}
 tr.chiprow td{border-top:0!important;padding-top:0!important}tr.chiprow .gt-chips{margin-top:0;border-top:0;padding-top:0}
+
+@media(max-width:600px){#sportSeg button{padding:8px 4px;font-size:13px;white-space:nowrap}}
