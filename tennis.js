@@ -69,7 +69,7 @@ S.starM=jl(K.starm,{}); for(const k of Object.keys(S.starM)) if(Date.now()-((S.s
 const saveStarM=()=>js_(K.starm,S.starM);
 const isStar=m=>!!S.starM[m.id];
 function saveCache(){ const ks=Object.keys(S.cache.board).sort((a,b)=>S.cache.board[b].t-S.cache.board[a].t); for(const k of ks.slice(6)) delete S.cache.board[k]; js_(K.cache,S.cache); }
-function mergeBoard(tour,evs){ for(const e of evs){ const key=tour+':'+e.id, D=S.draw[key]||(S.draw[key]={ms:{},n:e.sn,start:e.start,end:e.end,t:0}); if(!D.ms) D.ms={}; D.n=e.sn; D.start=e.start||D.start; D.end=e.end||D.end; D.t=Date.now(); for(const m of e.ms) D.ms[m.id]=m; } saveDraw(); }
+function mergeBoard(tour,evs){ for(const e of evs){ const key=tour+':'+e.id, D=S.draw[key]||(S.draw[key]={ms:{},n:e.sn,start:e.start,end:e.end,t:0}); if(!D.ms) D.ms={}; D.n=e.sn; D.start=e.start||D.start; D.end=e.end||D.end; D.t=Date.now(); const now=Date.now(), ids=new Set(e.ms.map(m=>m.id)); for(const id of Object.keys(D.ms)){ const o=D.ms[id]; if(o&&o.st==='in'&&!ids.has(id)){ o.st='post'; o.stale=1; } } for(const m of e.ms){ m.seen=now; D.ms[m.id]=m; } } saveDraw(); }
 function saveDraw(){ const ks=Object.keys(S.draw).sort((a,b)=>(S.draw[b].t||0)-(S.draw[a].t||0)); for(const k of ks.slice(3)) delete S.draw[k]; js_(K.draw,S.draw); }
 const dayKey=off=>parisDK(new Date(Date.now()+off*864e5).toISOString());
 const bKey=(tour,off)=>tour+':'+dayKey(off);
@@ -108,7 +108,9 @@ setInterval(()=>{ if(ui.sport!=='tennis'||document.hidden||S.tab==='rank') retur
 /* ---------- 5. Données utiles aux écrans ---------- */
 const boardEvents=(tour,off)=>((S.cache.board[bKey(tour,off)]||{}).ev)||[];
 const isQual=m=>m.ri===0||/qualif/i.test(m.rd||'');   // qualifications : masquées par défaut (case « Qualifications » pour les afficher)
-function allMatches(tour){ const out=[]; for(const k of Object.keys(S.draw)) if(k.startsWith(tour+':')) out.push(...Object.values(S.draw[k].ms||{}).filter(m=>S.qual||!isQual(m))); return out; }
+// un match « en cours » dont le coup d'envoi date de plus de 14 h (ou non revu depuis 90 min) est périmé : on le range en « terminé » au lieu de le laisser bloqué
+function unstick(m,D){ if(m&&m.st==='in'){ const t0=Date.parse(m.t), now=Date.now(), fin=D&&Date.parse(D.end); if((t0&&now-t0>14*36e5)||(m.seen&&now-m.seen>90*6e4)||(fin&&now-fin>2*864e5)){ m.st='post'; m.stale=1; } } return m; }
+function allMatches(tour){ const out=[]; for(const k of Object.keys(S.draw)) if(k.startsWith(tour+':')) out.push(...Object.values(S.draw[k].ms||{}).filter(m=>S.qual||!isQual(m)).map(m=>unstick(m,S.draw[k]))); return out; }
 // matchs d'un jour (jour de Paris) ; un match en cours compte pour aujourd'hui quelle que soit son heure de départ
 const dayMs=(tour,off)=>allMatches(tour).filter(m=>m.st==='in'?off===0:!!Date.parse(m.t)&&parisDK(m.t)===dayKey(off));
 function currentEvent(){ const evs=boardEvents(myTour(),0).filter(e=>e.ms.length||true); if(!evs.length) return null; return evs.find(e=>e.id===S.evSel)||evs.slice().sort((a,b)=>b.ms.length-a.ms.length)[0]; }
@@ -122,7 +124,7 @@ const ini=n=>String(n||'?').trim().split(/\s+/).map(w=>w[0]).join('').slice(0,2)
 /* ---------- 6. Affichage : éléments communs ---------- */
 const star=p=>`<span class="tnst${isFav(p)?' on':''}" data-tn="fav" data-id="${esc(p.id)}" data-n="${esc(p.n)}" data-cc="${esc(p.cc)}" title="${isFav(p)?'Retirer de mes joueurs':'Ajouter à mes joueurs'}">${isFav(p)?'★':'☆'}</span>`;
 function setLabel(m){ if(/suspend|delay|rain|interrupt/i.test(m.dsc)) return 'Interrompu'; const n=m.per||Math.max(m.a.sets.length,m.b.sets.length)||1; return n===1?'1er set':n+'e set'; }
-function endNote(m){ return /retir|abandon/i.test(m.dsc)?' · abandon':/walkover|w\/o|forfait/i.test(m.dsc)?' · forfait':''; }
+function endNote(m){ if(m.stale) return ' · score non confirmé'; return /retir|abandon/i.test(m.dsc)?' · abandon':/walkover|w\/o|forfait/i.test(m.dsc)?' · forfait':''; }
 function setsHtml(m,p,q){ const live=m.st==='in', n=Math.max(p.sets.length,q.sets.length); let h='';
   for(let i=0;i<n;i++){ const x=p.sets[i], y=q.sets[i]; if(!x){ h+='<span></span>'; continue; } const cur=live&&i===n-1, won=y?x.g>y.g:true;
     const showTb=x.tb!=null&&(y&&y.tb!=null?x.tb<y.tb:!won); h+=`<span class="${cur?'cur':won?'w':''}">${x.g}${showTb?`<sup>${x.tb}</sup>`:''}</span>`; }
