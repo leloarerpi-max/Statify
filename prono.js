@@ -2900,7 +2900,7 @@
         }
         if (i === j) restes.push(eligibles[i]);
       }
-      return { paires, restes, refaisables };
+      return { paires, restes, refaisables, eligibles };
     }
 
     // ===================== DÉTAIL DES COMBINÉS PAR JOUR =====================
@@ -3103,6 +3103,12 @@
         <label class="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 rounded-lg px-2 py-1">
           <input type="checkbox" ${genExclus.has(c) ? 'checked' : ''} onchange="genBasculerComp(this.getAttribute('data-c'), this.checked)" data-c="${escAttr(c)}"> ${escAttr(c)}
         </label>`).join(' ');
+      let rz = {}; try { rz = rgRaisonsPlan({ paires, restes, eligibles: calculerPaires(genJour).eligibles }, genJour, false); } catch (e) {}
+      const nbExclus = (state.football || []).filter(b => b.date === genJour && b.status === 'Pending' && !b.comboId && genExclus.has((b.comp || '').trim())).length;
+      const restesP = restes.filter(b => b.status === 'Pending');
+      const blocRestes = restesP.length || nbExclus ? `<div class="px-3 py-2 bg-amber-50/60 border-t border-amber-100">
+          ${restesP.length ? `<div class="text-[11px] font-bold text-amber-800 mb-1">Restent en simple (${restesP.length})</div>` + restesP.map(b => `<div class="text-[11px] py-1 border-b border-amber-100 last:border-0"><div class="text-slate-700 truncate"><b>${escAttr(b.match || '')}</b> — ${escAttr(b.prono || '')} <span class="text-blue-600 font-bold">${f(b.odds)}</span></div><div class="text-amber-800">${escAttr((rz[String(b.id)] || {}).t || '')}</div></div>`).join('') : ''}
+          ${nbExclus ? `<div class="text-[11px] text-slate-500 mt-1">${nbExclus} pari(s) de championnats exclus, laissés en simple comme tu l'as choisi.</div>` : ''}</div>` : '';
       const lignes = paires.map(([x, y], k) => `
         <div class="text-[11px] px-3 py-2 border-b border-slate-100">
           <div class="font-bold text-slate-700">Combiné ${k + 1} · cote ${f((x.odds || 1) * (y.odds || 1))} · mise ${f(x.stake || 1)} €</div>
@@ -3127,7 +3133,7 @@
               <span>Refaire les combinés de ce jour déjà créés (seulement ceux dont tous les paris sont encore en cours)${refaisables.length ? ` — ${refaisables.length} concerné(s)` : ''}</span>
             </label>
           </div>
-          <div class="overflow-y-auto flex-1">${lignes || '<p class="text-xs text-slate-400 italic p-4">Aucune paire possible : il faut au moins 2 paris ce jour-là (de matchs différents).</p>'}</div>
+          <div class="overflow-y-auto flex-1">${lignes || '<p class="text-xs text-slate-400 italic p-4">Aucune paire possible ce jour-là.</p>'}${blocRestes}</div>
           <div class="p-4 border-t border-slate-100 flex items-center gap-2">
             <span class="text-[11px] text-slate-500 flex-1">${paires.length} combiné(s)${restes.length ? ` · ${restes.length} pari(s) restent en simple` : ''}</span>
             <button onclick="fermerGenerateurCombines()" class="text-xs font-bold text-slate-500 px-3 py-2">Annuler</button>
@@ -5951,19 +5957,26 @@ function majReorg() {
     const L = rgEl('qsList'); if (!L) return;
     const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
     const maintenant = Date.now();
+    let raisons = {}; try { raisons = rgRaisonsSimples(att.filter(b => !b.comboId && !parId[String(b.id)])); } catch (e) {}
     const ligne = (b, dansCombo) => {
       const sc = (typeof scoreHtml === 'function' ? scoreHtml(b) : ''); const scTxt = sc ? sc.replace(/<[^>]+>/g, '').trim() : '';
       const ko = rgKo(b), h = rgHeure(ko), futur = ko && !rgEnDirect(b) && new Date(ko).getTime() > maintenant;
       const sg = rgSuggest(b);
       const vc = (typeof vrCache !== 'undefined') ? vrCache[String(b.id)] : null;
       const dec = vc && vc.dec ? new Date(vc.ko || (vc.dec + 'T12:00:00')).toLocaleString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
-      const info = `<div class="qs-info"><b>${esc(b.match)}</b><small>${esc(b.prono || '')} · cote ${esc(b.odds)}${dansCombo ? '' : ' · ' + esc(b.date || '')}</small>${rgEnDirect(b) ? `<span class="qs-sc">🔴 ${esc(scTxt || 'En direct')}</span>` : scTxt ? `<span class="qs-sc2">${esc(scTxt)}</span>` : futur && !dec ? `<span class="qs-h">⏰ ${esc(h)}</span>` : dec ? '' : h ? `<span class="qs-h">${esc(h)}</span>` : ''}${dec ? `<span class="qs-dec">📅 Match décalé au ${esc(dec)}</span>` : ''}${sg ? `<span class="qs-sg">Suggestion : ${sg.res === 'Won' ? 'gagné ✓' : 'perdu ✗'}</span>` : ''}</div>`;
+      const info = `<div class="qs-info"><b>${esc(b.match)}</b><small>${esc(b.prono || '')} · cote ${esc(b.odds)}</small>${rgEnDirect(b) ? `<span class="qs-sc">🔴 ${esc(scTxt || 'En direct')}</span>` : scTxt ? `<span class="qs-sc2">${esc(scTxt)}</span>` : futur && !dec ? `<span class="qs-h">⏰ ${esc(h)}</span>` : dec ? '' : h ? `<span class="qs-h">${esc(h)}</span>` : ''}${dec ? `<span class="qs-dec">📅 Match décalé au ${esc(dec)}</span>` : ''}${sg ? `<span class="qs-sg">Suggestion : ${sg.res === 'Won' ? 'gagné ✓' : 'perdu ✗'}</span>` : ''}</div>`;
       const bt = sg ? `<button type="button" class="${sg.res === 'Won' ? 'w sg' : 'l sg'}" data-id="${esc(b.id)}" data-res="${sg.res}" title="Appliquer la suggestion">${sg.res === 'Won' ? '✓' : '✗'}</button><button type="button" class="${sg.res === 'Won' ? 'l' : 'w'} petit" data-id="${esc(b.id)}" data-res="${sg.res === 'Won' ? 'Lost' : 'Won'}" title="${sg.res === 'Won' ? 'Perdu' : 'Gagné'}">${sg.res === 'Won' ? '✗' : '✓'}</button>`
         : `<button type="button" class="w" data-id="${esc(b.id)}" data-res="Won" title="Gagné">✓</button><button type="button" class="l" data-id="${esc(b.id)}" data-res="Lost" title="Perdu">✗</button>`;
-      return `<div class="qs-row${futur ? ' qs-futur' : ''}">${info}<div class="qs-btns">${bt}</div></div>`;
+      const rz = !dansCombo && raisons[String(b.id)];
+      const why = rz ? `<details class="qs-why ${rz.k}"><summary>${rz.k === 'plan' ? 'Combiné prévu' : 'Reste simple'}</summary><div>${esc(rz.t)}</div></details>` : '';
+      return `<div class="qs-row${futur ? ' qs-futur' : ''}">${info.replace(/<\/div>$/, why + '</div>')}<div class="qs-btns">${bt}</div></div>`;
     };
     const MAX = rgToutVoir ? 1e6 : 12; let html = '';
+    const jourLib = d => { if (!d) return ''; const t = new Date(d + 'T12:00:00'); if (isNaN(t)) return d; const n = Math.round((t - new Date(new Date().toDateString() + ' 12:00:00')) / 864e5); const lib = t.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }); return n === 0 ? 'Aujourd\'hui · ' + lib : n === 1 ? 'Demain · ' + lib : lib; };
+    let jourPrec = null;
     unites.slice(0, MAX).forEach(u => {
+      const dj = String(u.date || '').slice(0, 10);
+      if (dj !== jourPrec) { jourPrec = dj; const n = unites.filter(x => String(x.date || '').slice(0, 10) === dj).length; if (dj) html += `<div class="qs-jour"><b>${esc(jourLib(dj))}</b><span>${n} ${n > 1 ? 'éléments' : 'élément'}</span></div>`; }
       if (u.bet) { html += ligne(u.bet, false); return; }
       const st = comboStatus(currentSport, u.combo), cote = comboOdds(currentSport, u.combo);
       const ok = u.legs.filter(l => l.status === 'Won').length;
@@ -6007,6 +6020,52 @@ const RG_DELAI = 'pronotracker_auto_delai', RG_SIG = 'pronotracker_auto_sig', RG
 // Mode unique : paires selon les cotes (prono-combos-auto.js). Repli sur l'ordre de dépôt si ce fichier n'est pas chargé.
 function rgPairage() { return window.__combosAuto ? 'cotes' : 'ordre'; }
 function rgDelaiMin() { try { const s = localStorage.getItem(RG_DELAI); if (s === null) return rgPairage() === 'ordre' ? 0 : 5; const v = parseInt(s, 10); return v >= 0 ? v : 5; } catch (e) { return 5; } }
+/* ---- Pourquoi un pari reste en simple (les championnats exclus ne sont jamais expliqués : c'est ton choix) ---- */
+function rgRaisonsPlan(plan, jour, pourBandeau) {
+  const out = {}, auj = rgJourLocal(), refus = rgRefusLire();
+  const D = window.__combosAuto ? window.__combosAuto.DEF : null;
+  const f = n => Number(n).toFixed(2).replace('.', ',');
+  const nm = b => normalizeMatchName(b.match || '');
+  const avec = {}; plan.paires.forEach(([x, y]) => { avec[String(x.id)] = y; avec[String(y.id)] = x; });
+  const cands = plan.eligibles.filter(b => b.status === 'Pending');
+  const passe = jour < auj, auto = rgPref(RG_AUTO_CMB);
+  // paris déjà associés dans le plan mais pas encore enregistrés en combiné (bandeau seulement)
+  if (pourBandeau) plan.paires.forEach(([x, y]) => [[x, y], [y, x]].forEach(([b, o]) => {
+    if (b.status !== 'Pending') return;
+    const t = `${o.match || '?'} (${f(o.odds)}) → cote ${f(b.odds * o.odds)}`;
+    out[String(b.id)] = refus.has(String(b.id)) ? { k: 'non', t: 'tu as annulé le combiné automatique qui le contenait' }
+      : passe ? { k: 'plan', t: 'pourrait aller avec ' + t + ' · jour passé : pas de combiné automatique, utilise « Générer les combinés »' }
+      : !auto ? { k: 'plan', t: 'pourrait aller avec ' + t + ' · combinés automatiques désactivés' }
+      : { k: 'plan', t: 'sera combiné avec ' + t + ' (création automatique en attente)' };
+  }));
+  plan.restes.forEach(b => {
+    if (b.status !== 'Pending') return;
+    let r;
+    if (refus.has(String(b.id))) r = 'tu as annulé le combiné automatique qui le contenait';
+    else if (!(Number(b.odds) > 1)) r = 'cote manquante';
+    else {
+      const autres = cands.filter(o => String(o.id) !== String(b.id));
+      const diff = autres.filter(o => !nm(b) || nm(o) !== nm(b));
+      if (!autres.length) r = 'seul pari ce jour-là (hors championnats exclus)';
+      else if (!diff.length) r = 'les autres paris du jour portent sur le même match';
+      else if (D) {
+        const ok = diff.filter(o => { const p = b.odds * o.odds; return p >= D.min - 1e-9 && p <= D.max + 1e-9; });
+        if (!ok.length) {
+          if (b.odds * Math.min.apply(null, diff.map(o => o.odds)) > D.max + 1e-9) r = `cote trop haute : avec n'importe quel autre pari du jour, le combiné dépasse ${f(D.max)}`;
+          else r = `aucun partenaire : il faudrait un pari coté entre ${f(Math.max(1.01, D.min / b.odds))} et ${f(D.max / b.odds)} pour un combiné entre ${f(D.min)} et ${f(D.max)} (meilleur possible : ${f(b.odds * Math.max.apply(null, diff.map(o => o.odds)))})`;
+        } else r = 'ses partenaires possibles sont déjà pris : ' + ok.slice(0, 3).map(o => `${o.match || '?'} (${f(o.odds)})` + (avec[String(o.id)] ? ' est avec ' + (avec[String(o.id)].match || '?') : '')).join(' ; ');
+      } else r = 'nombre impair de paris ce jour-là : il en reste un';
+    }
+    out[String(b.id)] = { k: 'non', t: r };
+  });
+  return out;
+}
+function rgRaisonsSimples(bets) {
+  const out = {}; if (currentSport !== 'football') return out;
+  const jours = [...new Set(bets.map(b => b.date).filter(Boolean))], anc = genRefaire; genRefaire = false;
+  try { jours.forEach(j => Object.assign(out, rgRaisonsPlan(calculerPaires(j), j, true))); } catch (e) {} finally { genRefaire = anc; }
+  return out;
+}
 function rgPairesAuto() {
   const auj = rgJourLocal(), refus = rgRefusLire();
   const jours = [...new Set((state.football || []).filter(b => b.status === 'Pending' && b.date && b.date >= auj && !b.comboId).map(b => b.date))].sort();
@@ -6052,22 +6111,24 @@ function rgMajResume() {
   try {
     const auj = rgJourLocal(), liste = (state[currentSport] || []).filter(b => b.date === auj);
     const combos = (state.combos[currentSport] || []).filter(c => { const d = comboLegs(currentSport, c).reduce((mx, l) => (l.date && l.date > mx ? l.date : mx), ''); return d === auj; });
-    const attB = liste.filter(b => b.status === 'Pending'), attC = combos.filter(c => comboStatus(currentSport, c) === 'Pending');
-    const mS = attB.reduce((s, b) => s + (b.stake || 0), 0), gS = attB.reduce((s, b) => s + ((b.odds || 1) - 1) * (b.stake || 0), 0);
-    const mC = attC.reduce((s, c) => s + (c.stake || 0), 0), gC = attC.reduce((s, c) => s + (comboOdds(currentSport, c) - 1) * (c.stake || 0), 0);
     const f = v => v.toFixed(2).replace('.', ',') + ' €';
-    e.innerHTML = `<b>Aujourd'hui :</b> ${liste.length} pari${liste.length > 1 ? 's' : ''}, ${combos.length} combiné${combos.length > 1 ? 's' : ''} <span class="rj-sep">·</span> <b>Gain potentiel</b> solo <span class="pos">+${f(gS)}</span> (mise ${f(mS)}) <span class="rj-sep">·</span> combinés <span class="pos">+${f(gC)}</span> (mise ${f(mC)})`;
-    // Projection : total « si tout est bon » aujourd'hui + les jours suivants (paris déjà dans un combiné non comptés en solo)
+    const f0 = v => (Math.round(v * 100) / 100).toString().replace('.', ',') + ' €';
+    // Un pari qui fait partie d'un combiné n'est compté qu'une fois : dans son combiné (pas en simple).
     const dansCombo = new Set(); (state.combos[currentSport] || []).forEach(c => (c.legIds || []).forEach(id => dansCombo.add(String(id))));
-    const jr = {}, J = d => jr[d] = jr[d] || { ms: 0, gs: 0, mc: 0, gc: 0 };
-    (state[currentSport] || []).filter(b => b.status === 'Pending' && b.date >= auj && !dansCombo.has(String(b.id)) && !b.comboId && (b.stake || 0) > 0).forEach(b => { const j = J(b.date); j.ms += b.stake; j.gs += ((b.odds || 1) - 1) * b.stake; });
-    (state.combos[currentSport] || []).forEach(c => { if (comboStatus(currentSport, c) !== 'Pending') return; const d = comboLegs(currentSport, c).reduce((mx, l) => (l.date && l.date > mx ? l.date : mx), ''); if (d < auj) return; const j = J(d), st = c.stake || 0; j.mc += st; j.gc += (comboOdds(currentSport, c) - 1) * st; });
+    const jr = {}, J = d => jr[d] = jr[d] || { ns: 0, ms: 0, gs: 0, nc: 0, mc: 0, gc: 0 };
+    (state[currentSport] || []).filter(b => b.status === 'Pending' && b.date >= auj && !dansCombo.has(String(b.id)) && !b.comboId && (b.stake || 0) > 0).forEach(b => { const j = J(b.date); j.ns++; j.ms += b.stake; j.gs += ((b.odds || 1) - 1) * b.stake; });
+    (state.combos[currentSport] || []).forEach(c => { if (comboStatus(currentSport, c) !== 'Pending') return; const d = comboLegs(currentSport, c).reduce((mx, l) => (l.date && l.date > mx ? l.date : mx), ''); if (d < auj) return; const j = J(d), st = c.stake || 0; j.nc++; j.mc += st; j.gc += (comboOdds(currentSport, c) - 1) * st; });
+    const nSimplesAuj = liste.filter(b => !dansCombo.has(String(b.id)) && !b.comboId).length;
+    e.innerHTML = `<b>Aujourd'hui :</b> ${nSimplesAuj} pari${nSimplesAuj > 1 ? 's' : ''} simple${nSimplesAuj > 1 ? 's' : ''}, ${combos.length} combiné${combos.length > 1 ? 's' : ''} <span class="mut">(les paris d'un combiné ne sont comptés que dans leur combiné)</span>`;
     const jFr = d => { const x = new Date(d + 'T12:00:00'); return isNaN(x) ? d : x.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }); };
-    const ligne = (lib, j) => { const m = j.ms + j.mc, g = j.gs + j.gc; return `<div style="margin-top:4px"><b>${lib}</b> si tout est bon : <span class="pos">+${f(g)}</span> <span class="mut">(mise ${f(m)} · retour ${f(m + g)})</span></div>`; };
+    const cel = (n, m, g, mot) => n ? `<span class="pos">+${f(g)}</span><small>${n} ${mot}${n > 1 ? 's' : ''} · mise ${f0(m)}</small>` : '<span class="mut">—</span>';
+    const ligne = (lib, j) => { const m = j.ms + j.mc, g = j.gs + j.gc;
+      return `<tr><th>${lib}</th><td>${cel(j.ns, j.ms, j.gs, 'simple')}</td><td>${cel(j.nc, j.mc, j.gc, 'combiné')}</td><td class="tot"><b class="pos">+${f(g)}</b><small>mise ${f0(m)} → retour ${f(m + g)}</small></td></tr>`; };
     const jours = Object.keys(jr).sort();
     let proj = '';
     if (jr[auj]) proj += ligne('🎯 Aujourd\'hui', jr[auj]);
     jours.filter(d => d > auj).slice(0, 4).forEach(d => { proj += ligne(jFr(d), jr[d]); });
+    if (proj) proj = `<table class="rj-proj"><thead><tr><th></th><th>Paris simples</th><th>Combinés</th><th>Total si tout est bon</th></tr></thead><tbody>${proj}</tbody></table>`;
     e.innerHTML += proj;
     e.style.display = (liste.length || combos.length || proj) ? '' : 'none';
   } catch (x) {}
