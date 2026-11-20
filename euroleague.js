@@ -10,7 +10,8 @@
 /* ---------- 1. Adresses (sans clé, CORS ouvert ; secours via corsproxy.io comme pour la NBA) ---------- */
 const SRC={
   games:sc=>`https://api-live.euroleague.net/v2/competitions/E/seasons/${sc}/games`,
-  box:(sc,code)=>`https://live.euroleague.net/api/Boxscore?gamecode=${code}&seasoncode=${sc}`
+  box:(sc,code)=>`https://live.euroleague.net/api/Boxscore?gamecode=${code}&seasoncode=${sc}`,
+  header:(sc,code)=>`https://live.euroleague.net/api/Header?gamecode=${code}&seasoncode=${sc}`
 };
 const PROXY=u=>'https://corsproxy.io/?url='+encodeURIComponent(u);
 const seasonY=()=>{ const d=new Date(); return d.getMonth()>=7?d.getFullYear():d.getFullYear()-1; };   // la saison démarre fin septembre
@@ -42,7 +43,7 @@ function pGame(g,sc){ const L=pClub(g.local), R=pClub(g.road), code=num(first(g.
   const t=pTime(g), hs=num(g.local&&g.local.score), as=num(g.road&&g.road.score), gs=String(g.gameStatus||g.status||'');
   let st='pre'; if(g.played===true||/result|final|played|finished/i.test(gs)) st='post';
   else if(/live|progress|playing|running/i.test(gs)) st='in';
-  else { const t0=Date.parse(t)||0, now=Date.now(); if(t0&&now>t0&&now<t0+3*36e5&&((hs||0)+(as||0))>0) st='in'; }
+  else { const t0=Date.parse(t)||0, now=Date.now(); if(t0&&now>=t0-6e4&&now<t0+5*36e5) st='in'; }
   const vn=g.venue&&typeof g.venue==='object'?first(g.venue.name,g.venue.venueName):g.venue;
   return {id:sc+':'+code,sc,code,r,rn:trim((rd&&typeof rd==='object'&&first(rd.name,rd.roundName))||(r?'Journée '+r:'')),ph:phc,
     phn:trim(typeof ph==='object'?first(ph.name,ph.alias):ph),t,st,h:Object.assign(L,{s:hs}),a:Object.assign(R,{s:as}),
@@ -76,7 +77,7 @@ const TABS=[['home','🏠','Accueil'],['games','📋','Matchs'],['cal','📅','C
 const P0=jl(K.pref,{});
 const S={tab:TABS.some(t=>t[0]===P0.tab)?P0.tab:'home',sc:P0.sc||scOf(seasonY()),gR:0,gTeam:'',cTeam:'',cFav:!!P0.cFav,
   pSort:{k:'pts',d:-1},pMode:P0.pMode||'avg',pTeam:'',pQ:'',pMin:P0.pMin||1,pFav:false,
-  games:jl(K.games,{}),fav:jl(K.fav,{teams:[],players:{}}),box:{},boxReady:false,open:null,busy:{},err:{},errT:{},boxQ:{n:0,d:0},boxFail:{},diag:''};
+  games:jl(K.games,{}),fav:jl(K.fav,{teams:[],players:{}}),box:{},boxReady:false,open:null,busy:{},err:{},errT:{},boxQ:{n:0,d:0},boxFail:{},diag:'',live:{}};
 if(!Array.isArray(S.fav.teams)) S.fav.teams=[]; if(!S.fav.players||typeof S.fav.players!=='object') S.fav.players={};
 const savePref=()=>js_(K.pref,{tab:S.tab,sc:S.sc,cFav:S.cFav,pMode:S.pMode,pMin:S.pMin});
 const saveFav=()=>js_(K.fav,S.fav);
@@ -93,15 +94,36 @@ async function jget(u){ const errs=[];
     catch(e){ errs.push(e.name==='AbortError'?'délai dépassé':(e.message||String(e))); } finally{ clearTimeout(t); } }
   throw new Error(errs.join(' / ')); }
 function redraw(){ if(ui.sport!=='euro') return; const a=document.activeElement; if(a&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)&&a.closest&&a.closest('#view')) return; render(); }
-const list=(sc)=>((S.games[sc||S.sc]||{}).list)||[];
+const list=(sc)=>{ const L=((S.games[sc||S.sc]||{}).list)||[]; for(const g of L) applyLive(g); return L; };
+// S.live[id] = {hs,as,q,clk,live,fin,t} lu sur le flux live (Header + box score)
+function applyLive(g){ const x=S.live[g.id]; if(!x||g.st==='post') return;
+  if(x.hs!=null) g.h.s=x.hs; if(x.as!=null) g.a.s=x.as; g.clk=x.clk||'';
+  if(x.fin) { g.st='post'; } else if(x.live) g.st='in'; }
+function liveTxt(g){ return g.clk?'EN DIRECT · '+g.clk:'EN DIRECT'; }
+function pHeader(js){ if(!js||typeof js!=='object') return null; const n=v=>{ const x=num(v); return x==null?null:x; };
+  const hs=n(first(js.ScoreA,js.scoreA,js.LocalScore)), as=n(first(js.ScoreB,js.scoreB,js.RoadScore));
+  const q=n(first(js.Quarter,js.quarter,js.Period)), rem=trim(first(js.RemainingPartialTime,js.RemainingTime,js.Clock,''));
+  const live=js.Live===true||js.Live==='true'||js.Live===1;
+  let clk=''; if(q) clk=(q<=4?'Q'+q:'Prol.'+(q>5?' '+(q-4):''))+(rem&&rem!=='00:00'?' '+rem.replace(/^0(\d:)/,'$1'):(rem==='00:00'?' · fin':''));
+  return {hs,as,q,clk,live}; }
+async function fetchLive(g){ try{ const h=pHeader(await jget(SRC.header(g.sc,g.code))); if(h){ const o=S.live[g.id]||{};
+      const started=(h.hs||0)+(h.as||0)>0;
+      // match terminé : plus « Live », 4e quart (ou prolongation) à 00:00 et scores différents
+      const fin=!h.live&&started&&h.q>=4&&h.hs!==h.as&&Date.now()-Date.parse(g.t)>80*6e4;
+      S.live[g.id]=Object.assign(o,{hs:started?h.hs:o.hs,as:started?h.as:o.as,clk:started?(fin?'':h.clk):'',live:started&&!fin,fin,t:Date.now()}); } }
+  catch(e){ S.err.live=e.message||String(e); } }
+async function liveTick(){ if(S.busy.live) return; const L=((S.games[S.sc]||{}).list)||[], gs=L.filter(g=>g.st==='in'); if(!gs.length) return;
+  S.busy.live=1; try{ await Promise.all(gs.map(fetchLive)); } finally{ S.busy.live=0; redraw(); } }
 async function loadGames(force){ const sc=S.sc, c=S.games[sc], k='g'+sc;
   if(S.busy[k]) return; if(!force&&c&&Date.now()-c.t<(hasLive()?6e4:15*6e4)) return; if(!force&&S.errT[k]&&Date.now()-S.errT[k]<6e4) return;
   S.busy[k]=1; try{ const js=await jget(SRC.games(sc)), L=parseGames(js,sc); if(!L.length) throw new Error('format inattendu (aucun match lu)');
     S.games[sc]={t:Date.now(),list:L}; S.err[k]=''; saveGames(); }
   catch(e){ S.err[k]=e.message||String(e); S.errT[k]=Date.now(); }
-  finally{ S.busy[k]=0; redraw(); ensureBoxes(); } }
-const needBox=g=>{ const b=S.box[g.id]; if(g.st==='post') return !b||!b.fin; if(g.st==='in') return !b||Date.now()-(b.t||0)>6e4; return false; };
-async function fetchBox(g){ try{ const js=await jget(SRC.box(g.sc,g.code)), b=parseBox(js,g); if(b){ b.t=Date.now(); b.fin=g.st==='post'&&!b.live; S.box[g.id]=b; delete S.boxFail[g.id]; return true; } S.boxFail[g.id]=Date.now(); }
+  finally{ S.busy[k]=0; redraw(); liveTick(); ensureBoxes(); } }
+const needBox=g=>{ const b=S.box[g.id]; if(g.st==='post') return !b||!b.fin; if(g.st==='in') return !b||Date.now()-(b.t||0)>2e4; return false; };
+async function fetchBox(g){ try{ const js=await jget(SRC.box(g.sc,g.code)), b=parseBox(js,g); if(b){ b.t=Date.now(); b.fin=g.st==='post'&&!b.live; S.box[g.id]=b; delete S.boxFail[g.id];
+      if(g.st==='in'){ const sum=t=>t.tot&&t.tot.pts?t.tot.pts:t.pl.reduce((a,p)=>a+(p.pts||0),0), hs=sum(b.h), as=sum(b.a), o=S.live[g.id]||(S.live[g.id]={}); if(hs+as>0&&!(o.t&&Date.now()-o.t<3e4)){ o.hs=hs; o.as=as; o.live=true; } }
+      return true; } S.boxFail[g.id]=Date.now(); }
   catch(e){ S.boxFail[g.id]=Date.now(); S.err.box=e.message||String(e); } return false; }
 // récupère les box scores manquants par petits paquets (4 à la fois), puis met l'écran à jour
 async function ensureBoxes(){ if(S.busy.box||!S.boxReady) return;
@@ -111,7 +133,7 @@ async function ensureBoxes(){ if(S.busy.box||!S.boxReady) return;
   finally{ S.busy.box=0; S.boxQ={n:0,d:0}; saveBox(); redraw(); } }
 function euroRefresh(manual){ loadGames(true); if(manual) say('🏀 Euroligue : actualisation…','warn'); }
 const hasLive=()=>list().some(g=>g.st==='in'||(g.st==='pre'&&Math.abs(Date.parse(g.t)-Date.now())<15*6e4));
-setInterval(()=>{ if(ui.sport!=='euro'||document.hidden) return; loadGames(false); if(hasLive()) ensureBoxes(); },20000);
+setInterval(()=>{ if(ui.sport!=='euro'||document.hidden) return; loadGames(false); if(hasLive()){ liveTick(); ensureBoxes(); } },20000);
 
 /* ---------- 5. Calculs : équipes, classement, joueurs ---------- */
 const TC={OLY:'#d6001c',PAN:'#007a3d',MAD:'#5b3c88',BAR:'#a50044',ULK:'#0b2a5b',IST:'#003b7a',MCO:'#c8102e',ZAL:'#006a3a',TEL:'#f2c300',HTA:'#d8232a',RED:'#cf142b',PAR:'#2b2b2b',MIL:'#c8102e',VIR:'#111111',MUN:'#0066b2',BAS:'#b4122a',PAM:'#f47b20',ASV:'#1c2f5e',PRS:'#e5007e',DUB:'#1d1d1d',BER:'#ffd200',VAL:'#f47b20',MAC:'#f2c300',CSK:'#c8102e'};
@@ -175,13 +197,13 @@ function statusBar(){ const k='g'+S.sc, c=S.games[S.sc], out=[];
   if(S.boxQ.n) out.push(`📥 Box scores : ${S.boxQ.d}/${S.boxQ.n}… (les stats joueurs se complètent au fur et à mesure)`);
   return out.length?`<div class="card ${S.err[k]?'warn':''}" style="padding:10px 14px">${out.join('<br>')}</div>`:''; }
 const seasonSel=()=>{ const y=seasonY(); return `<select data-el-sel="season">${[y,y-1,y-2].map(v=>`<option value="${scOf(v)}" ${S.sc===scOf(v)?'selected':''}>Saison ${scLabel(scOf(v))}</option>`).join('')}</select>`; };
-const stTxt=g=>g.st==='post'?'FINAL':g.st==='in'?'EN COURS':fHour(g.t);
+const stTxt=g=>g.st==='post'?'FINAL':g.st==='in'?liveTxt(g):fHour(g.t);
 
 function tile(g){ const fin=g.st==='post', wh=fin&&g.h.s>g.a.s, wa=fin&&g.a.s>g.h.s, sc=v=>g.st==='pre'?'':esc(String(v??''));
   const side=(s,w)=>`<div class="gt-side ${fin&&!w?'lose':''}"><span class="gt-t">${logo(s.code,28)}<b>${esc(s.sn)}</b></span><span class="gt-sc">${sc(s.s)}</span></div>`;
-  return `<div class="gt-tile click ${isFavG(g)?'fv':''}" data-el="game" data-id="${esc(g.id)}"><div class="gt-top"><span>${g.st==='in'?'<span class="tag live">EN COURS</span>':esc(stTxt(g))}</span><span>${isFavG(g)?'⭐ ':''}${esc(g.rn||'')}</span></div>${side(g.h,wh)}${side(g.a,wa)}${fin&&g.h.s!==g.a.s?`<div class="gt-diff">${esc(tm(wh?g.h.code:g.a.code).tri)} +${Math.abs(g.h.s-g.a.s)}</div>`:''}</div>`; }
+  return `<div class="gt-tile click ${isFavG(g)?'fv':''}" data-el="game" data-id="${esc(g.id)}"><div class="gt-top"><span>${g.st==='in'?'<span class="tag live">'+esc(liveTxt(g))+'</span>':esc(stTxt(g))}</span><span>${isFavG(g)?'⭐ ':''}${esc(g.rn||'')}</span></div>${side(g.h,wh)}${side(g.a,wa)}${fin&&g.h.s!==g.a.s?`<div class="gt-diff">${esc(tm(wh?g.h.code:g.a.code).tri)} +${Math.abs(g.h.s-g.a.s)}</div>`:''}</div>`; }
 function line(g){ const fin=g.st==='post', wh=fin&&g.h.s>g.a.s, wa=fin&&g.a.s>g.h.s;
-  return `<div class="gt-line click ${isFavG(g)?'fv':''}" data-el="game" data-id="${esc(g.id)}"><span class="gt-l ${fin&&!wh?'lose':''}"><b>${esc(g.h.sn)}</b>${logo(g.h.code,22)}</span><span class="gt-m">${g.st==='pre'?`<span class="mut" style="font-size:13px;font-weight:600">${esc(fHour(g.t))}</span>`:`<span class="${fin&&!wh?'lose':''}">${esc(String(g.h.s??''))}</span><i>–</i><span class="${fin&&!wa?'lose':''}">${esc(String(g.a.s??''))}</span>`}</span><span class="gt-r ${fin&&!wa?'lose':''}">${logo(g.a.code,22)}<b>${esc(g.a.sn)}</b></span>${g.st==='in'?'<span class="tag live">En cours</span>':''}</div>`; }
+  return `<div class="gt-line click ${isFavG(g)?'fv':''}" data-el="game" data-id="${esc(g.id)}"><span class="gt-l ${fin&&!wh?'lose':''}"><b>${esc(g.h.sn)}</b>${logo(g.h.code,22)}</span><span class="gt-m">${g.st==='pre'?`<span class="mut" style="font-size:13px;font-weight:600">${esc(fHour(g.t))}</span>`:`<span class="${fin&&!wh?'lose':''}">${esc(String(g.h.s??''))}</span><i>–</i><span class="${fin&&!wa?'lose':''}">${esc(String(g.a.s??''))}</span>`}</span><span class="gt-r ${fin&&!wa?'lose':''}">${logo(g.a.code,22)}<b>${esc(g.a.sn)}</b></span>${g.st==='in'?'<span class="tag live">'+esc(liveTxt(g))+'</span>':''}</div>`; }
 function byDay(gs,asTiles){ const days=[]; for(const g of gs){ const k=dKey(g.t); let d=days[days.length-1]; if(!d||d.k!==k){ d={k,lab:fDay(g.t),gs:[]}; days.push(d); } d.gs.push(g); }
   return days.map((d,i)=>`<div class="gt-day">${esc(d.lab)} <span class="mut">· ${d.gs.length} match${d.gs.length>1?'s':''}</span></div>${asTiles===true||(asTiles==='first'&&i===0)?`<div class="gt-grid">${d.gs.map(tile).join('')}</div>`:`<div class="gt-list">${d.gs.map(line).join('')}</div>`}`).join(''); }
 // journée « courante » : celle du prochain match si elle commence dans les 4 jours ou a déjà commencé, sinon la dernière jouée
@@ -198,8 +220,8 @@ function hero(){ const L=list(); if(!L.length) return '';
   const live=pool.find(g=>g.st==='in'), last=pool.filter(g=>g.st==='post').sort((a,b)=>Date.parse(b.t)-Date.parse(a.t))[0], next=pool.filter(g=>g.st==='pre'&&Date.parse(g.t)>now-3*36e5).sort((a,b)=>Date.parse(a.t)-Date.parse(b.t))[0];
   const g=live||(next&&last&&Date.parse(next.t)-now<12*36e5?next:last||next); if(!g) return '';
   const focus=favs.length?(isFavT(g.h.code)?g.h.code:g.a.code):(g.st==='post'?(g.h.s>g.a.s?g.h.code:g.a.code):g.h.code);
-  const eb=(favs.length?'Ton équipe · '+tm(focus).sn:g.st==='post'?'Dernier match joué':'Prochain match')+(g.rn?' · '+g.rn:'');
-  const chip=g.st==='post'?(favs.length?(won(g,focus)?'Victoire':'Défaite'):'Final'):g.st==='in'?'En cours':'À venir', cls=g.st==='post'?(favs.length?(won(g,focus)?'w':'l'):''):'';
+  const eb=(favs.length?'Ton équipe · '+tm(focus).sn:g.st==='post'?'Dernier match joué':g.st==='in'?'En direct':'Prochain match')+(g.rn?' · '+g.rn:'');
+  const chip=g.st==='post'?(favs.length?(won(g,focus)?'Victoire':'Défaite'):'Final'):g.st==='in'?liveTxt(g):'À venir', cls=g.st==='post'?(favs.length?(won(g,focus)?'w':'l'):''):'';
   return heroHtml({act:'',id:'',col:hex(tcol(focus)),eb,l1:logo(g.h.code,44),n1:tm(g.h.code).tri,l2:logo(g.a.code,44),n2:tm(g.a.code).tri,s1:g.st==='pre'?'':g.h.s,s2:g.st==='pre'?'':g.a.s,chip,cls,when:g.st==='pre'?fDay(g.t)+' · '+fHour(g.t):fDay(g.t)}).replace('class="hero click"',`class="hero click" data-el="game" data-id="${esc(g.id)}"`); }
 function standTable(rows,compact){ const head=compact?'<th>#</th><th class="l">Équipe</th><th>V</th><th>D</th><th>Diff.</th>':'<th>#</th><th class="l">Équipe</th><th>MJ</th><th>V</th><th>D</th><th class="hide-m">%V</th><th class="hide-m">Pts</th><th class="hide-m">Enc.</th><th>Diff.</th><th class="hide-m">Dom.</th><th class="hide-m">Ext.</th><th>Série</th><th class="hide-m">5 derniers</th>';
   const body=rows.map(t=>{ const d=t.pf-t.pa, dc=`<td class="${d>=0?'ok':'err'}">${d>0?'+':''}${d}</td>`;
@@ -266,9 +288,9 @@ function vTeams(){ const D=data(); if(!list().length) return vHome();
 
 /* ---------- 7. Fenêtres : box score, équipe, joueur ---------- */
 function mGame(id){ const g=list().find(x=>x.id===id); if(!g) return ''; const b=S.box[g.id];
-  const head=`<div class="row between"><h2 style="margin:0">${esc(g.h.sn)} – ${esc(g.a.sn)}</h2><button class="sec" data-el="close">Fermer</button></div>`;
+  const head=`<div class="row between"><h2 style="margin:0">${esc(g.h.sn)} – ${esc(g.a.sn)}</h2></div>`;
   const hs=g.st==='pre'?'':g.h.s, as=g.st==='pre'?'':g.a.s;
-  const hr=`<div class="hero" style="--tc:${hex(tcol(g.h.code))};cursor:default"><div class="hero-eb">${esc([g.rn,g.phn&&!isRS(g)?g.phn:'',fDay(g.t)+(g.st==='pre'?' · '+fHour(g.t):'')].filter(Boolean).join(' · '))}</div><div class="hero-row"><div class="hero-t"><span class="hero-lg">${logo(g.h.code,44)}</span><b>${esc(tm(g.h.code).tri)}</b></div><div class="hero-s">${hs}<small>–</small>${as}</div><div class="hero-t"><span class="hero-lg">${logo(g.a.code,44)}</span><b>${esc(tm(g.a.code).tri)}</b></div></div><div class="hero-ft"><span class="hero-chip">${g.st==='post'?'Final':g.st==='in'?'En cours':'À venir'}</span><span>${esc(g.v||'')}${g.aud?' · '+g.aud.toLocaleString('fr-FR')+' spectateurs':''}</span></div></div>`;
+  const hr=`<div class="hero" style="--tc:${hex(tcol(g.h.code))};cursor:default"><div class="hero-eb">${esc([g.rn,g.phn&&!isRS(g)?g.phn:'',fDay(g.t)+(g.st==='pre'?' · '+fHour(g.t):'')].filter(Boolean).join(' · '))}</div><div class="hero-row"><div class="hero-t"><span class="hero-lg">${logo(g.h.code,44)}</span><b>${esc(tm(g.h.code).tri)}</b></div><div class="hero-s">${hs}<small>–</small>${as}</div><div class="hero-t"><span class="hero-lg">${logo(g.a.code,44)}</span><b>${esc(tm(g.a.code).tri)}</b></div></div><div class="hero-ft"><span class="hero-chip">${g.st==='post'?'Final':g.st==='in'?esc(liveTxt(g)):'À venir'}</span><span>${esc(g.v||'')}${g.aud?' · '+g.aud.toLocaleString('fr-FR')+' spectateurs':''}</span></div></div>`;
   const qh=(b&&b.qh)||g.qh, qa=(b&&b.qa)||g.qa, n=Math.max(qh.length,qa.length);
   const qt=n?`<div class="scroll"><table class="st"><thead><tr><th class="l">Équipe</th>${Array.from({length:n},(_,i)=>`<th>${i<4?'Q'+(i+1):'Prol.'+(n>5?i-3:'')}</th>`).join('')}<th>Total</th></tr></thead><tbody>${[[g.h,qh,qa],[g.a,qa,qh]].map(([s,q,o])=>`<tr><td class="l">${logo(s.code,18)}<b>${esc(s.sn)}</b></td>${Array.from({length:n},(_,i)=>`<td class="${q[i]!=null&&o[i]!=null&&q[i]>o[i]?'win':''}">${q[i]??'–'}</td>`).join('')}<td><b>${esc(String(s.s??''))}</b></td></tr>`).join('')}</tbody></table></div>`:'';
   if(g.st==='pre'){ const D=data(), row=c=>{ const t=D.ST.find(x=>x.code===c); return t?`<div class="row between" style="padding:6px 0"><span>${tLink(c)} <span class="mut">${t.rk}e · ${t.w}-${t.l}</span></span><span>${formDotsE(t.log)}</span></div>`:''; };
@@ -287,14 +309,14 @@ function mTeam(c){ const D=data(), t=D.ST.find(x=>x.code===c); if(!t) return '';
   const gs=list().filter(g=>g.h.code===c||g.a.code===c), past=gs.filter(g=>g.st==='post').sort((a,b)=>Date.parse(b.t)-Date.parse(a.t)), next=gs.filter(g=>g.st!=='post'&&Date.parse(g.t)>now-3*36e5).sort((a,b)=>Date.parse(a.t)-Date.parse(b.t)).slice(0,5);
   const ro=Object.values(D.P).filter(r=>r.team===c).sort((a,b)=>b.pts/b.gp-a.pts/a.gp);
   const avg=x=>t.g?f1(x/t.g):'–';
-  return `<div class="card print-target" style="border-left:4px solid ${col}"><div class="row between"><span></span><button class="sec" data-el="close">Fermer</button></div><div class="phead" style="background:linear-gradient(135deg,${col}33,transparent 65%)">${logo(c,84)}<div class="pinfo"><div class="pname">${starT(c)}${esc(T.n)}</div><div class="psub">${t.rk}e · ${t.w} V – ${t.l} D · domicile ${t.hw}-${t.hl} · extérieur ${t.aw}-${t.al}</div><div style="margin-top:6px">${formDotsE(t.log,10)} <span class="mut">· série ${streakE(t.log)}</span></div></div></div>
+  return `<div class="card print-target" style="border-left:4px solid ${col}"><div class="row between"><span></span></div><div class="phead" style="background:linear-gradient(135deg,${col}33,transparent 65%)">${logo(c,84)}<div class="pinfo"><div class="pname">${starT(c)}${esc(T.n)}</div><div class="psub">${t.rk}e · ${t.w} V – ${t.l} D · domicile ${t.hw}-${t.hl} · extérieur ${t.aw}-${t.al}</div><div style="margin-top:6px">${formDotsE(t.log,10)} <span class="mut">· série ${streakE(t.log)}</span></div></div></div>
   <div class="row" style="gap:18px;margin-bottom:10px"><span>Marqués <b>${avg(t.pf)}</b>/match</span><span>Encaissés <b>${avg(t.pa)}</b>/match</span><span>Écart <b class="${t.pf>=t.pa?'ok':'err'}">${t.g?((t.pf-t.pa)/t.g>0?'+':'')+f1((t.pf-t.pa)/t.g):'–'}</b></span></div>
   ${next.length?`<h3>📅 Prochains matchs</h3><div class="gt-list">${next.map(line).join('')}</div>`:''}
   ${past.length?`<h3>📋 Résultats</h3><div class="gt-list">${past.slice(0,12).map(line).join('')}</div>`:''}
   ${ro.length?`<h3>👤 Joueurs (moyennes)</h3><div class="scroll"><table><thead><tr><th class="l">Joueur</th><th>MJ</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>PIR</th><th>3P%</th></tr></thead><tbody>${ro.map(r=>`<tr><td class="l">${starP(r.id,r.n)}${pLink(r.id,r.n)}</td><td>${r.gp}</td><td>${f1(r.min/r.gp)}</td><td><b>${f1(r.pts/r.gp)}</b></td><td>${f1(r.reb/r.gp)}</td><td>${f1(r.ast/r.gp)}</td><td>${f1(r.pir/r.gp)}</td><td>${pc(r.f3m,r.f3a)}</td></tr>`).join('')}</tbody></table></div>`:''}</div>`; }
 function mPlayer(id){ const D=data(), r=D.P[id]; if(!r) return ''; const col=hex(tcol(r.team)), L=r.log.slice().sort((a,b)=>Date.parse(b.t)-Date.parse(a.t));
   const best=k=>Math.max(...r.log.map(x=>x.p[k]||0));
-  return `<div class="card print-target" style="border-left:4px solid ${col}"><div class="row between"><span></span><button class="sec" data-el="close">Fermer</button></div><div class="phead" style="background:linear-gradient(135deg,${col}33,transparent 65%)">${pAv(r,84)}<div class="pinfo"><div class="pname">${starP(r.id,r.n)}${esc(r.n)}</div><div class="psub">${tLink(r.team)} · ${r.gp} match(s), ${r.gs} titulaire</div></div></div>
+  return `<div class="card print-target" style="border-left:4px solid ${col}"><div class="row between"><span></span></div><div class="phead" style="background:linear-gradient(135deg,${col}33,transparent 65%)">${pAv(r,84)}<div class="pinfo"><div class="pname">${starP(r.id,r.n)}${esc(r.n)}</div><div class="psub">${tLink(r.team)} · ${r.gp} match(s), ${r.gs} titulaire</div></div></div>
   <div class="row" style="gap:18px;margin-bottom:10px">${['pts','reb','ast','pir','min'].map(k=>`<span>${PC[k][0]} <b>${f1(PC[k][1](r))}</b></span>`).join('')}<span>TIR <b>${pc(r.fgm,r.fga)}%</b></span><span>3P <b>${pc(r.f3m,r.f3a)}%</b></span><span>LF <b>${pc(r.ftm,r.fta)}%</b></span></div>
   <p class="mut">Records cette saison : ${best('pts')} pts · ${best('reb')} reb · ${best('ast')} ast · PIR ${best('pir')}</p>
   <h3>📋 Match par match</h3><div class="scroll"><table><thead><tr><th class="l">Date</th><th class="l">Adversaire</th><th>Rés.</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>2P</th><th>3P</th><th>LF</th><th>PIR</th></tr></thead><tbody>${L.map(x=>`<tr class="click" data-el="game" data-id="${esc(x.id)}"><td class="l">${esc(fDayS(x.t))}</td><td class="l">${x.home?'vs':'@'} ${logo(x.opp,18)}${esc(tm(x.opp).sn)}</td><td class="${x.win?'ok':'err'}">${x.win?'V':'D'}</td><td>${Math.round(x.p.min)}</td><td><b>${x.p.pts}</b></td><td>${x.p.reb}</td><td>${x.p.ast}</td><td>${x.p.f2m}/${x.p.f2a}</td><td>${x.p.f3m}/${x.p.f3a}</td><td>${x.p.ftm}/${x.p.fta}</td><td>${x.p.pir}</td></tr>`).join('')}</tbody></table></div></div>`; }
@@ -310,7 +332,7 @@ window.euroRender=function(){ $('#tabs').innerHTML=TABS.map(([k,i,l])=>`<button 
   const M=$('#modal'), keep=M.classList.contains('on')&&modalOn?M.scrollTop:0; M.firstElementChild.innerHTML=mh; M.classList.toggle('on',!!mh); document.body.style.overflow=mh?'hidden':''; M.scrollTop=keep; modalOn=!!mh;
   try{ modalHist(!!mh); }catch(e){}
   if(S.open&&S.open.k==='game'){ const g=list().find(x=>x.id===S.open.id); if(g&&needBox(g)&&!S.busy['b'+g.id]){ S.busy['b'+g.id]=1; fetchBox(g).then(()=>{ S.busy['b'+g.id]=0; saveBox(); redraw(); }); } }
-  loadGames(false); ensureBoxes(); };
+  loadGames(false); ensureBoxes(); if(!S.live._t||Date.now()-S.live._t>15e3){ S.live._t=Date.now(); liveTick(); } };
 window.euroRefresh=euroRefresh;
 window.euroClose=()=>{ S.open=null; };
 window.Euro={parseGames,parseBox,pGame,state:S,standings:()=>data().ST,players:()=>data().P};

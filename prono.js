@@ -2422,13 +2422,14 @@
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     }
     function scEcartJours(d1, d2) { return Math.abs((new Date(d1 + 'T12:00:00') - new Date(d2 + 'T12:00:00')) / 86400000); }
-    function scTrouverMatch(bet, matchs) {
+    function scTrouverMatch(bet, matchs, ecartMax) {
+      const EC = ecartMax || 1;
       const parts = String(bet.match || '').split(/\s+(?:vs\.?|contre|-|–)\s+/i);
       if (parts.length < 2) return null;
       let best = null, bestScore = 0;
       matchs.forEach(m => {
         if (!m.homeTeam || !m.awayTeam || !bet.date) return;
-        if (scEcartJours(scJourLocal(m.utcDate), bet.date) > 1) return;
+        if (scEcartJours(scJourLocal(m.utcDate), bet.date) > EC) return;
         const h = scMemeEquipeMatch(parts[0], m, 'homeTeam'), a = scMemeEquipeMatch(parts[1], m, 'awayTeam');
         if (h && a && h + a > bestScore) { bestScore = h + a; best = m; }
       });
@@ -2437,7 +2438,7 @@
       // on retourne le match pour que le score soit lu dans l'ordre écrit sur le pari.
       matchs.forEach(m => {
         if (!m.homeTeam || !m.awayTeam || !m.esp || !bet.date) return;
-        if (scEcartJours(scJourLocal(m.utcDate), bet.date) > 1) return;
+        if (scEcartJours(scJourLocal(m.utcDate), bet.date) > EC) return;
         const h = scMemeEquipeMatch(parts[0], m, 'awayTeam'), a = scMemeEquipeMatch(parts[1], m, 'homeTeam');
         if (h && a && h + a > bestScore) {
           bestScore = h + a;
@@ -5644,13 +5645,37 @@ async function vrRecupererScores(bets, progress) {
       fait++; if (progress) progress(fait, uniq.length);
     }));
   }
+  const charger = async cles => { for (let i = 0; i < cles.length; i += 6) {
+    await Promise.all(cles.slice(i, i + 6).map(async k => {
+      const [slug, jour] = k.split('|'); parSlug[k] = parSlug[k] || [];
+      try {
+        const r = await fetch(SC_ESPN + slug + '/scoreboard?dates=' + jour.replace(/-/g, ''), { cache: 'no-store' });
+        if (r.ok) { const d = await r.json(); ok++; (d.events || []).forEach(e => { const m = vrParseEvt(e); if (m) parSlug[k].push(m); }); }
+      } catch (e) {}
+    }));
+  } };
+  const chercher = (b, ecarts, ecMax) => {
+    const s = scSlugEspn(b.comp), jour = String(b.date).slice(0, 10), liste = [];
+    ecarts.forEach(n => (parSlug[s + '|' + scAjouterJours(jour, n)] || []).forEach(m => liste.push(m)));
+    return scTrouverMatch({ match: b.match, date: jour }, liste, ecMax);
+  };
+  const ranger = (b, m) => {
+    const jour = String(b.date).slice(0, 10), jm = scJourLocal(m.utcDate);
+    vrCache[vrId(b)] = Object.assign({ sig: sig(b), ko: m.utcDate, t: Date.now(), dec: jm && jm !== jour && scEcartJours(jm, jour) > 1 ? jm : '' }, m.vr);
+  };
+  const rates = [];
   need.forEach(b => {
-    const s = scSlugEspn(b.comp); if (!s) return;
-    const jour = String(b.date).slice(0, 10), liste = [];
-    [jour, scAjouterJours(jour, -1), scAjouterJours(jour, 1)].forEach(j => (parSlug[s + '|' + j] || []).forEach(m => liste.push(m)));
-    const m = scTrouverMatch({ match: b.match, date: jour }, liste);
-    if (m) vrCache[vrId(b)] = Object.assign({ sig: sig(b), ko: m.utcDate, t: Date.now() }, m.vr);
+    if (!scSlugEspn(b.comp)) return;
+    const m = chercher(b, [0, -1, 1], 1);
+    if (m) ranger(b, m); else rates.push(b);
   });
+  // match décalé ou avancé (ex. reprogrammé du vendredi au lundi) : on élargit à J-3 … J+5
+  if (rates.length) {
+    const ECARTS = [-3, -2, -1, 1, 2, 3, 4, 5], cles = new Set();
+    rates.forEach(b => { const s = scSlugEspn(b.comp), jour = String(b.date).slice(0, 10); ECARTS.forEach(n => { const k = s + '|' + scAjouterJours(jour, n); if (!parSlug[k]) cles.add(k); }); });
+    await charger([...cles]);
+    rates.forEach(b => { const m = chercher(b, [0].concat(ECARTS), 6); if (m) ranger(b, m); });
+  }
   scEcrire(VR_SC, vrCache);
   return { ok, essais: uniq.length };
 }
@@ -5865,7 +5890,7 @@ function rgToutAppliquer() {
   const liste = (state[currentSport] || []).filter(b => b.status === 'Pending').map(b => ({ id: b.id, s: rgSuggest(b) })).filter(x => x.s).map(x => ({ id: x.id, res: x.s.res }));
   rgChanger(liste, liste.length + ' pari(s) réglé(s) d\'après les scores');
 }
-let rgRafEnCours = false, rgRafDernier = 0, rgDiag = '';
+let rgRafEnCours = false, rgRafDernier = 0, rgDiag = '', rgToutVoir = false;
 async function rgRafraichirTermines(force) {
   try {
     if (rgRafEnCours || currentSport !== 'football') return;
@@ -5930,12 +5955,14 @@ function majReorg() {
       const sc = (typeof scoreHtml === 'function' ? scoreHtml(b) : ''); const scTxt = sc ? sc.replace(/<[^>]+>/g, '').trim() : '';
       const ko = rgKo(b), h = rgHeure(ko), futur = ko && !rgEnDirect(b) && new Date(ko).getTime() > maintenant;
       const sg = rgSuggest(b);
-      const info = `<div class="qs-info"><b>${esc(b.match)}</b><small>${esc(b.prono || '')} · cote ${esc(b.odds)}${dansCombo ? '' : ' · ' + esc(b.date || '')}</small>${rgEnDirect(b) ? `<span class="qs-sc">🔴 ${esc(scTxt || 'En direct')}</span>` : scTxt ? `<span class="qs-sc2">${esc(scTxt)}</span>` : futur ? `<span class="qs-h">⏰ ${esc(h)}</span>` : h ? `<span class="qs-h">${esc(h)}</span>` : ''}${sg ? `<span class="qs-sg">Suggestion : ${sg.res === 'Won' ? 'gagné ✓' : 'perdu ✗'}</span>` : ''}</div>`;
+      const vc = (typeof vrCache !== 'undefined') ? vrCache[String(b.id)] : null;
+      const dec = vc && vc.dec ? new Date(vc.ko || (vc.dec + 'T12:00:00')).toLocaleString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+      const info = `<div class="qs-info"><b>${esc(b.match)}</b><small>${esc(b.prono || '')} · cote ${esc(b.odds)}${dansCombo ? '' : ' · ' + esc(b.date || '')}</small>${rgEnDirect(b) ? `<span class="qs-sc">🔴 ${esc(scTxt || 'En direct')}</span>` : scTxt ? `<span class="qs-sc2">${esc(scTxt)}</span>` : futur && !dec ? `<span class="qs-h">⏰ ${esc(h)}</span>` : dec ? '' : h ? `<span class="qs-h">${esc(h)}</span>` : ''}${dec ? `<span class="qs-dec">📅 Match décalé au ${esc(dec)}</span>` : ''}${sg ? `<span class="qs-sg">Suggestion : ${sg.res === 'Won' ? 'gagné ✓' : 'perdu ✗'}</span>` : ''}</div>`;
       const bt = sg ? `<button type="button" class="${sg.res === 'Won' ? 'w sg' : 'l sg'}" data-id="${esc(b.id)}" data-res="${sg.res}" title="Appliquer la suggestion">${sg.res === 'Won' ? '✓' : '✗'}</button><button type="button" class="${sg.res === 'Won' ? 'l' : 'w'} petit" data-id="${esc(b.id)}" data-res="${sg.res === 'Won' ? 'Lost' : 'Won'}" title="${sg.res === 'Won' ? 'Perdu' : 'Gagné'}">${sg.res === 'Won' ? '✗' : '✓'}</button>`
         : `<button type="button" class="w" data-id="${esc(b.id)}" data-res="Won" title="Gagné">✓</button><button type="button" class="l" data-id="${esc(b.id)}" data-res="Lost" title="Perdu">✗</button>`;
       return `<div class="qs-row${futur ? ' qs-futur' : ''}">${info}<div class="qs-btns">${bt}</div></div>`;
     };
-    const MAX = 12; let html = '';
+    const MAX = rgToutVoir ? 1e6 : 12; let html = '';
     unites.slice(0, MAX).forEach(u => {
       if (u.bet) { html += ligne(u.bet, false); return; }
       const st = comboStatus(currentSport, u.combo), cote = comboOdds(currentSport, u.combo);
@@ -5945,7 +5972,8 @@ function majReorg() {
         u.legs.map(l => l.status === 'Pending' ? ligne(l, true) : `<div class="qs-row qs-fait"><div class="qs-info"><b>${esc(l.match)}</b><small>${esc(l.prono || '')} · cote ${esc(l.odds)}</small></div><span>${l.status === 'Won' ? '✅' : '❌'}</span></div>`).join('') + '</div>';
     });
     if (!unites.length) html = '<div class="qs-vide">Aucun pari en attente. Tout est réglé.</div>';
-    else if (unites.length > MAX) html += `<div class="qs-vide">+ ${unites.length - MAX} autres : voir l'historique.</div>`;
+    else if (unites.length > MAX) html += `<button type="button" class="qs-plus" data-qs-plus="1">+ ${unites.length - MAX} autres paris en attente · tout afficher</button>`;
+    else if (rgToutVoir && unites.length > 12) html += `<button type="button" class="qs-plus" data-qs-plus="0">Réduire la liste</button>`;
     L.innerHTML = html;
     const dg = rgEl('qsDiag'); if (dg) dg.textContent = rgDiag;
     const nSg = att.filter(b => rgSuggest(b)).length, tb = rgEl('qsTout');
@@ -5953,6 +5981,8 @@ function majReorg() {
   } catch (e) { /* le bandeau ne doit jamais bloquer l'appli */ }
 }
 document.addEventListener('click', ev => {
+  const pl = ev.target.closest && ev.target.closest('#qsList [data-qs-plus]');
+  if (pl) { rgToutVoir = pl.dataset.qsPlus === '1'; majReorg(); return; }
   const bt = ev.target.closest && ev.target.closest('#qsList button[data-id]'); if (!bt) return;
   rgReglerRapide(bt.dataset.id, bt.dataset.res);
 });
