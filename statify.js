@@ -894,7 +894,7 @@ function viewHome(S){
   let parts='', run=[];
   const flush=()=>{ if(!run.length) return; const col={L:'',R:''}; run.forEach((id,k)=>{ col[(cfg.c||{})[id]||(k%2?'R':'L')]+=blk(id); }); parts+=`<div class="hcols"><div class="hcol" data-col="L">${col.L}</div><div class="hcol" data-col="R">${col.R}</div></div>`; run=[]; };
   vis.forEach(id=>{ if(homeIsFull(id,cfg)){ flush(); parts+=blk(id); } else run.push(id); }); flush();
-  return heroNba(S)+(()=>{ try{ return stuReadyCard('nba'); }catch(e){ return ''; } })()+`<div class="row between" style="margin-bottom:10px"><span class="mut">${cfg.hidden.length?cfg.hidden.length+' bloc(s) masqué(s)':''}</span><button class="sec" data-act="homeedit">⚙ Personnaliser l'accueil</button></div>${ui.homeEdit?homeEditor(cfg):''}<div class="home${ui.homeEdit?' edit':''}">${parts}</div>`;
+  return heroNba(S)+`<div class="row between" style="margin-bottom:10px"><span class="mut">${cfg.hidden.length?cfg.hidden.length+' bloc(s) masqué(s)':''}</span><button class="sec" data-act="homeedit">⚙ Personnaliser l'accueil</button></div>${ui.homeEdit?homeEditor(cfg):''}<div class="home${ui.homeEdit?' edit':''}">${parts}</div>`;
 }
 
 function viewGames(S){
