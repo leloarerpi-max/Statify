@@ -484,5 +484,6 @@ details.qs-why{margin-top:4px}details.qs-why summary{display:inline-block;list-s
 .sc-lost{color:var(--bad,#d03a2a);background:color-mix(in srgb,var(--bad,#d03a2a) 15%,transparent)}
 .sc-void{color:var(--mut,#5b7490);background:color-mix(in srgb,var(--mut,#5b7490) 15%,transparent)}
 
-/* Règlement rapide : sur grand écran, les boutons ✓ ✗ restent près du texte (440 px max) au lieu de partir tout à droite */
-.qs-row{padding-right:max(0px,calc(100% - 440px))}
+/* Règlement rapide : sur grand écran, l'encadré du combiné se resserre autour du texte et des boutons ✓ ✗ (460 px max) */
+.qs-combo{max-width:460px}
+#qsList>.qs-row{padding-right:max(0px,calc(100% - 460px))}
