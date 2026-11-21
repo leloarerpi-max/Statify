@@ -484,6 +484,10 @@ details.qs-why{margin-top:4px}details.qs-why summary{display:inline-block;list-s
 .sc-lost{color:var(--bad,#d03a2a);background:color-mix(in srgb,var(--bad,#d03a2a) 15%,transparent)}
 .sc-void{color:var(--mut,#5b7490);background:color-mix(in srgb,var(--mut,#5b7490) 15%,transparent)}
 
-/* Règlement rapide : sur grand écran, l'encadré du combiné se resserre autour du texte et des boutons ✓ ✗ (460 px max) */
-.qs-combo{max-width:460px}
+/* Règlement rapide : les combinés d'une même journée s'affichent en grille (2 colonnes dès ~760 px, sinon 1),
+   tous les cadres à la même hauteur ; chaque sélection occupe la même part du cadre. */
+.qs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));grid-auto-rows:1fr;gap:8px;margin:8px 0}
+.qs-grid .qs-combo{margin:0;display:flex;flex-direction:column}
+.qs-grid .qs-combo .qs-row{flex:1}
+@media(max-width:420px){.qs-grid{grid-template-columns:minmax(0,1fr)}}
 #qsList>.qs-row{padding-right:max(0px,calc(100% - 460px))}

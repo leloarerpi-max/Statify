@@ -6048,17 +6048,20 @@ function majReorg() {
     };
     const MAX = rgToutVoir ? 1e6 : 12; let html = '';
     const jourLib = d => { if (!d) return ''; const t = new Date(d + 'T12:00:00'); if (isNaN(t)) return d; const n = Math.round((t - new Date(new Date().toDateString() + ' 12:00:00')) / 864e5); const lib = t.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }); return n === 0 ? 'Aujourd\'hui · ' + lib : n === 1 ? 'Demain · ' + lib : lib; };
-    let jourPrec = null;
+    let jourPrec = null, enGrille = false;
+    const fermerGrille = () => { if (enGrille) { html += '</div>'; enGrille = false; } };
     unites.slice(0, MAX).forEach(u => {
       const dj = String(u.date || '').slice(0, 10);
-      if (dj !== jourPrec) { jourPrec = dj; const n = unites.filter(x => String(x.date || '').slice(0, 10) === dj).length; if (dj) html += `<div class="qs-jour"><b>${esc(jourLib(dj))}</b><span>${n} ${n > 1 ? 'éléments' : 'élément'}</span></div>`; }
-      if (u.bet) { html += ligne(u.bet, false); return; }
+      if (dj !== jourPrec) { fermerGrille(); jourPrec = dj; const n = unites.filter(x => String(x.date || '').slice(0, 10) === dj).length; if (dj) html += `<div class="qs-jour"><b>${esc(jourLib(dj))}</b><span>${n} ${n > 1 ? 'éléments' : 'élément'}</span></div>`; }
+      if (u.bet) { fermerGrille(); html += ligne(u.bet, false); return; }
+      if (!enGrille) { html += '<div class="qs-grid">'; enGrille = true; }
       const st = comboStatus(currentSport, u.combo), cote = comboOdds(currentSport, u.combo);
       const ok = u.legs.filter(l => l.status === 'Won').length;
       const etat = st === 'Lost' ? '<span class="qs-etat bad">combiné perdu</span>' : `<span class="qs-etat">${ok}/${u.legs.length} gagnée${ok > 1 ? 's' : ''}</span>`;
       html += `<div class="qs-combo"><div class="qs-ch"><b>🎫 Combiné · ${u.legs.length} sél.</b><span>cote ${esc(Number(cote).toFixed(2))} · mise ${esc(u.combo.stake || 0)} €</span>${etat}</div>` +
         u.legs.map(l => l.status === 'Pending' ? ligne(l, true) : `<div class="qs-row qs-fait"><div class="qs-info"><b>${esc(l.match)}</b><small>${esc(l.prono || '')} · cote ${esc(l.odds)}</small></div><span>${l.status === 'Won' ? '✅' : '❌'}</span></div>`).join('') + '</div>';
     });
+    fermerGrille();
     if (!unites.length) html = '<div class="qs-vide">Aucun pari en attente. Tout est réglé.</div>';
     else if (unites.length > MAX) html += `<button type="button" class="qs-plus" data-qs-plus="1">+ ${unites.length - MAX} autres paris en attente · tout afficher</button>`;
     else if (rgToutVoir && unites.length > 12) html += `<button type="button" class="qs-plus" data-qs-plus="0">Réduire la liste</button>`;
