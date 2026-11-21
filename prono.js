@@ -2736,6 +2736,14 @@
       let mt = null;
       if (st === 'PAUSED' && per <= 1 && hs != null && as != null) mt = { h: hs, a: as };
       else if (!ex && lh.length >= 2 && la.length >= 2 && somme(lh.slice(0, 2)) === hs && somme(la.slice(0, 2)) === as) mt = { h: lh[0], a: la[0] };
+      // Pas de buts par période chez ESPN (fréquent en direct) : on les recompte avec la minute de chaque but.
+      if (!mt && !ex && (per >= 2 || st === 'FINISHED') && hs != null && as != null) {
+        const buts = ((e.competitions[0].details) || []).filter(x => x.scoringPlay && !x.shootout);
+        const min = x => { const t = /(\d+)/.exec(String((x.clock && x.clock.displayValue) || '')); return t ? +t[1] : null; };
+        const bh = buts.filter(x => String(x.team && x.team.id) === String(h.team.id)), ba = buts.filter(x => String(x.team && x.team.id) === String(a.team.id));
+        if (bh.length === hs && ba.length === as && buts.every(x => min(x) != null))
+          mt = { h: bh.filter(x => min(x) <= 45).length, a: ba.filter(x => min(x) <= 45).length };
+      }
       return { homeTeam: eq(h), awayTeam: eq(a), utcDate: e.date, esp: { h: hs, a: as, st, per, mn: mm ? +mm[1] : null, it: mm && mm[2] != null ? +mm[2] : null, mt, ex } };
     }
     // Interroge ESPN pour les paris dont le championnat est couvert. Renvoie les identifiants de paris trouvés.
