@@ -3061,6 +3061,31 @@
           </summary>${detail}</details>`;
       }).join('');
 
+      // Défaites : combien de combinés perdus, et avec combien de pronos perdus dedans (ex. « 2 sur 2 » ou « 1 sur 2 »)
+      const perdus = reg.filter(r => r.status === 'Lost');
+      const parPerte = {};
+      perdus.forEach(r => {
+        const n = r.legs.length, k = r.legs.filter(l => l.status === 'Lost').length, cle = k + '/' + n;
+        const o = parPerte[cle] = parPerte[cle] || { k, n, nb: 0, autresG: 0, autresAtt: 0 };
+        o.nb++;
+        const autres = r.legs.filter(l => l.status !== 'Lost');
+        if (autres.length) { if (autres.every(l => l.status === 'Won')) o.autresG++; else o.autresAtt++; }
+      });
+      const lignesPerte = Object.values(parPerte).sort((x, y) => (x.n - y.n) || (y.k - x.k)).map(o => {
+        const lib = o.k === o.n ? `Les ${o.n} pronos perdus` : `${o.k} prono${o.k > 1 ? 's' : ''} perdu${o.k > 1 ? 's' : ''} sur ${o.n}`;
+        const pcReg = Math.round(o.nb / N * 100);
+        const det = o.k < o.n ? [o.autresG ? `l'autre gagné : ${o.autresG}` : '', o.autresAtt ? `autre pas encore joué : ${o.autresAtt}` : ''].filter(Boolean).join(' · ') : '';
+        return `<div class="py-1 border-b border-slate-100">
+            <div class="flex items-center justify-between text-[11px]"><b>${lib}</b><span><b class="text-rose-600">${o.nb}</b> combiné${o.nb > 1 ? 's' : ''} · <b class="text-rose-600">${pcReg} %</b> des réglés</span></div>
+            <div class="h-1.5 rounded-full bg-slate-100 mt-1 overflow-hidden"><div class="h-full bg-rose-400" style="width:${pcReg}%"></div></div>
+            ${det ? `<div class="text-[10px] text-slate-400 mt-0.5">${det}</div>` : ''}
+          </div>`;
+      }).join('');
+      const blocDefaites = N ? `<div class="bg-rose-50/50 border border-rose-100 rounded-xl p-3">
+          <div class="flex items-center justify-between mb-1"><div class="text-[10px] uppercase font-bold text-slate-500">Défaites</div><div class="text-sm font-extrabold text-rose-600">${perdus.length} sur ${N} · ${Math.round(perdus.length / N * 100)} %</div></div>
+          ${lignesPerte || '<p class="text-[11px] text-slate-400 italic">Aucun combiné perdu sur cette période.</p>'}
+          <p class="text-[10px] text-slate-400 pt-1">Un combiné est perdu dès qu'un prono est perdu, même si l'autre n'est pas encore joué.</p>
+        </div>` : '';
       const lignesNb = Object.keys(parNb).sort((a, b) => a - b).map(k => { const o = parNb[k]; return `<div class="grid grid-cols-5 text-[11px] py-1 border-b border-slate-100"><b>${k} matchs</b><span class="text-center">${o.n}</span><span class="text-center">${Math.round(o.w / o.n * 100)} %</span><span class="text-center">${o.mise ? Math.round(o.profit / o.mise * 100) + ' %' : '–'}</span><span class="text-right font-bold ${cls(o.profit)}">${money(o.profit)}</span></div>`; }).join('');
 
       m.innerHTML = `<div class="space-y-3">
@@ -3076,6 +3101,7 @@
           ${kpi('Réglés', N)}${kpi('Gagnés', W + ' (' + Math.round(W / N * 100) + ' %)')}${kpi('Profit', money(prof), cls(prof))}
           ${kpi('ROI', mise ? (prof / mise * 100).toFixed(1).replace('.', ',') + ' %' : '–', cls(prof))}${kpi('Cote moy.', f2(coteMoy))}${kpi('Jours +', jPos + '/' + jReg.length)}
         </div>
+        ${blocDefaites}
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div>
           <div class="text-[10px] uppercase font-bold text-slate-500 mb-1">Évolution du bankroll (combiné après combiné)</div>
