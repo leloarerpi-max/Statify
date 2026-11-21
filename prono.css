@@ -406,6 +406,7 @@ select option{background-color:var(--card);color:var(--txt)}
 .qs-h{color:var(--mut);font-size:11px;font-weight:700}
 .qs-sc2{color:var(--mut);font-size:11px}
 .qs-sg{display:block;color:var(--ok);font-weight:800;font-size:11px}
+.qs-sg.qs-sg-l{color:var(--bad)}
 .qs-btns .sg{background:color-mix(in srgb,var(--ok) 22%,transparent);border-color:var(--ok)}
 .qs-btns .l.sg{background:color-mix(in srgb,var(--bad) 22%,transparent);border-color:var(--bad)}
 .qs-btns .petit{width:30px;opacity:.6}

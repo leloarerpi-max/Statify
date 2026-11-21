@@ -2393,10 +2393,65 @@
             temps = v > lim ? ` · ${lim}+'` : ` · ${v}'`;
           } else temps = ` · ${mn}'`;
         }
+        const seconde = Number(r.per) >= 2 || (!r.per && mn > 45);
+        if (seconde && r.hh != null && r.ha != null) temps += ` · MT ${r.hh}-${r.ha}`;
         txt = `En cours : ${r.h}-${r.a}${temps}`;
       }
       else return '';
       return `<div class="text-[10px] font-extrabold text-violet-700">⚽ ${txt}</div>`;
+    }
+
+    // ===== VERDICT EN DIRECT : le pari est-il déjà gagné / perdu avant la fin du match ? =====
+    // On encadre le nombre de buts possible dans la période du pari ([mini, maxi]) :
+    //  • match en cours : le nombre de buts ne peut que monter  → [buts actuels, ∞[
+    //  • période terminée (mi-temps ou fin de match)            → valeur exacte
+    // Si toutes les issues possibles donnent le même résultat, le pari est joué.
+    function scBornes(r, mt) {
+      if (r.ex) return null; // prolongations / tirs au but : le résultat à 90 min n'est pas connu
+      const per = Number(r.per) || 0, mn = Number(r.mn) || 0, fini = r.st === 'FINISHED';
+      if (!mt) return fini ? { clos: true, h: [r.h, r.h], a: [r.a, r.a] } : { clos: false, h: [r.h, Infinity], a: [r.a, Infinity] };
+      if (r.hh != null && r.ha != null) return { clos: true, h: [r.hh, r.hh], a: [r.ha, r.ha] };
+      if (fini) return null;
+      if (r.st === 'PAUSED') return { clos: true, h: [r.h, r.h], a: [r.a, r.a] };
+      if (per === 1 || (!per && mn > 0 && mn <= 45)) return { clos: false, h: [r.h, Infinity], a: [r.a, Infinity] };
+      // 2e période mais score à la mi-temps inconnu : les buts de la 1re MT sont compris entre 0 et le score actuel
+      if (per >= 2 || (!per && mn > 45)) return { clos: false, h: [0, r.h], a: [0, r.a] };
+      return null;
+    }
+    // Renvoie { res: 'Won'|'Lost'|'Void', final: bool, why } ou null si le pari n'est pas encore décidé.
+    function scVerdictLive(b) {
+      try {
+        const r = scoresCache[b.id];
+        if (!r || r.h == null || r.a == null || !/^(IN_PLAY|PAUSED|FINISHED)$/.test(r.st)) return null;
+        const sel = vrParsePari(b);
+        if (!sel || sel.kind === 'x') return null;
+        const B = scBornes(r, sel.mt); if (!B) return null;
+        const [hl, hu] = B.h, [al, au] = B.a, Tl = hl + al, Tu = hu + au;
+        const nb = n => n + ' but' + (n > 1 ? 's' : ''), MT = sel.mt ? ' en 1ère MT' : '';
+        let res = null, why = '';
+        if (sel.kind === 'ou') {
+          const L = sel.line, plus = sel.dir === 'plus';
+          if (plus ? Tl > L : Tu < L) res = 'Won';
+          else if (plus ? Tu < L : Tl > L) res = 'Lost';
+          else if (B.clos && Tl === L) res = 'Void';
+          if (res === 'Void') why = nb(Tl) + MT + ' : ligne atteinte pile';
+          else if (res) why = B.clos ? nb(Tl) + MT : ((plus && res === 'Won') || (!plus && res === 'Lost')) ? 'déjà ' + nb(Tl) + MT : 'au plus ' + nb(Tu) + MT;
+        } else if (sel.kind === 'btts') {
+          const deux = hl > 0 && al > 0, pas = hu === 0 || au === 0;
+          if (deux) res = sel.yes ? 'Won' : 'Lost'; else if (pas) res = sel.yes ? 'Lost' : 'Won';
+          if (res) why = (deux ? 'les deux équipes ont marqué' : 'une équipe n\'a pas marqué') + MT;
+        } else if (B.clos) { // 1N2 et double chance : jouables seulement quand la période est terminée
+          const out = hl > al ? 'H' : hl < al ? 'A' : 'D';
+          res = (sel.kind === 'dc' ? sel.set.includes(out) : out === sel.pick) ? 'Won' : 'Lost';
+          why = (sel.mt ? 'mi-temps ' : 'score ') + hl + '-' + al;
+        }
+        return res ? { res, final: B.clos, why } : null;
+      } catch (e) { return null; }
+    }
+    function verdictHtml(b) {
+      const v = scVerdictLive(b); if (!v) return '';
+      const [ico, lib, col] = v.res === 'Won' ? ['✅', 'gagné', 'text-emerald-600'] : v.res === 'Lost' ? ['❌', 'perdu', 'text-rose-600'] : ['↩️', 'remboursé', 'text-slate-500'];
+      return `<div class="text-[10px] font-extrabold ${col}">${ico} Pari ${lib}${v.final ? '' : ' — déjà certain'} · ${v.why}</div>`;
     }
 
     const SC_JETONS_IGNORES = new Set(['fc', 'cf', 'ac', 'as', 'sc', 'us', 'ssc', 'afc', 'rc', 'rcd', 'sv', 'vfb', 'vfl', 'fsv', 'tsg', 'og', 'ogc', 'ca', 'cd', 'ud', 'sd', 'de', 'la', 'le', 'the', 'el', 'club', 'calcio', 'fk']);
@@ -2443,7 +2498,7 @@
         if (h && a && h + a > bestScore) {
           bestScore = h + a;
           const sw = x => x && { h: x.a, a: x.h };
-          best = Object.assign({}, m, { homeTeam: m.awayTeam, awayTeam: m.homeTeam, esp: Object.assign({}, m.esp, { h: m.esp.a, a: m.esp.h }), vr: m.vr ? Object.assign({}, m.vr, { h: m.vr.a, a: m.vr.h, mt: m.vr.mt ? sw(m.vr.mt) : m.vr.mt }) : m.vr, inverse: true });
+          best = Object.assign({}, m, { homeTeam: m.awayTeam, awayTeam: m.homeTeam, esp: Object.assign({}, m.esp, { h: m.esp.a, a: m.esp.h, mt: sw(m.esp.mt) }), vr: m.vr ? Object.assign({}, m.vr, { h: m.vr.a, a: m.vr.h, mt: m.vr.mt ? sw(m.vr.mt) : m.vr.mt }) : m.vr, inverse: true });
         }
       });
       return best;
@@ -2674,7 +2729,14 @@
       const sc = x => { const n = parseInt(x.score, 10); return Number.isFinite(n) ? n : null; };
       const stt = e.status || {};
       const mm = /(\d+)'?(?:\s*\+\s*(\d+))?/.exec(String(stt.displayClock || ''));
-      return { homeTeam: eq(h), awayTeam: eq(a), utcDate: e.date, esp: { h: sc(h), a: sc(a), st: scStatutEspn(stt), per: +stt.period || 0, mn: mm ? +mm[1] : null, it: mm && mm[2] != null ? +mm[2] : null } };
+      // Score à la mi-temps : lu dans les « linescores » (buts par période) ; pendant la pause, c'est le score actuel.
+      const ls = x => (x.linescores || []).map(l => Number(l.value)).filter(Number.isFinite), somme = t => t.reduce((n, v) => n + v, 0);
+      const lh = ls(h), la = ls(a), hs = sc(h), as = sc(a), st = scStatutEspn(stt), per = +stt.period || 0;
+      const ex = /AET|PEN|EXTRA|SHOOT/i.test(String((stt.type && stt.type.name) || '')) || lh.length > 2 || la.length > 2 || per >= 3;
+      let mt = null;
+      if (st === 'PAUSED' && per <= 1 && hs != null && as != null) mt = { h: hs, a: as };
+      else if (!ex && lh.length >= 2 && la.length >= 2 && somme(lh.slice(0, 2)) === hs && somme(la.slice(0, 2)) === as) mt = { h: lh[0], a: la[0] };
+      return { homeTeam: eq(h), awayTeam: eq(a), utcDate: e.date, esp: { h: hs, a: as, st, per, mn: mm ? +mm[1] : null, it: mm && mm[2] != null ? +mm[2] : null, mt, ex } };
     }
     // Interroge ESPN pour les paris dont le championnat est couvert. Renvoie les identifiants de paris trouvés.
     async function scEspnRecuperer(bets) {
@@ -2699,7 +2761,7 @@
         const m = scTrouverMatch(b, parSlug[s] || []);
         if (!m) return;
         const x = m.esp;
-        scoresCache[b.id] = { h: x.h, a: x.a, st: x.st, mn: x.mn, it: x.it, per: x.per, ko: m.utcDate, src: 'espn', t: Date.now() };
+        scoresCache[b.id] = { h: x.h, a: x.a, hh: x.mt ? x.mt.h : null, ha: x.mt ? x.mt.a : null, ex: !!x.ex, st: x.st, mn: x.mn, it: x.it, per: x.per, ko: m.utcDate, src: 'espn', t: Date.now() };
         trouves.add(b.id);
       });
       return { trouves, ok, essais: uniq.length };
@@ -4204,7 +4266,7 @@
             <td class="p-3 align-middle font-semibold text-slate-800">
               <div class="text-xs font-bold text-slate-900">${comboMatchBadge}${b.match || ''}</div>
               <div class="text-[10px] text-slate-400 font-medium">${b.comp || ''}</div>
-              ${scoreHtml(b)}
+              ${scoreHtml(b)}${verdictHtml(b)}
             </td>
             <td class="p-3 align-middle font-medium text-slate-800">
               ${b.prono || ''} <span class="text-slate-400 text-xs font-normal">(${b.market || ''})</span>
@@ -4280,7 +4342,7 @@
                 <div class="min-w-0">
                   <div class="text-xs font-bold text-slate-900 truncate">${numBadge} ${b.match || ''}</div>
                   <div class="text-[10px] text-slate-400 font-medium truncate">${b.comp || ''} · <span class="text-blue-600 font-bold">${b.date || ''}${heureMatch(b) ? ' · ' + heureMatch(b) : ''}</span></div>
-                  ${scoreHtml(b)}
+                  ${scoreHtml(b)}${verdictHtml(b)}
                 </div>
               </div>
               ${statusBadge}
@@ -5864,11 +5926,16 @@ function rgEnDirect(b) { const r = scoresCache[b.id]; return !!(r && (r.st === '
 function rgJourLocal() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function rgKo(b) { const r = scoresCache[b.id], v = (typeof vrCache !== 'undefined') ? vrCache[String(b.id)] : null; return (r && r.ko) || (v && v.ko) || ''; }
 function rgHeure(iso) { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); }
-function rgSuggest(b) {
+// sansLive = true : seulement les matchs terminés (utilisé par « tout régler » et le réglage auto, qui ne doivent
+// jamais valider un pari en plein match). Sinon on ajoute le verdict en direct (pari déjà gagné / perdu).
+function rgSuggest(b, sansLive) {
   try {
     const sel = vrParsePari(b); if (!sel || sel.kind === 'x') return null;
-    const sc = vrCache[String(b.id)]; if (!sc || sc.st !== 'FINISHED') return null;
-    const v = vrVerdict(sel, sc); return v && v.res ? { res: v.res, why: v.why } : null;
+    const sc = vrCache[String(b.id)];
+    if (sc && sc.st === 'FINISHED') { const v = vrVerdict(sel, sc); return v && v.res ? { res: v.res, why: v.why } : null; }
+    if (sansLive) return null;
+    const lv = scVerdictLive(b);
+    return lv && (lv.res === 'Won' || lv.res === 'Lost') ? { res: lv.res, why: lv.why, live: !lv.final || rgEnDirect(b) } : null;
   } catch (e) { return null; }
 }
 let rgToastT = null, rgUndo = null;
@@ -5893,7 +5960,7 @@ function rgChanger(liste, msg, auto) {
 }
 function rgReglerRapide(id, st) { rgChanger([{ id, res: st }], st === 'Won' ? 'Pari réglé : gagné' : 'Pari réglé : perdu'); }
 function rgToutAppliquer() {
-  const liste = (state[currentSport] || []).filter(b => b.status === 'Pending').map(b => ({ id: b.id, s: rgSuggest(b) })).filter(x => x.s).map(x => ({ id: x.id, res: x.s.res }));
+  const liste = (state[currentSport] || []).filter(b => b.status === 'Pending').map(b => ({ id: b.id, s: rgSuggest(b, true) })).filter(x => x.s).map(x => ({ id: x.id, res: x.s.res }));
   rgChanger(liste, liste.length + ' pari(s) réglé(s) d\'après les scores');
 }
 let rgRafEnCours = false, rgRafDernier = 0, rgDiag = '', rgToutVoir = false;
@@ -5913,7 +5980,7 @@ async function rgRafraichirTermines(force) {
     rgDiag = rr.essais && !rr.ok ? '⚠️ ESPN n\'a pas répondu (connexion ou blocage). Réessaie avec ↻.' : sans ? 'ℹ️ ' + sans + ' match(s) non reconnu(s) chez ESPN (nom d\'équipe ou championnat). Heure et score indisponibles pour eux.' : '✓ Scores à jour (' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) + ')';
   } catch (e) { rgDiag = '⚠️ Erreur de récupération des scores : ' + (e && e.message ? e.message : e); }
   rgRafEnCours = false; const bt = rgEl('qsRefresh'); if (bt) bt.classList.remove('anim');
-  try { if (rgPref(RG_AUTO_REG) && currentSport === 'football') rgReglerAuto((state.football || []).filter(b => b.status === 'Pending').map(b => ({ b, s: rgSuggest(b) })).filter(x => x.s).map(x => ({ id: x.b.id, res: x.s.res }))); } catch (e) {}
+  try { if (rgPref(RG_AUTO_REG) && currentSport === 'football') rgReglerAuto((state.football || []).filter(b => b.status === 'Pending').map(b => ({ b, s: rgSuggest(b, true) })).filter(x => x.s).map(x => ({ id: x.b.id, res: x.s.res }))); } catch (e) {}
   majReorg();
 }
 function majReorg() {
@@ -5964,7 +6031,7 @@ function majReorg() {
       const sg = rgSuggest(b);
       const vc = (typeof vrCache !== 'undefined') ? vrCache[String(b.id)] : null;
       const dec = vc && vc.dec ? new Date(vc.ko || (vc.dec + 'T12:00:00')).toLocaleString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
-      const info = `<div class="qs-info"><b>${esc(b.match)}</b><small>${esc(b.prono || '')} · cote ${esc(b.odds)}</small>${rgEnDirect(b) ? `<span class="qs-sc">🔴 ${esc(scTxt || 'En direct')}</span>` : scTxt ? `<span class="qs-sc2">${esc(scTxt)}</span>` : futur && !dec ? `<span class="qs-h">⏰ ${esc(h)}</span>` : dec ? '' : h ? `<span class="qs-h">${esc(h)}</span>` : ''}${dec ? `<span class="qs-dec">📅 Match décalé au ${esc(dec)}</span>` : ''}${sg ? `<span class="qs-sg">Suggestion : ${sg.res === 'Won' ? 'gagné ✓' : 'perdu ✗'}</span>` : ''}</div>`;
+      const info = `<div class="qs-info"><b>${esc(b.match)}</b><small>${esc(b.prono || '')} · cote ${esc(b.odds)}</small>${rgEnDirect(b) ? `<span class="qs-sc">🔴 ${esc(scTxt || 'En direct')}</span>` : scTxt ? `<span class="qs-sc2">${esc(scTxt)}</span>` : futur && !dec ? `<span class="qs-h">⏰ ${esc(h)}</span>` : dec ? '' : h ? `<span class="qs-h">${esc(h)}</span>` : ''}${dec ? `<span class="qs-dec">📅 Match décalé au ${esc(dec)}</span>` : ''}${sg ? `<span class="qs-sg${sg.res === 'Won' ? '' : ' qs-sg-l'}">${sg.live ? 'Déjà ' : 'Suggestion : '}${sg.res === 'Won' ? 'gagné ✓' : 'perdu ✗'}${sg.live && sg.why ? ' · ' + esc(sg.why) : ''}</span>` : ''}</div>`;
       const bt = sg ? `<button type="button" class="${sg.res === 'Won' ? 'w sg' : 'l sg'}" data-id="${esc(b.id)}" data-res="${sg.res}" title="Appliquer la suggestion">${sg.res === 'Won' ? '✓' : '✗'}</button><button type="button" class="${sg.res === 'Won' ? 'l' : 'w'} petit" data-id="${esc(b.id)}" data-res="${sg.res === 'Won' ? 'Lost' : 'Won'}" title="${sg.res === 'Won' ? 'Perdu' : 'Gagné'}">${sg.res === 'Won' ? '✗' : '✓'}</button>`
         : `<button type="button" class="w" data-id="${esc(b.id)}" data-res="Won" title="Gagné">✓</button><button type="button" class="l" data-id="${esc(b.id)}" data-res="Lost" title="Perdu">✗</button>`;
       const rz = !dansCombo && raisons[String(b.id)];
@@ -5989,7 +6056,7 @@ function majReorg() {
     else if (rgToutVoir && unites.length > 12) html += `<button type="button" class="qs-plus" data-qs-plus="0">Réduire la liste</button>`;
     L.innerHTML = html;
     const dg = rgEl('qsDiag'); if (dg) dg.textContent = rgDiag;
-    const nSg = att.filter(b => rgSuggest(b)).length, tb = rgEl('qsTout');
+    const nSg = att.filter(b => rgSuggest(b, true)).length, tb = rgEl('qsTout');
     if (tb) { tb.classList.toggle('hidden', !nSg); tb.textContent = 'Tout régler d\'après les scores (' + nSg + ')'; }
   } catch (e) { /* le bandeau ne doit jamais bloquer l'appli */ }
 }
