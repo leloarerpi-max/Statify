@@ -2377,10 +2377,10 @@
     function scoreHtml(b) {
       const r = scoresCache[b.id];
       if (!r) return '';
-      let txt = '';
-      if (r.st === 'FINISHED' && r.h != null) txt = `Score final : ${r.h}-${r.a}` + (r.hh != null ? ` · mi-temps ${r.hh}-${r.ha}` : '');
-      else if (r.st === 'POSTPONED' || r.st === 'SUSPENDED' || r.st === 'CANCELLED') txt = 'Match reporté / annulé';
-      else if (r.st === 'PAUSED' && r.h != null) txt = `Mi-temps : ${r.h}-${r.a}`;
+      let main = '', mt = '', dot = false;
+      if (r.st === 'FINISHED' && r.h != null) { main = `Score final : ${r.h}-${r.a}`; if (r.hh != null) mt = `mi-temps ${r.hh}-${r.ha}`; }
+      else if (r.st === 'POSTPONED' || r.st === 'SUSPENDED' || r.st === 'CANCELLED') main = 'Match reporté / annulé';
+      else if (r.st === 'PAUSED' && r.h != null) { main = `Mi-temps : ${r.h}-${r.a}`; dot = true; }
       else if (r.st === 'IN_PLAY' && r.h != null) {
         const mn = Number(r.mn), it = Number(r.it);
         let temps = '';
@@ -2394,11 +2394,11 @@
           } else temps = ` · ${mn}'`;
         }
         const seconde = Number(r.per) >= 2 || (!r.per && mn > 45);
-        if (seconde && r.hh != null && r.ha != null) temps += ` · MT ${r.hh}-${r.ha}`;
-        txt = `En cours : ${r.h}-${r.a}${temps}`;
+        if (seconde && r.hh != null && r.ha != null) mt = `MT ${r.hh}-${r.ha}`;
+        main = `${r.h}-${r.a}${temps}`; dot = true;
       }
       else return '';
-      return `<div class="text-[10px] font-extrabold text-violet-700">⚽ ${txt}</div>`;
+      return `<div class="sc-line">${dot ? '<span class="sc-dot"></span>' : ''}<span class="sc-main">${main}</span>${mt ? `<span class="sc-mt">· ${mt}</span>` : ''}${verdictBadge(b)}</div>`;
     }
 
     // ===== VERDICT EN DIRECT : le pari est-il déjà gagné / perdu avant la fin du match ? =====
@@ -2448,10 +2448,10 @@
         return res ? { res, final: B.clos, why } : null;
       } catch (e) { return null; }
     }
-    function verdictHtml(b) {
+    function verdictBadge(b) {
       const v = scVerdictLive(b); if (!v) return '';
-      const [ico, lib, col] = v.res === 'Won' ? ['✅', 'gagné', 'text-emerald-600'] : v.res === 'Lost' ? ['❌', 'perdu', 'text-rose-600'] : ['↩️', 'remboursé', 'text-slate-500'];
-      return `<div class="text-[10px] font-extrabold ${col}">${ico} Pari ${lib}${v.final ? '' : ' — déjà certain'} · ${v.why}</div>`;
+      const [cls, lib] = v.res === 'Won' ? ['sc-won', '✓ Gagné'] : v.res === 'Lost' ? ['sc-lost', '✗ Perdu'] : ['sc-void', '↩ Remboursé'];
+      return `<span class="sc-badge ${cls}" title="${v.why}${v.final ? '' : ' (déjà certain)'}">${lib}</span>`;
     }
 
     const SC_JETONS_IGNORES = new Set(['fc', 'cf', 'ac', 'as', 'sc', 'us', 'ssc', 'afc', 'rc', 'rcd', 'sv', 'vfb', 'vfl', 'fsv', 'tsg', 'og', 'ogc', 'ca', 'cd', 'ud', 'sd', 'de', 'la', 'le', 'the', 'el', 'club', 'calcio', 'fk']);
@@ -4274,7 +4274,7 @@
             <td class="p-3 align-middle font-semibold text-slate-800">
               <div class="text-xs font-bold text-slate-900">${comboMatchBadge}${b.match || ''}</div>
               <div class="text-[10px] text-slate-400 font-medium">${b.comp || ''}</div>
-              ${scoreHtml(b)}${verdictHtml(b)}
+              ${scoreHtml(b)}
             </td>
             <td class="p-3 align-middle font-medium text-slate-800">
               ${b.prono || ''} <span class="text-slate-400 text-xs font-normal">(${b.market || ''})</span>
@@ -4350,7 +4350,7 @@
                 <div class="min-w-0">
                   <div class="text-xs font-bold text-slate-900 truncate">${numBadge} ${b.match || ''}</div>
                   <div class="text-[10px] text-slate-400 font-medium truncate">${b.comp || ''} · <span class="text-blue-600 font-bold">${b.date || ''}${heureMatch(b) ? ' · ' + heureMatch(b) : ''}</span></div>
-                  ${scoreHtml(b)}${verdictHtml(b)}
+                  ${scoreHtml(b)}
                 </div>
               </div>
               ${statusBadge}
@@ -6034,12 +6034,12 @@ function majReorg() {
     const maintenant = Date.now();
     let raisons = {}; try { raisons = rgRaisonsSimples(att.filter(b => !b.comboId && !parId[String(b.id)])); } catch (e) {}
     const ligne = (b, dansCombo) => {
-      const sc = (typeof scoreHtml === 'function' ? scoreHtml(b) : ''); const scTxt = sc ? sc.replace(/<[^>]+>/g, '').trim() : '';
+      const sc = (typeof scoreHtml === 'function' ? scoreHtml(b) : ''); const scTxt = sc;
       const ko = rgKo(b), h = rgHeure(ko), futur = ko && !rgEnDirect(b) && new Date(ko).getTime() > maintenant;
       const sg = rgSuggest(b);
       const vc = (typeof vrCache !== 'undefined') ? vrCache[String(b.id)] : null;
       const dec = vc && vc.dec ? new Date(vc.ko || (vc.dec + 'T12:00:00')).toLocaleString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
-      const info = `<div class="qs-info"><b>${esc(b.match)}</b><small>${esc(b.prono || '')} · cote ${esc(b.odds)}</small>${rgEnDirect(b) ? `<span class="qs-sc">🔴 ${esc(scTxt || 'En direct')}</span>` : scTxt ? `<span class="qs-sc2">${esc(scTxt)}</span>` : futur && !dec ? `<span class="qs-h">⏰ ${esc(h)}</span>` : dec ? '' : h ? `<span class="qs-h">${esc(h)}</span>` : ''}${dec ? `<span class="qs-dec">📅 Match décalé au ${esc(dec)}</span>` : ''}${sg ? `<span class="qs-sg${sg.res === 'Won' ? '' : ' qs-sg-l'}">${sg.live ? 'Déjà ' : 'Suggestion : '}${sg.res === 'Won' ? 'gagné ✓' : 'perdu ✗'}${sg.live && sg.why ? ' · ' + esc(sg.why) : ''}</span>` : ''}</div>`;
+      const info = `<div class="qs-info"><b>${esc(b.match)}</b><small>${esc(b.prono || '')} · cote ${esc(b.odds)}</small>${scTxt ? scTxt : rgEnDirect(b) ? `<div class="sc-line"><span class="sc-dot"></span><span class="sc-main">En direct</span></div>` : futur && !dec ? `<span class="qs-h">⏰ ${esc(h)}</span>` : dec ? '' : h ? `<span class="qs-h">${esc(h)}</span>` : ''}${dec ? `<span class="qs-dec">📅 Match décalé au ${esc(dec)}</span>` : ''}${sg && !sg.live ? `<span class="qs-sg">Suggestion : ${sg.res === 'Won' ? 'gagné ✓' : 'perdu ✗'}</span>` : ''}</div>`;
       const bt = sg ? `<button type="button" class="${sg.res === 'Won' ? 'w sg' : 'l sg'}" data-id="${esc(b.id)}" data-res="${sg.res}" title="Appliquer la suggestion">${sg.res === 'Won' ? '✓' : '✗'}</button><button type="button" class="${sg.res === 'Won' ? 'l' : 'w'} petit" data-id="${esc(b.id)}" data-res="${sg.res === 'Won' ? 'Lost' : 'Won'}" title="${sg.res === 'Won' ? 'Perdu' : 'Gagné'}">${sg.res === 'Won' ? '✗' : '✓'}</button>`
         : `<button type="button" class="w" data-id="${esc(b.id)}" data-res="Won" title="Gagné">✓</button><button type="button" class="l" data-id="${esc(b.id)}" data-res="Lost" title="Perdu">✗</button>`;
       const rz = !dansCombo && raisons[String(b.id)];
