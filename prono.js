@@ -6022,10 +6022,11 @@ function majReorg() {
     unites.forEach(u => {
       const pend = (u.legs || [u.bet]).filter(b => b.status === 'Pending');
       u.rang = Math.min.apply(null, pend.map(rang));
+      if (u.bet) u.rang = Math.max(u.rang, 1); // un pari simple en direct ne passe pas devant les combinés
       u.date = pend.map(b => String(b.date || '')).sort()[0] || '';
       u.ko = pend.map(rgKo).filter(Boolean).sort()[0] || '9';
     });
-    unites.sort((a, b) => (a.rang - b.rang) || a.date.localeCompare(b.date) || String(a.ko).localeCompare(String(b.ko)));
+    unites.sort((a, b) => (a.rang - b.rang) || a.date.localeCompare(b.date) || ((a.bet ? 1 : 0) - (b.bet ? 1 : 0)) || String(a.ko).localeCompare(String(b.ko))); // à date égale : combinés d'abord, paris simples en bas, puis par heure
     const nC = unites.filter(u => u.combo).length, nS = unites.length - nC;
     set('ibAttente', String(unites.length));
     const c = rgEl('qsCount'); if (c) c.textContent = (nC ? nC + ' combiné' + (nC > 1 ? 's' : '') : '') + (nC && nS ? ' + ' : '') + (nS ? nS + ' pari' + (nS > 1 ? 's' : '') : '') || '0';
