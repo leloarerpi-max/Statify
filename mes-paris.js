@@ -23,7 +23,7 @@
   const pareil = (x, y) => { const a = mots(x), b = mots(y); return a.some(u => b.some(v => u === v || (u.length >= 4 && v.length >= 4 && (u.startsWith(v) || v.startsWith(u))))); };
   const cotes = m => String(m || '').split(/\s+(?:vs\.?|v)\s+|\s+[-–—]\s+/i);
   function matchs() {
-    try { return Object.entries(foot.leagues || {}).flatMap(([lg, L]) => Object.values(L.matches || {}).map(m => Object.assign({ lg }, m))); } catch (e) { return []; }
+    try { const ex = {}; extListe().forEach(m => { ex[m.id.slice(1)] = m; }); const ids = new Set(); const base = Object.entries(foot.leagues || {}).flatMap(([lg, L]) => Object.values(L.matches || {}).map(m => { const c = Object.assign({ lg }, m), e = ex[String(m.id)]; ids.add(String(m.id)); if (e) { if (!c.ht) c.ht = e.ht; if (!(c.x && c.x.ev && c.x.ev.length)) c.x = e.x; } return c; })); return base.concat(extListe().filter(m => !ids.has(m.id.slice(1)))); } catch (e) { return []; }
   }
   let cache = null, cacheT = 0;
   function trouverM(b) {
@@ -31,7 +31,7 @@
     const [h, a] = cotes(b.match); if (!h || !a) return null;
     const j = b.date ? Date.parse(b.date) : 0;
     const ok = cache.filter(m => (pareil(h, m.hn) && pareil(a, m.an)) || (pareil(h, m.an) && pareil(a, m.hn)));   // domicile/extérieur parfois inversés à la saisie
-    if (!ok.length) { manque(b); return null; }
+    if (!ok.length) { if (b.status !== 'Won' && b.status !== 'Lost') manque(b); return null; }
     ok.sort((x, y) => Math.abs(Date.parse(x.d) - j) - Math.abs(Date.parse(y.d) - j));
     const m = ok[0];
     return (!j || Math.abs(Date.parse(m.d) - j) < 2.5 * 864e5) ? m : null;
@@ -45,6 +45,7 @@
     const per = +m.per || 0, fini = m.done || m.st === 'post', hs = +m.hs || 0, as = +m.as || 0;
     if (m.st === 'in' && per <= 1) return { h: hs, a: as, final: /^ht$|half|mi-temps/i.test(String(m.det || '').trim()) };
     if (!hs && !as) return { h: 0, a: 0, final: true };
+    if (m.ht) return { h: m.ht.h, a: m.ht.a, final: true };
     const g = ((m.x && m.x.ev) || []).filter(e => e.t === 'g' || e.t === 'pg' || e.t === 'og');
     if (g.length !== hs + as || g.some(e => e.s !== 'h' && e.s !== 'a')) {
       if (!m.x && !_dl.has(m.id) && typeof footGet === 'function' && typeof footIngest === 'function') {   // détail des buts pas encore chargé : on le demande une fois
@@ -57,21 +58,48 @@
     return { h: p1.filter(e => e.s === 'h').length, a: p1.filter(e => e.s === 'a').length, final: true };
   }
 
-  /* ---------- Matchs hors de la période chargée par Statify : on les va chercher ---------- */
-  const _jours = new Set(); let _tm = 0;
+  /* ---------- Matchs que Statify ne suit pas : lus directement chez ESPN (comme PronoTracker) ---------- */
+  const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/soccer/', _ext = {}, _extT = {}, _tm = {};
+  function slugEspn(comp) {
+    const c = String(comp || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    if (!c || /\bq\b|qualif/.test(c)) return null;
+    if (/champions|^ldc$|^c1$/.test(c) && !/fem|women|afc|caf|concacaf/.test(c)) return 'uefa.champions';
+    if (/conference|conf\.? league|^c4$/.test(c)) return 'uefa.europa.conf';
+    if (/europa|^c3$/.test(c)) return 'uefa.europa';
+    if (/^ligue 1\b/.test(c)) return 'fra.1';
+    if (/^ligue 2\b/.test(c)) return 'fra.2';
+    if (/^premier league\b/.test(c) && !/ecosse|scot|russ|ukrain|egypt|kazakh|maroc|ghana|nigeria|singap|armen|malt|bosn|hongr|hungar|irland|ireland/.test(c)) return 'eng.1';
+    if (/^(la ?liga|liga espagnole|liga espagne|primera division)\b/.test(c) || c === 'liga' || c === 'espagne') return 'esp.1';
+    if (/^serie a\b/.test(c) && !/bresil|brazil|equateur/.test(c)) return 'ita.1';
+    if (/^bundesliga\b/.test(c) && !/2|autrich|austria/.test(c)) return 'ger.1';
+    return null;
+  }
+  function extMatch(e, lg) {
+    const c = e && e.competitions && e.competitions[0]; if (!c) return null;
+    const h = (c.competitors || []).find(x => x.homeAway === 'home'), a = (c.competitors || []).find(x => x.homeAway === 'away'); if (!h || !a || !h.team || !a.team) return null;
+    const stt = e.status || {}, t = stt.type || {}, n = x => { const v = parseInt(x.score, 10); return Number.isFinite(v) ? v : 0; };
+    const hs = n(h), as = n(a), per = +stt.period || 0, ls = x => (x.linescores || []).map(l => Number(l.value)).filter(Number.isFinite), lh = ls(h), la = ls(a), sum = q => q.reduce((u, v) => u + v, 0);
+    const ex = /AET|PEN|EXTRA|SHOOT/i.test(String(t.name || '')) || lh.length > 2 || la.length > 2 || per >= 3;
+    let ht = null; if (!ex && lh.length >= 2 && la.length >= 2 && sum(lh.slice(0, 2)) === hs && sum(la.slice(0, 2)) === as) ht = { h: lh[0], a: la[0] };
+    const ev = (c.details || []).filter(x => x.scoringPlay && !x.shootout).map(x => ({ t: x.ownGoal ? 'og' : x.penaltyKick ? 'pg' : 'g', m: parseInt(String((x.clock && x.clock.displayValue) || '')) || 0, s: String(x.team && x.team.id) === String(h.team.id) ? 'h' : String(x.team && x.team.id) === String(a.team.id) ? 'a' : '' }));
+    return { id: 'x' + e.id, ext: true, lg, d: e.date, st: t.state || 'pre', done: !!t.completed, det: t.shortDetail || '', clk: stt.displayClock || '', per, hn: h.team.displayName || h.team.shortDisplayName, an: a.team.displayName || a.team.shortDisplayName, hs, as, ht, x: { ev } };
+  }
+  const extListe = () => Object.values(_ext).flat();
   function manque(b) {
-    if (b.status === 'Won' || b.status === 'Lost' || !/^\d{4}-\d{2}-\d{2}$/.test(b.date || '') || _jours.has(b.date)) return;
-    const dt = Date.parse(b.date + 'T12:00:00'); if (!dt || Math.abs(dt - Date.now()) > 21 * 864e5) return;
-    _jours.add(b.date); clearTimeout(_tm); _tm = setTimeout(chargerJours, 600);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(b.date || '')) return;
+    const sl = slugEspn(b.comp), lgs = sl ? [sl] : Object.keys(FLGN);
+    lgs.forEach(lg => { const k = lg + '|' + b.date; if (_extT[k] != null) return; _extT[k] = 0; clearTimeout(_tm.x); _tm.x = setTimeout(chargerExt, 400); });
   }
-  async function chargerJours() {
-    if (typeof footGet !== 'function' || typeof footIngest !== 'function' || typeof FLG === 'undefined') return;
-    const jours = [..._jours].filter(j => !_faits.has(j)); let n = 0;
-    for (const j of jours) { _faits.add(j); const d8 = j.replace(/-/g, '');
-      await Promise.all(FLG.map(async ([lg]) => { try { n += footIngest({ __foot: 'scores', league: lg, data: await footGet('https://site.api.espn.com/apis/site/v2/sports/soccer/' + lg + '/scoreboard?dates=' + d8) }) || 0; } catch (e) {} })); }
-    if (n) { try { footSave(); } catch (e) {} cache = null; rafraichir(); }
+  async function chargerExt() {
+    const todo = Object.keys(_extT).filter(k => _extT[k] === 0); if (!todo.length) return; let n = 0;
+    for (let i = 0; i < todo.length; i += 6) await Promise.all(todo.slice(i, i + 6).map(async k => {
+      _extT[k] = Date.now(); const [lg, j] = k.split('|');
+      try { const r = await fetch(ESPN + lg + '/scoreboard?dates=' + j.replace(/-/g, ''), { cache: 'no-store' }); if (!r.ok) return; const d = await r.json(); _ext[k] = (d.events || []).map(e => extMatch(e, lg)).filter(Boolean); n++; } catch (e) {}
+    }));
+    if (n) { cache = null; rafraichir(); }
   }
-  const _faits = new Set();
+  // rafraîchit chaque minute les jours dont des matchs ne sont pas terminés
+  setInterval(() => { try { const ks = Object.keys(_ext).filter(k => _ext[k].some(m => m.st !== 'post') && Date.now() - _extT[k] > 55000 && Math.abs(Date.parse(k.split('|')[1] + 'T12:00:00') - Date.now()) < 2 * 864e5); ks.forEach(k => { _extT[k] = 0; }); if (ks.length) chargerExt(); } catch (e) {} }, 30000);
 
   /* ---------- État d'un pari d'après le score ---------- */
   // won = gagné (ou déjà acquis), ok = en passe, live = en cours, pre = à venir, lost = perdu, end = à régler, nf = pas suivi par Statify
@@ -154,11 +182,24 @@
   function ligneMatch(items) {
     return items.map(({ l, combo }) => `<div class="pz-line"><span class="pz-ic">🎯</span><b>${esc(l.b.prono)} · ${cote(l.b.odds)}</b>${pastille(l.e, l.m)}${combo ? `<span class="pz-cb">Combiné ${cote(combo.odds)}</span>` : '<span class="pz-cb pz-solo">Solo</span>'}</div>`).join('');
   }
+  // Explique pourquoi un pari n'est pas relié à un match de Statify
+  function diagNF(b) {
+    const [h, a] = cotes(b.match); if (!h || !a) return 'Nom du match illisible : écris « Équipe A vs Équipe B ».';
+    if (!cache || Date.now() - cacheT > 3000) { cache = matchs(); cacheT = Date.now(); }
+    const jj = d => { const t = new Date(d); return isNaN(t) ? '?' : t.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', timeZone: 'Europe/Paris' }); };
+    const c = k => cache.filter(m => pareil(k, m.hn) || pareil(k, m.an)).sort((x, y) => Date.parse(x.d) - Date.parse(y.d));
+    const ch = c(h), ca = c(a), fmt = L => L.slice(0, 3).map(m => m.hn + ' – ' + m.an + ' (' + jj(m.d) + ')').join(' ; ');
+    let t = 'Pari daté du ' + (b.date ? stFdf(b.date) : 'jour inconnu') + '. ';
+    if (!ch.length && !ca.length) t += 'Statify n\'a aucun match de ' + h + ' ni de ' + a + ' dans ses données (championnat non suivi, ou match hors période' + (Object.keys(_extT).some(k => k.endsWith('|' + b.date) && _extT[k]) ? ' : ESPN a déjà été interrogé pour ce jour' : '') + ').';
+    else t += 'Matchs connus : ' + (fmt(ch.length ? ch : ca)) + '. Aucun ne correspond à cette date ou à cette affiche.';
+    return t;
+  }
+
   function jambe(l, edit) {
     const ic = { won: '✅', lost: '❌', ok: '🟢', live: '🔴', pre: '⏳', end: '❔', nf: '➖' }[l.e];
     const id = esc(l.b.id), W = l.b.status === 'Won', P = l.b.status === 'Lost';
     const act = edit ? `<span class="pz-act"><button class="sec pz-ib${W ? ' pz-onw' : ''}" data-pz="won" data-id="${id}" title="Marquer gagné">✓ Gagné</button><button class="sec pz-ib${P ? ' pz-onl' : ''}" data-pz="lost" data-id="${id}" title="Marquer perdu">✗ Perdu</button><button class="sec pz-ib" data-pz="edit" data-id="${id}" title="Modifier">✎</button><button class="sec pz-ib" data-pz="del" data-id="${id}" title="Supprimer">🗑</button></span>` : '';
-    return `<div class="pz-leg"><span>${ic}</span><div class="pz-lt"><b ${l.m ? `class="link" data-act="fmatch" data-id="${esc(l.m.id)}"` : ''}>${esc(l.b.match.replace(/\s+vs\s+/i, ' – '))}</b><small class="mut">${esc(l.b.prono)} · ${cote(l.b.odds)}${l.e === 'nf' ? ' · pas suivi par Statify' : ''}</small>${act}</div><b class="pz-sc">${scoreJambe(l)}</b></div>`;
+    return `<div class="pz-leg"><span>${ic}</span><div class="pz-lt"><b ${l.m && !l.m.ext ? `class="link" data-act="fmatch" data-id="${esc(l.m.id)}"` : ''}>${esc(l.b.match.replace(/\s+vs\s+/i, ' – '))}</b><small class="mut">${esc(l.b.prono)} · ${cote(l.b.odds)}${l.e === 'nf' ? ' · pas suivi par Statify' : ''}</small>${l.e === 'nf' && l.b.status !== 'Won' && l.b.status !== 'Lost' ? `<small class="mut pz-diag">${esc(diagNF(l.b))}</small>` : ''}${act}</div><b class="pz-sc">${scoreJambe(l)}</b></div>`;
   }
   function scoreJambe(l) {
     if (!l.m || !estMT(l.b)) return scoreDe(l.m);
@@ -1373,7 +1414,7 @@
   .pz-mks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.pz-mk{display:inline-flex;align-items:center;gap:6px;padding:4px 6px 4px 12px;border-radius:999px;background:var(--field);font-weight:700;font-size:13px}.pz-mk button{padding:1px 7px!important;border-radius:999px!important;font-size:11px!important;box-shadow:none!important}
   @media (max-width:900px){.pz-six{grid-template-columns:repeat(2,1fr)!important}.pz-2{grid-template-columns:1fr}.pz-search{min-width:100%}}
   @media (max-width:700px){.pz-if{height:calc(100dvh - 200px)}.pz-fg{grid-template-columns:1fr}.pz-bar{bottom:84px;gap:8px 10px;padding:10px 12px}.pz-bar>span[style]{display:none}.pz-bar button{flex:1;padding:9px 10px!important}.pz-bar>b{flex:1 0 100%}}
-  @media (min-width:1100px){.pz-bar{left:252px;bottom:16px}}.pz-sp{height:150px}.pz-jour{font-size:12.5px;opacity:.85;margin-top:14px}  .pz-tbw{overflow-x:auto}.pz-tb{width:100%;border-collapse:collapse;font-size:12.5px}.pz-tb th{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);padding:6px 8px;text-align:center;border-bottom:1px solid var(--line);white-space:nowrap}.pz-tb td{padding:7px 8px;text-align:center;border-bottom:1px solid var(--line)}.pz-tb .l{text-align:left}.pz-clk{cursor:pointer}.pz-clk:hover,.pz-tb tr.pz-on{background:var(--field)}.pz-tb tr.pz-exc{background:rgba(220,60,60,.08)}.pz-pt{color:var(--acc)}  .pz-cat{border:1px solid var(--line);border-radius:14px;margin-top:10px;overflow:hidden}.pz-cath{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:12px 14px;cursor:pointer}.pz-cath b:first-child{flex:1;min-width:140px}.pz-catb{padding:4px 14px 14px;border-top:1px solid var(--line)}
+  @media (min-width:1100px){.pz-bar{left:252px;bottom:16px}}.pz-sp{height:150px}.pz-diag{font-size:10.5px;line-height:1.35}.pz-jour{font-size:12.5px;opacity:.85;margin-top:14px}  .pz-tbw{overflow-x:auto}.pz-tb{width:100%;border-collapse:collapse;font-size:12.5px}.pz-tb th{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);padding:6px 8px;text-align:center;border-bottom:1px solid var(--line);white-space:nowrap}.pz-tb td{padding:7px 8px;text-align:center;border-bottom:1px solid var(--line)}.pz-tb .l{text-align:left}.pz-clk{cursor:pointer}.pz-clk:hover,.pz-tb tr.pz-on{background:var(--field)}.pz-tb tr.pz-exc{background:rgba(220,60,60,.08)}.pz-pt{color:var(--acc)}  .pz-cat{border:1px solid var(--line);border-radius:14px;margin-top:10px;overflow:hidden}.pz-cath{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:12px 14px;cursor:pointer}.pz-cath b:first-child{flex:1;min-width:140px}.pz-catb{padding:4px 14px 14px;border-top:1px solid var(--line)}
   .pz-dfs{background:var(--field);border-radius:14px;padding:12px;margin:10px 0}.pz-dl{margin-top:8px}.pz-pb{height:6px;border-radius:6px;background:var(--line);overflow:hidden;margin-top:4px}.pz-pb i{display:block;height:100%;background:var(--bad)}
   .pz-jh,.pz-jr{display:grid;grid-template-columns:.8fr 1fr 1fr 1fr 1fr 1.2fr;gap:4px;font-size:12.5px;padding:8px 4px;text-align:center}.pz-jh{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);border-bottom:1px solid var(--line)}.pz-jr{cursor:pointer;border-bottom:1px solid var(--line)}.pz-jr span:first-child{text-align:left}.pz-jr span:last-child{text-align:right}.pz-jh span:last-child{text-align:right}.pz-jh span:first-child{text-align:left}.pz-jd{padding:6px 10px;font-size:12px;border-bottom:1px solid var(--line);background:var(--field)}
   .pz-h2{font-size:16px;margin:18px 0 4px}
