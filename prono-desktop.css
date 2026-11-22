@@ -48,15 +48,18 @@
   /* Les boutons Foot / Tennis / Analyseur sont déjà dans la barre latérale */
   #appRoot>div:has(>#btnViewTracker){display:none!important}
 }
-@media (min-width:1100px) and (min-height:820px){
+/* Actions (Sync, thème, ambiance, Exporter, Sauvegarder, Importer) : toujours en bas de la barre latérale, quelle que soit la hauteur */
+@media (min-width:1100px){
   #appRoot{z-index:auto!important}
   #hdrActions{position:fixed;left:0;bottom:0;width:240px;box-sizing:border-box;flex-direction:column!important;align-items:stretch!important;
-    gap:6px!important;padding:14px!important;background:var(--card);border-right:1px solid var(--line);z-index:61}
+    gap:6px!important;padding:12px 14px!important;background:var(--card);border-right:1px solid var(--line);z-index:61;margin:0!important}
   #hdrActions>*{width:100%!important;flex:none!important;justify-content:center}
-  #gnav{padding-bottom:300px!important}
+  #gnav{padding-bottom:290px!important;overflow-y:auto}
 }
-@media (min-width:1100px) and (max-height:819px){
-  #hdrActions{margin-left:auto}
+@media (min-width:1100px) and (max-height:760px){
+  #hdrActions{display:grid!important;grid-template-columns:1fr 1fr;gap:5px!important;padding:8px 10px!important}
+  #hdrActions>#ambianceSelect,#hdrActions>label{grid-column:1/-1}
+  #gnav{padding-bottom:190px!important}
 }
 /* Très grands écrans : un peu plus d'air pour la colonne de droite */
 @media (min-width:1900px){
