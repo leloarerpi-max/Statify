@@ -19,7 +19,14 @@
 
   /* ---------- Correspondance pari ↔ match Statify ---------- */
   const STOP = new Set(['fc', 'sv', 'ac', 'as', 'cf', 'sc', 'afc', 'ssc', 'us', 'estac', 'fsv', 'vfb', 'vfl', 'tsg', 'rc', 'og', 'ca', 'cd', 'ud', 'sd', 'de', 'la', 'le', 'club', 'city']);
-  const mots = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter(w => w.length >= 3 && !STOP.has(w));
+  // équivalences de noms (reprises de PronoTracker) : « Man Utd » = « Manchester United », « PSG » = « Paris Saint-Germain »…
+  const ALIAS = { psg: ['paris', 'saint', 'germain'], om: ['marseille'], ol: ['lyon'], utd: ['united'], man: ['manchester'], spurs: ['tottenham'], barca: ['barcelona'], atleti: ['atletico'], atm: ['atletico'], praha: ['prague'], prag: ['prague'], hambourg: ['hamburg'], hamburger: ['hamburg'], valence: ['valencia'], olympiakos: ['olympiacos'], bruges: ['brugge'], kiev: ['kyiv'], wien: ['vienna'], koln: ['cologne'], kln: ['cologne'], koeln: ['cologne'], dynamo: ['dinamo'], lisboa: ['lisbon'], gladbach: ['monchengladbach'], mnchen: ['munich'], munchen: ['munich'], muenchen: ['munich'], bayern: ['bayern', 'munich'], bodoglimt: ['bodo', 'glimt'], bvb: ['dortmund'], juve: ['juventus'], wolves: ['wolverhampton'], nottm: ['nottingham'], forest: ['nottingham'], sheff: ['sheffield'], qpr: ['queens', 'park', 'rangers'], 'w': [] };
+  const mots = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).flatMap(w => ALIAS[w] || [w]).filter(w => w.length >= 3 && !STOP.has(w));
+  // quel côté désigne le pronostic : compte les mots en commun (utile pour « Man Utd » / « Man City »)
+  const proche = (x, y) => { const a = mots(x), b = mots(y); return a.filter(u => b.some(v => u === v || (u.length >= 4 && v.length >= 4 && (u.startsWith(v) || v.startsWith(u))))).length; };
+  const brut = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).flatMap(w => ALIAS[w] || [w]).filter(w => w.length >= 3);
+  const proche2 = (x, y) => { const a = brut(x), b = brut(y); return a.filter(u => b.includes(u)).length; };
+  const cote2 = (p, hn, an) => { let h = proche(p, hn), a = proche(p, an); if (h === a && h > 0) { h = proche2(p, hn); a = proche2(p, an); } return [h > 0 && h > a, a > 0 && a > h]; };
   const pareil = (x, y) => { const a = mots(x), b = mots(y); return a.some(u => b.some(v => u === v || (u.length >= 4 && v.length >= 4 && (u.startsWith(v) || v.startsWith(u))))); };
   const cotes = m => String(m || '').split(/\s+(?:vs\.?|v)\s+|\s+[-–—]\s+/i);
   function matchs() {
@@ -116,7 +123,7 @@
       if (/deux|btts|both/.test(p)) { bon = hh > 0 && aa > 0; acq = bon; }
       else if ((y = p.match(/(?:plus de|over|\+)\s*(\d+(?:[.,]\d+)?)/))) { bon = tt > parseFloat(y[1].replace(',', '.')); acq = bon; }
       else if ((y = p.match(/(?:moins de|under)\s*(\d+(?:[.,]\d+)?)/))) bon = tt < parseFloat(y[1].replace(',', '.'));
-      else { const dom = pareil(p, m.hn), ext = pareil(p, m.an); if (/nul|draw/.test(p) && !dom && !ext) bon = hh === aa; else if (dom) bon = hh > aa; else if (ext) bon = aa > hh; }
+      else { const [dom, ext] = cote2(p, m.hn, m.an); if (/nul|draw/.test(p) && !dom && !ext) bon = hh === aa; else if (dom) bon = hh > aa; else if (ext) bon = aa > hh; }
       if (bon === null) return fini ? 'end' : 'live';
       if (ht.final) return bon ? 'won' : 'lost';
       return acq ? 'won' : bon ? 'ok' : 'live';
@@ -127,7 +134,7 @@
     else if ((x = p.match(/(?:plus de|over|\+)\s*(\d+(?:[.,]\d+)?)/))) { const n = parseFloat(x[1].replace(',', '.')); bon = t > n; acquis = bon; }
     else if ((x = p.match(/(?:moins de|under)\s*(\d+(?:[.,]\d+)?)/))) { const n = parseFloat(x[1].replace(',', '.')); bon = t < n; }
     else if (/victoire|gagne|vainqueur|win/.test(p) || /1n2/i.test(b.market || '')) {
-      const dom = pareil(p, m.hn), ext = pareil(p, m.an);
+      const [dom, ext] = cote2(p, m.hn, m.an);
       if (/nul|draw|\bn\b/.test(p) && !dom && !ext) bon = h === a; else if (dom) bon = h > a; else if (ext) bon = a > h;
     }
     if (bon === null) return fini ? 'end' : 'live';
