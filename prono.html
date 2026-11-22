@@ -20,7 +20,7 @@
   <link rel="stylesheet" href="prono-desktop.css">
 </head>
 <body class="p-4 md:p-8 min-h-screen">
-<nav id="gnav" aria-label="Navigation"><a href="./"><i>🏠</i><span>Accueil</span></a><a href="prono.html" aria-current="page"><i>🎯</i><span>Pronos</span></a></nav>
+<nav id="gnav" aria-label="Navigation"><a href="./"><i>🏠</i><span>Accueil</span></a><a href="prono.html" aria-current="page" onclick="gnavGo(event,'pronos')"><i>🎯</i><span>Pronos</span></a><a class="gnav-d" href="#combos" onclick="gnavGo(event,'combos')"><i>🔀</i><span>Combinés</span></a><a class="gnav-d" href="#stats" onclick="gnavGo(event,'stats')"><i>📊</i><span>Stats</span></a><a class="gnav-d" href="#tennis" onclick="gnavGo(event,null,'tennis')"><i>🎾</i><span>Tennis</span></a><a class="gnav-d" href="#analyseur" onclick="gnavGo(event,null,'analyzer')"><i>🔍</i><span>Analyseur</span></a></nav>
 
 
   <div id="appRoot" class="max-w-7xl mx-auto space-y-8">
@@ -740,5 +740,19 @@
 <script src="prono.js"></script>
 <script src="prono-combos-auto.js"></script>
 <script src="prono-cotes.js"></script>
+<script>
+function gnavGo(e,page,view){
+  if(e)e.preventDefault();
+  var l=document.querySelectorAll('#gnav a[onclick]');
+  for(var k=0;k<l.length;k++)l[k].removeAttribute('aria-current');
+  if(e&&e.currentTarget)e.currentTarget.setAttribute('aria-current','page');
+  if(view){if(typeof switchView==='function')switchView(view);return;}
+  if(typeof switchView==='function')switchView('tracker');
+  document.body.setAttribute('data-page',page);
+  try{history.replaceState(null,'',page==='pronos'?location.pathname:'#'+page);}catch(x){}
+  window.scrollTo({top:0});
+}
+(function(){var h=(location.hash||'').slice(1);if(h==='combos'||h==='stats'){document.addEventListener('DOMContentLoaded',function(){var a=document.querySelector('#gnav a[href="#'+h+'"]');gnavGo({preventDefault:function(){},currentTarget:a},h);});}})();
+</script>
 </body>
 </html>

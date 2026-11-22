@@ -1,3 +1,6 @@
+/* Liens supplémentaires de la barre latérale : masqués sur mobile */
+#gnav a.gnav-d{display:none}
+
 /* Mise en page ordinateur : barre latérale + page pleine largeur.
    Chargé après prono.css ; ne s'applique qu'à partir de 1100 px de large. */
 @media (min-width:1100px){
@@ -11,6 +14,7 @@
   #gnav::before{content:"PronoTracker Pro";display:block;font-size:20px;font-weight:800;color:var(--txt);padding:0 10px 18px}
   #gnav a{flex-direction:row!important;justify-content:flex-start!important;gap:12px!important;
     padding:12px 14px!important;border-radius:12px!important;font-size:15px!important}
+  #gnav a.gnav-d{display:flex!important}
   #gnav a i{font-size:18px}
   #gnav a span{font-size:15px}
 
@@ -20,6 +24,12 @@
   /* Deux colonnes de travail : À régler / historique à gauche, Mes combinés à droite */
   #trackerViewContent{grid-template-columns:minmax(0,2fr) minmax(420px,1fr)!important}
   #colD{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow-y:auto}
+  /* Pages : Pronos (défaut), Combinés, Stats — pilotées par body[data-page] */
+  body:not([data-page=stats]) #colD~*,
+  body[data-page=combos] #colG,body[data-page=combos] #resumeJour,body[data-page=combos] #vueTabs,
+  body[data-page=stats] #colG,body[data-page=stats] #colD,body[data-page=stats] #resumeJour,body[data-page=stats] #vueTabs{display:none!important}
+  body[data-page=combos] #colD{grid-column:1/-1;position:static;max-height:none}
+  body[data-page=stats] #colD~*{grid-column:1/-1}
 }
 /* Très grands écrans : un peu plus d'air pour la colonne de droite */
 @media (min-width:1900px){
