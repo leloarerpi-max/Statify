@@ -178,7 +178,7 @@
     if (zr && !document.querySelector('#view [data-fb=paris]')) {
       const ajd = (D.ajd.length ? D.ajd : D.ouvertsC).slice(0, petit ? 2 : 4);
       const avant = petit && zr.querySelector('[data-fb=multi]');
-      (avant || zr).insertAdjacentHTML(avant ? 'beforebegin' : 'afterbegin', `<div class="fb" data-fb="paris"><div class="card rail pz-rail"><h2>🎯 Mes paris <span class="link pz-add" data-pz="new">＋ Pari</span><span class="link pz-all" data-pz="open">Tout voir</span></h2>${bilan(D)}${ajd.map(carteCombo).join('') || '<p class="mut">Aucun combiné en cours.</p>'}</div></div>`);
+      (avant || zr).insertAdjacentHTML(avant ? 'beforebegin' : 'afterbegin', `<div class="fb" data-fb="paris"><div class="card rail pz-rail"><h2>🎯 Mes paris <span class="link pz-add" data-pz="new">＋ Pari</span><span class="link pz-all" data-pz="open">Tout voir</span></h2>${bilan(D)}${ajd.map(x => carteCombo(x, true)).join('') || '<p class="mut">Aucun combiné en cours.</p>'}</div></div>`);
     }
     // 3) onglet « Pronos » → « Mes paris »
     const tabs = document.getElementById('tabs'), grand = window.innerWidth >= 1100;
