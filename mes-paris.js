@@ -55,10 +55,7 @@
     if (m.ht) return { h: m.ht.h, a: m.ht.a, final: true };
     const g = ((m.x && m.x.ev) || []).filter(e => e.t === 'g' || e.t === 'pg' || e.t === 'og');
     if (g.length !== hs + as || g.some(e => e.s !== 'h' && e.s !== 'a')) {
-      if (!m.x && !_dl.has(m.id) && typeof footGet === 'function' && typeof footIngest === 'function') {   // détail des buts pas encore chargé : on le demande une fois
-        _dl.add(m.id);
-        footGet('https://site.api.espn.com/apis/site/v2/sports/soccer/' + m.lg + '/summary?event=' + m.id).then(d => { footIngest({ __foot: 'summary', league: m.lg, id: m.id, data: d }); try { footSave(); } catch (e) {} rafraichir(); }).catch(() => {});
-      }
+      demandeExt(m);   // score par période pas encore connu : on lit le tableau ESPN du jour (une requête par championnat et par jour)
       return null;
     }
     const p1 = g.filter(e => (+e.m || 0) <= 45);
@@ -91,11 +88,17 @@
     const ev = (c.details || []).filter(x => x.scoringPlay && !x.shootout).map(x => ({ t: x.ownGoal ? 'og' : x.penaltyKick ? 'pg' : 'g', m: parseInt(String((x.clock && x.clock.displayValue) || '')) || 0, s: String(x.team && x.team.id) === String(h.team.id) ? 'h' : String(x.team && x.team.id) === String(a.team.id) ? 'a' : '' }));
     return { id: 'x' + e.id, ext: true, lg, d: e.date, st: t.state || 'pre', done: !!t.completed, det: t.shortDetail || '', clk: stt.displayClock || '', per, hn: h.team.displayName || h.team.shortDisplayName, an: a.team.displayName || a.team.shortDisplayName, hs, as, ht, x: { ev } };
   }
+  function demandeExt(m) {
+    if (!m || m.ext || !m.lg || !m.d) return;
+    const j = new Date(m.d).toLocaleDateString('fr-CA', { timeZone: 'Europe/Paris' }), k = m.lg + '|' + j;
+    if (_extT[k] != null) return; _extT[k] = 0; clearTimeout(_tm.x); _tm.x = setTimeout(chargerExt, 400);
+  }
   const extListe = () => Object.values(_ext).flat();
   function manque(b) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(b.date || '')) return;
     const sl = slugEspn(b.comp), lgs = sl ? [sl] : Object.keys(FLGN);
     lgs.forEach(lg => { const k = lg + '|' + b.date; if (_extT[k] != null) return; _extT[k] = 0; clearTimeout(_tm.x); _tm.x = setTimeout(chargerExt, 400); });
+    if (lgs.every(lg => _extT[lg + '|' + b.date] > 0)) fdCharger(b.date);   // ESPN déjà interrogé sans succès : secours football-data
   }
   async function chargerExt() {
     const todo = Object.keys(_extT).filter(k => _extT[k] === 0); if (!todo.length) return; let n = 0;
@@ -209,8 +212,9 @@
     return `<div class="pz-leg"><span>${ic}</span><div class="pz-lt"><b ${l.m && !l.m.ext ? `class="link" data-act="fmatch" data-id="${esc(l.m.id)}"` : ''}>${esc(l.b.match.replace(/\s+vs\s+/i, ' – '))}</b><small class="mut">${esc(l.b.prono)} · ${cote(l.b.odds)}${l.e === 'nf' ? ' · pas suivi par Statify' : ''}</small>${l.e === 'nf' && l.b.status !== 'Won' && l.b.status !== 'Lost' ? `<small class="mut pz-diag">${esc(diagNF(l.b))}</small>` : ''}${act}</div><b class="pz-sc">${scoreJambe(l)}</b></div>`;
   }
   function scoreJambe(l) {
-    if (!l.m || !estMT(l.b)) return scoreDe(l.m);
-    const ht = scoreMT(l.m); if (!ht || l.m.st === 'pre') return scoreDe(l.m);
+    if (!l.m || l.m.st === 'pre') return scoreDe(l.m);
+    const mt = estMT(l.b), ht = scoreMT(l.m);
+    if (!ht || (!ht.final && !mt)) return scoreDe(l.m);   // comme PronoTracker : mi-temps affichée dès la 2e période (ou en direct pour un pari mi-temps)
     return `${scoreDe(l.m)}<small class="mut" style="display:block;font-weight:600;font-size:11px">MT ${ht.h}-${ht.a}${ht.final ? '' : ' ·'}</small>`;
   }
   function carteCombo(x, edit) {
@@ -226,10 +230,26 @@
   }
 
   /* ---------- Décoration des écrans de Statify ---------- */
+  function lateral(D) {
+    // menu latéral (tous les sports) : tous les onglets visibles, logo, « Mes paris » + « Analyseur »
+    const tabs = document.getElementById('tabs'), grand = window.innerWidth >= 1100;
+    if (tabs && grand) {
+      if (typeof ui !== 'undefined' && !ui.tabMore && !window.__pzMore) { window.__pzMore = 1; ui.tabMore = true; setTimeout(() => { try { render(); } catch (e) {} window.__pzMore = 0; }, 0); }
+      const br = document.querySelector('header .brand');
+      if (br && !tabs.querySelector('.pz-brand')) { const c = br.cloneNode(true); c.classList.add('pz-brand'); c.removeAttribute('id'); tabs.prepend(c); }
+    }
+    const t = document.querySelector('#tabs [data-act=pronos]');
+    if (t && grand && !tabs.querySelector('[data-act=pzanalyse]')) { const a = t.cloneNode(false); a.setAttribute('data-act', 'pzanalyse'); a.removeAttribute('id'); a.innerHTML = '<i>🔍</i><span>Analyseur</span>'; t.insertAdjacentElement('afterend', a); }
+    const ta = document.querySelector('#tabs [data-act=pzanalyse]'); if (ta) ta.classList.toggle('on', !!window.__pzVue && filtre === 'analyse');
+    if (t) { const s = t.querySelector('span'); if (s && s.textContent !== 'Mes paris') s.textContent = 'Mes paris'; t.classList.toggle('on', !!window.__pzVue && !(grand && filtre === 'analyse')); if (D && D.nbAttente && !t.querySelector('.pz-badge')) t.insertAdjacentHTML('beforeend', `<em class="pz-badge">${D.nbAttente}</em>`); }
+  }
+  // Mes paris vit dans le Foot : depuis la NBA ou l'Euroligue, on bascule d'abord sur le Foot
+  function allerFoot() { if (typeof ui !== 'undefined' && ui.sport !== 'foot' && typeof setSport === 'function') { setSport('foot'); try { render(); } catch (e) {} } }
   function decorer() {
-    if (typeof ui !== 'undefined' && ui.sport === 'tennis') return tennisParis();
-    if (typeof ui === 'undefined' || ui.sport !== 'foot') return;
+    if (typeof ui === 'undefined') return;
+    if (ui.sport !== 'foot') { try { lateral(ui.sport === 'tennis' ? null : donnees()); } catch (e) {} if (ui.sport === 'tennis') tennisParis(); return; }
     const D = donnees();
+    lateral(D);
     // 1) lignes sous les matchs (Accueil : .mxc, Matchs : .gt-tile)
     document.querySelectorAll('#view .mxc[data-id], #view .gt-tile[data-id]').forEach(el => {
       if (el.querySelector('.pz-line')) return;
@@ -244,17 +264,6 @@
       const avant = petit && zr.querySelector('[data-fb=multi]');
       (avant || zr).insertAdjacentHTML(avant ? 'beforebegin' : 'afterbegin', `<div class="fb" data-fb="paris"><div class="card rail pz-rail"><h2>🎯 Mes paris <span class="link pz-add" data-pz="new">＋ Pari</span><span class="link pz-all" data-pz="open">Tout voir</span></h2>${bilan(D)}${ajd.map(x => carteCombo(x, true)).join('') || '<p class="mut">Aucun combiné en cours.</p>'}</div></div>`);
     }
-    // 3) onglet « Pronos » → « Mes paris »
-    const tabs = document.getElementById('tabs'), grand = window.innerWidth >= 1100;
-    if (tabs && grand) {
-      if (typeof ui !== 'undefined' && !ui.tabMore && !window.__pzMore) { window.__pzMore = 1; ui.tabMore = true; setTimeout(() => { try { render(); } catch (e) {} window.__pzMore = 0; }, 0); }
-      const br = document.querySelector('header .brand');
-      if (br && !tabs.querySelector('.pz-brand')) { const c = br.cloneNode(true); c.classList.add('pz-brand'); c.removeAttribute('id'); tabs.prepend(c); }
-    }
-    const t = document.querySelector('#tabs [data-act=pronos]');
-    if (t && grand && !tabs.querySelector('[data-act=pzanalyse]')) { const a = t.cloneNode(false); a.setAttribute('data-act', 'pzanalyse'); a.removeAttribute('id'); a.innerHTML = '<i>🔍</i><span>Analyseur</span>'; t.insertAdjacentElement('afterend', a); }
-    const ta = document.querySelector('#tabs [data-act=pzanalyse]'); if (ta) ta.classList.toggle('on', !!window.__pzVue && filtre === 'analyse');
-    if (t) { const s = t.querySelector('span'); if (s && s.textContent !== 'Mes paris') s.textContent = 'Mes paris'; t.classList.toggle('on', !!window.__pzVue && !(grand && filtre === 'analyse')); if (D.nbAttente && !t.querySelector('.pz-badge')) t.insertAdjacentHTML('beforeend', `<em class="pz-badge">${D.nbAttente}</em>`); }
     if (lsGet(AUTO) === '1' && D.aRegler.length && !window.__pzAuto && !window.__pzFrame) { window.__pzAuto = 1; try { appliquer(D.aRegler, true); } finally { setTimeout(() => { window.__pzAuto = 0; }, 1500); } return; }
     if (window.__pzVue) vueParis(D);
   }
@@ -325,12 +334,90 @@
     const f = o.querySelector('input:not([type=date])'); if (f) setTimeout(() => f.focus(), 30);
   }
   function fermer() { const o = document.getElementById('pzOv'); if (o) o.remove(); }
+  /* --- Saisie rapide : coller plusieurs paris d'un coup (même analyse que PronoTracker), avec aperçu modifiable --- */
+  let COL = null;   // lignes analysées en attente de validation
+  function marcheTexte(t, fb) { const P = [[/BTTS|(les\s+)?(deux|2)\s+équipes?\s+marquent/i, 'BTTS'], [/Over\/?Under/i, 'Over/Under'], [/Buteur/i, 'Buteur'], [/Mi[\s-]?Temps/i, 'Mi-Temps'], [/1N2|Résultat|Vainqueur/i, '1N2']]; if (!t) return fb; for (const [p, l] of P) if (p.test(t)) return l; return fb; }
+  const recoller = s => s.replace(/(\.)([A-ZÀ-Ö])/g, '$1 $2').replace(/([a-zà-öø-ÿ])([A-ZÀ-Ö])/g, '$1 $2').replace(/([A-Za-zÀ-ÖØ-öø-ÿ])(\d)/g, '$1 $2').replace(/(\d-\d)(\d)/g, '$1 $2').replace(/\s{2,}/g, ' ').trim();
+  function analyserCollage(raw, mise, existants) {
+    const nm = s => String(s || '').toLowerCase().replace(/vs|-|_/g, ' ').replace(/\s+/g, ' ').trim();
+    const dbl = b => existants.some(x => x.date === b.date && nm(x.match) === nm(b.match) && x.market === b.market && String(x.prono || '').toLowerCase().trim() === String(b.prono || '').toLowerCase().trim());
+    const i0 = raw.search(/\d{2}[\/.-]\d{2}[\/.-]\d{4}/), r1 = i0 > 0 ? raw.slice(i0) : raw;
+    const lignes = r1.replace(/(?<![\n|])(?=\d{2}[\/.-]\d{2}[\/.-]\d{4})/g, '\n').split('\n').filter(l => l.trim());
+    const out = []; let dup = 0;
+    lignes.forEach((line, i) => {
+      let s = line.trim().replace(/^\|+\s*/, '').replace(/\s*\|+$/, '').replace(/(\d-\d)(\d)/g, '$1 $2'); if (!s) return;
+      let date = jour(); const dm = s.match(/^(\d{2}[\/.-]\d{2}[\/.-]\d{4})/); if (dm) { const p = dm[1].split(/[\/.-]/); date = p[2] + '-' + p[1] + '-' + p[0]; s = s.replace(dm[0], '').trim(); }
+      let odds = 1.5; const om = s.match(/(\d+[.,]\d{1,2})\s*$/); if (om) { odds = parseFloat(om[1].replace(',', '.')); s = s.substring(0, s.lastIndexOf(om[1])).trim(); }
+      let b = null;
+      if (s.includes('|')) {
+        const p = s.split('|').map(x => x.trim()).filter(Boolean);
+        if (p.length >= 3) {
+          let market = '1N2', unres = false; if (p.length >= 4) { const r = marcheTexte(p[2], null); if (r) market = r; else { market = 'Autre'; unres = true; } }
+          let prono = p[p.length - 1], st = mise; if (p.length >= 5) { prono = p[p.length - 2]; const l = p[p.length - 1].trim(), n = parseFloat(l.replace(',', '.').replace('€', '')); if (!isNaN(n) && /^[\d.,]+\s*€?$/.test(l)) st = n; }
+          b = { date, match: p[0].replace(/\s+-\s+/g, ' vs ').replace(/\s+/g, ' ').trim(), comp: p[1], market, prono, odds, stake: st, unres };
+        }
+      }
+      if (!b) {
+        const rx = x => { let t = x, market = '1N2', ok = false; for (const [pt, l] of [[/BTTS|(les\s+)?(deux|2)\s+équipes?\s+marquent/i, 'BTTS'], [/Over\/?Under/i, 'Over/Under'], [/Buteur/i, 'Buteur'], [/Mi[\s-]?Temps/i, 'Mi-Temps'], [/1N2|Résultat|Vainqueur/i, '1N2']]) if (pt.test(t)) { market = l; ok = true; t = t.replace(pt, ' |MARKET| '); break; }
+          let comp = 'Autre'; const cm = t.match(/(Ligue\s+Europa\s+Conf[ée]rence|Europa\s+Conf[ée]rence\s+League|Conf[ée]rence\s+League|Ligue\s+Conf[ée]rence|Ligue\s+Europa|Europa\s+League|Ligue\s+des\s+Champions|Champions\s+League|Ligue\s+1|Premier\s+League|La\s+Liga|Serie\s+A|Bundesliga)/i);
+          if (cm) { comp = cm[0].trim(); t = t.replace(cm[0], ' |COMP| '); }
+          let match = 'Affiche inconnue', prono = t;
+          if (t.includes('|COMP|')) { const q = t.split('|COMP|'); match = q[0].replace(/\s+vs\s+/i, ' vs ').replace(/\s+-\s+/g, ' vs ').replace(/\s+/g, ' ').trim(); prono = q[1].replace('|MARKET|', '').trim(); }
+          else if (t.includes('|MARKET|')) { const q = t.split('|MARKET|'); match = q[0].replace(/\s+-\s+/g, ' vs ').replace(/\s+/g, ' ').trim(); prono = q[1].trim(); }
+          prono = prono.replace(/^Victoire de\s+/i, 'Vainqueur ').replace(/^\||\|$/g, '').trim();
+          return { market, ok, comp, match, prono }; };
+        let r = rx(s); if (!r.ok) { const r2 = rx(recoller(s)); if (r2.ok) r = r2; }
+        b = { date, match: r.match, comp: r.comp, market: r.market, prono: r.prono, odds, stake: mise, unres: !r.ok };
+      }
+      b.id = Date.now() + i; b.type = 'Single'; b.status = 'Pending';
+      if (dbl(b)) { dup++; return; }
+      out.push(b);
+    });
+    return { out, dup };
+  }
+  function vueColler(texte, msg) {
+    ov(`<div class="pz-fm pz-col"><h3>📋 Coller plusieurs paris</h3><p class="mut" style="margin:0 0 6px">Une ligne par pari. Format : <b>Date | Match | Compétition | Marché | Pronostic | [Mise] | Cote</b>. Exemple : <i>06/08/2026 | Lens - Lyon | Ligue 1 | 1N2 | Lens | 1.67</i></p>
+      <textarea id="pz-col-t" rows="7" placeholder="06/08/2026 | Équipe A - Équipe B | Compétition | Marché | Pronostic | 1.67">${esc(texte || '')}</textarea><p class="pz-err">${esc(msg || '')}</p>
+      <div class="pz-fa"><span style="flex:1"></span><button class="sec" data-pz="cancel">Annuler</button><button data-pz="colan">Analyser</button></div></div>`);
+  }
+  function vueApercu(dup) {
+    const mk = marches();
+    ov(`<div class="pz-fm pz-col"><h3>📋 Vérifie avant d'ajouter</h3><p class="mut" style="margin:0">${COL.length} pari(s) analysé(s). Corrige si besoin, décoche ceux à ignorer.${dup ? ` <b>${dup} doublon(s) déjà présent(s) ont été ignorés.</b>` : ''}</p>
+      <div class="pz-tbw"><table class="pz-tb pz-colt"><thead><tr><th></th><th class="l">Date</th><th class="l">Match</th><th class="l">Compétition</th><th class="l">Marché</th><th class="l">Pronostic</th><th>Cote</th><th>Mise</th></tr></thead><tbody>
+      ${COL.map((b, i) => `<tr class="${b.unres ? 'pz-warn' : ''}"><td><input type="checkbox" data-pz="colinc" data-i="${i}"${b.on !== false ? ' checked' : ''}></td><td><input data-col="${i}" data-f="date" type="date" value="${esc(b.date)}"></td><td><input data-col="${i}" data-f="match" value="${esc(b.match)}"></td><td><input data-col="${i}" data-f="comp" value="${esc(b.comp)}"></td><td><select data-col="${i}" data-f="market">${(mk.includes(b.market) ? mk : mk.concat(b.market)).map(m => `<option${m === b.market ? ' selected' : ''}>${esc(m)}</option>`).join('')}</select></td><td><input data-col="${i}" data-f="prono" value="${esc(b.prono)}"></td><td><input data-col="${i}" data-f="odds" type="number" step="0.01" value="${esc(b.odds)}" style="width:70px"></td><td><input data-col="${i}" data-f="stake" type="number" step="0.5" value="${esc(b.stake)}" style="width:60px"></td></tr>`).join('')}
+      </tbody></table></div><p class="mut pz-hint">Les lignes en orange : marché non reconnu, à vérifier.</p>
+      <div class="pz-fa"><button class="sec" data-pz="colback">← Modifier le texte</button><span style="flex:1"></span><button class="sec" data-pz="cancel">Annuler</button><button data-pz="colok">Valider et ajouter (<span id="pz-col-n">${COL.filter(b => b.on !== false).length}</span>)</button></div></div>`);
+  }
+  function collerAnalyser() {
+    const raw = ((document.getElementById('pz-col-t') || {}).value || '').trim(); if (!raw) return;
+    const L = lireN()[SP()], mise = (L[0] && +L[0].stake) || 1, r = analyserCollage(raw, mise, L);
+    COL = r.out; COL.texte = raw;
+    if (!COL.length) return vueColler(raw, r.dup ? `Tous les paris analysés (${r.dup}) étaient déjà présents.` : 'Aucun pari n\'a pu être extrait du texte.');
+    vueApercu(r.dup);
+  }
+  function collerValider() {
+    const add = COL.filter(b => b.on !== false).map(b => { const x = Object.assign({}, b); delete x.on; delete x.unres; x.odds = parseFloat(String(x.odds).replace(',', '.')) || 1; x.stake = parseFloat(String(x.stake).replace(',', '.')) || 1; return x; });
+    if (!add.length) return;
+    fermer(); COL = null;
+    muter(S => { add.slice().reverse().forEach(b => S[SP()].unshift(b)); }, add.length + ' pari(s) ajouté(s)');
+  }
+  // suggestions de pronostic sous le champ, d'après le match et le marché (comme PronoTracker)
+  function suggestions(match, market) {
+    const p = String(match || '').split(/\s+vs\.?\s+|\s+-\s+/i).map(x => x.trim()).filter(Boolean), t = p.length === 2 ? p : null, m = String(market || '').toLowerCase();
+    if (/1n2|résultat|vainqueur/.test(m)) return t ? [t[0], 'Match nul', t[1]] : [];
+    if (/btts|deux\s+équipes?\s+marquent/.test(m)) return ['Les deux équipes marquent', 'Une équipe ne marque pas'];
+    if (/over\/?under/.test(m)) return ['Plus de 1.5 buts', 'Plus de 2.5 buts', 'Moins de 2.5 buts', 'Plus de 3.5 buts'];
+    if (/mi[\s-]?temps/.test(m)) return t ? [`Victoire ${t[0]} (MT)`, 'Nul (MT)', `Victoire ${t[1]} (MT)`] : ['Nul à la Mi-Temps'];
+    return [];
+  }
+  function majSugg() { const box = document.getElementById('pz-sugg'); if (!box) return; const L = suggestions((document.getElementById('pz-m') || {}).value, (document.getElementById('pz-k') || {}).value); box.innerHTML = L.map(x => `<button class="sec pz-ib" data-pz="sugg" data-v="${esc(x)}">${esc(x)}</button>`).join(''); }
+
   function formulaire(opt) {
     opt = opt || {};
     const S = lire(), L = S[SP()] || [];
     const b = opt.id != null ? L.find(x => String(x.id) === String(opt.id)) : null;
     const mk = marches(); if (b && b.market && !mk.includes(b.market)) mk.push(b.market);
-    const v = b || { date: opt.date || jour(), match: opt.match || '', comp: opt.comp || '', market: opt.market || mk[0], prono: '', odds: '', stake: (L[0] && +L[0].stake) || 1 };
+    const v = b || { date: opt.date || jour(), match: opt.match || '', comp: opt.comp || '', market: opt.market && mk.includes(opt.market) ? opt.market : (opt.market ? (mk.push(opt.market), opt.market) : mk[0]), prono: '', odds: '', stake: opt.stake != null ? +opt.stake : ((L[0] && +L[0].stake) || 1) };
     const noms = [...new Set(matchs().map(m => m.hn + ' vs ' + m.an))];
     const comps = [...new Set(L.map(x => (x.comp || '').trim()).filter(Boolean).concat(Object.values(FLGN)))];
     const pronos = [...new Set(L.map(x => x.prono).filter(Boolean))].slice(0, 80);
@@ -342,11 +429,12 @@
         <label class="pz-f w"><span>Match</span><input id="pz-m" list="pz-lm" placeholder="Équipe A vs Équipe B" value="${esc(v.match)}" autocomplete="off"></label>
         <label class="pz-f"><span>Marché</span><select id="pz-k">${mk.map(x => `<option${x === v.market ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
         <label class="pz-f"><span>Pronostic</span><input id="pz-p" list="pz-lp" placeholder="Ex. Plus de 2.5 buts" value="${esc(v.prono)}" autocomplete="off"></label>
+        <div class="pz-f w pz-sugg" id="pz-sugg">${suggestions(v.match, v.market).map(x => `<button class="sec pz-ib" data-pz="sugg" data-v="${esc(x)}">${esc(x)}</button>`).join('')}</div>
         <label class="pz-f"><span>Cote</span><input id="pz-o" type="number" step="0.01" min="1.01" inputmode="decimal" value="${esc(v.odds)}"></label>
         <label class="pz-f"><span>Mise (€)</span><input id="pz-s" type="number" step="0.5" min="0.1" inputmode="decimal" value="${esc(v.stake)}"></label>
       </div>${dl('pz-lm', noms)}${dl('pz-lc', comps)}${dl('pz-lp', pronos)}
       <p class="pz-err" id="pz-err"></p>
-      <div class="pz-fa">${b ? `<button class="sec pz-danger" data-pz="del" data-id="${esc(b.id)}">🗑 Supprimer</button>` : ''}<span style="flex:1"></span><button class="sec" data-pz="cancel">Annuler</button><button data-pz="save" data-id="${b ? esc(b.id) : ''}">Enregistrer</button></div></div>`);
+      <div class="pz-fa">${b ? `<button class="sec pz-danger" data-pz="del" data-id="${esc(b.id)}">🗑 Supprimer</button>` : `<button class="sec" data-pz="newmatch" title="Vide le match et le pronostic, garde le reste">↺ Nouveau match</button><button class="sec" data-pz="paste" title="Coller plusieurs paris d'un coup">📋 Coller plusieurs paris</button>`}<span style="flex:1"></span><button class="sec" data-pz="cancel">Annuler</button><button data-pz="save" data-id="${b ? esc(b.id) : ''}">Enregistrer</button></div></div>`);
   }
   function enregistrer(id) {
     const g = k => (document.getElementById(k) || {}).value || '';
@@ -1010,10 +1098,58 @@
     const venir = avenir.length ? `<h3 class="pz-h3 pz-sec">⏳ À venir</h3>${parJour(avenir, msCombo, x => carteCombo(x, true), false)}` : '';
     return (grp('🔴 En direct', live) + venir + solosO) || '<p class="mut">Aucun pari en cours. Ajoute-en un avec « ＋ Nouveau pari ».</p>';
   }
+  /* --- Historique complet (comme PronoTracker) : recherche, filtres, tri, numéros, dupliquer, charger plus --- */
+  const H = { q: '', st: 'ALL', ty: 'ALL', per: 'ALL', from: '', to: '', comp: 'ALL', f: 'date', dir: 'desc', n: 25 };
+  const H_TRIS = [['date', 'Date'], ['num', 'N°'], ['match', 'Match'], ['prono', 'Pronostic'], ['odds', 'Cote'], ['stake', 'Mise'], ['status', 'Statut']];
+  function numeros(L) { const m = {}; let k = 1; [...L].reverse().forEach(b => { if (b.status === 'Won' || b.status === 'Lost') m[b.id] = k++; }); return m; }
+  function histoFiltre(L, nums, sans) {
+    const q = H.q.toLowerCase().trim(), qn = /^#?\d+$/.test(q) ? parseInt(q.replace('#', ''), 10) : null;
+    const auj = jour(), dm = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })(), mois = auj.slice(0, 7);
+    return L.filter(b => {
+      if (q && (qn != null ? nums[b.id] !== qn : !((b.match || '').toLowerCase().includes(q) || (b.prono || '').toLowerCase().includes(q) || (b.comp || '').toLowerCase().includes(q)))) return false;
+      if (sans !== 'st') { if (H.st === 'Pending' && b.status !== 'Pending') return false; if (H.st === 'Settled' && b.status === 'Pending') return false; if (H.st === 'Won' && b.status !== 'Won') return false; if (H.st === 'Lost' && b.status !== 'Lost') return false; }
+      if (sans !== 'ty') { if (H.ty === 'SOLO' && b.comboId) return false; if (H.ty === 'COMBO' && !b.comboId) return false; }
+      const d = b.date || '';
+      if (H.per === 'TODAY' && d !== auj) return false; if (H.per === 'TOMORROW' && d !== dm) return false; if (H.per === 'THIS_MONTH' && !d.startsWith(mois)) return false;
+      if (H.per === 'THIS_WEEK' && Math.ceil(Math.abs(Date.now() - new Date(d)) / 864e5) > 7) return false;
+      if (H.per === 'CUSTOM' && ((H.from && d < H.from) || (H.to && d > H.to))) return false;
+      if (H.comp !== 'ALL' && (b.comp || '').trim() !== H.comp) return false;
+      return true;
+    });
+  }
   function corpsHist(D) {
-    const regles = D.C.filter(x => x.regle).sort((a, b) => (b.jour > a.jour ? 1 : -1)).slice(0, 30);
-    const soloH = D.solos.filter(s => s.b.status === 'Won' || s.b.status === 'Lost').sort((a, b) => ((b.b.date || '') > (a.b.date || '') ? 1 : -1)).slice(0, 40);
-    return `${regles.length ? `<h3 class="pz-h3 pz-sec">Combinés réglés</h3>${parJour(regles, msCombo, x => carteCombo(x, true), true)}` : ''}${soloH.length ? `<h3 class="pz-h3 pz-sec">Paris simples réglés</h3>${parJour(soloH, msSolo, carteSolo, true)}` : ''}` || '<p class="mut">Rien de réglé pour l\'instant.</p>';
+    const L = (D.S[SP()] || []).slice(), nums = numeros(L), info = new Map();
+    D.solos.forEach(s => info.set(String(s.b.id), s)); D.C.forEach(x => x.legs.forEach(l => info.set(String(l.b.id), l)));
+    const base = histoFiltre(L, nums, 'st'), bt = histoFiltre(L, nums, 'ty');
+    const cS = { ALL: base.length, Pending: base.filter(b => b.status === 'Pending').length, Settled: base.filter(b => b.status !== 'Pending').length, Won: base.filter(b => b.status === 'Won').length, Lost: base.filter(b => b.status === 'Lost').length };
+    const cT = { ALL: bt.length, SOLO: bt.filter(b => !b.comboId).length, COMBO: bt.filter(b => b.comboId).length };
+    let F = histoFiltre(L, nums);
+    const sg = H.dir === 'asc' ? 1 : -1, nm = s => String(s || '').toLowerCase().replace(/vs|-|_/g, ' ').replace(/\s+/g, ' ').trim();
+    F.sort((a, b) => {
+      if (H.f === 'date') { const x = (a.date || '').localeCompare(b.date || ''); return x ? sg * x : nm(a.match).localeCompare(nm(b.match)); }
+      if (H.f === 'num') { const x = nums[a.id], y = nums[b.id]; if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1; return sg * (x - y); }
+      if (H.f === 'odds' || H.f === 'stake') return sg * ((+a[H.f] || 0) - (+b[H.f] || 0));
+      if (H.f === 'status') return sg * String(a.status).localeCompare(String(b.status));
+      return sg * nm(a[H.f]).localeCompare(nm(b[H.f]));
+    });
+    const tot = F.length; F = F.slice(0, H.n);
+    const comps = [...new Set(L.map(b => (b.comp || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+    const chip = (cur, k, l, n, act) => `<button class="${cur === k ? '' : 'sec'} pz-ib" data-pz="${act}" data-k="${k}">${l} <span class="pz-cnt">${n}</span></button>`;
+    const nf = (H.q ? 1 : 0) + (H.st !== 'ALL') + (H.ty !== 'ALL') + (H.per !== 'ALL') + (H.comp !== 'ALL');
+    const barre = `<div class="card pz-hbar"><div class="row pz-chips">${chip(H.st, 'ALL', 'Tous', cS.ALL, 'hst')}${chip(H.st, 'Pending', 'En cours', cS.Pending, 'hst')}${chip(H.st, 'Settled', 'Terminés', cS.Settled, 'hst')}${chip(H.st, 'Won', '✓ Gagnés', cS.Won, 'hst')}${chip(H.st, 'Lost', '✗ Perdus', cS.Lost, 'hst')}<span class="pz-sepv"></span>${chip(H.ty, 'ALL', 'Tous', cT.ALL, 'hty')}${chip(H.ty, 'SOLO', 'Solo', cT.SOLO, 'hty')}${chip(H.ty, 'COMBO', 'Combinés', cT.COMBO, 'hty')}</div>
+      <div class="pz-fa pz-hf"><input id="pz-hq" class="pz-search" type="search" placeholder="Rechercher un match, un pronostic, un championnat ou #12…" value="${esc(H.q)}" autocomplete="off">
+      <select id="pz-hper" class="pz-sel">${[['ALL', 'Toutes les dates'], ['TODAY', 'Aujourd\'hui'], ['TOMORROW', 'Demain'], ['THIS_WEEK', 'Cette semaine'], ['THIS_MONTH', 'Ce mois-ci'], ['CUSTOM', 'Plage personnalisée…']].map(([k, l]) => `<option value="${k}"${H.per === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      ${H.per === 'CUSTOM' ? `<input id="pz-hfrom" class="pz-sel" type="date" value="${esc(H.from)}"><input id="pz-hto" class="pz-sel" type="date" value="${esc(H.to)}">` : ''}
+      <select id="pz-hcomp" class="pz-sel"><option value="ALL">Tous les championnats</option>${comps.map(c => `<option${H.comp === c ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select>
+      <select id="pz-hsort" class="pz-sel" title="Trier par">${H_TRIS.map(([k, l]) => `<option value="${k}"${H.f === k ? ' selected' : ''}>Tri : ${l}</option>`).join('')}</select><button class="sec pz-ib" data-pz="hdir" title="Inverser l'ordre">${H.dir === 'asc' ? '↑ Croissant' : '↓ Décroissant'}</button>${nf ? '<button class="sec pz-ib" data-pz="hreset">✕ Effacer les filtres</button>' : ''}</div></div>`;
+    const ligne = b => {
+      const l = info.get(String(b.id)) || { b, m: null, e: b.status === 'Won' ? 'won' : b.status === 'Lost' ? 'lost' : 'nf' }, id = esc(b.id), W = b.status === 'Won', P = b.status === 'Lost', n = nums[b.id];
+      return `<div class="pz-hr${W ? ' pz-hw' : P ? ' pz-hl' : ''}"><span class="pz-num">${n ? '#' + n : '–'}</span><div class="pz-hm"><div><b ${l.m && !l.m.ext ? `class="link" data-act="fmatch" data-id="${esc(l.m.id)}"` : ''}>${esc(String(b.match || '').replace(/\s+vs\s+/i, ' – '))}</b>${b.comboId ? ' <span class="pz-cb">Combiné</span>' : ''}</div><small class="mut">${esc(stFdf(b.date))}${b.comp ? ' · ' + esc(b.comp) : ''} · ${esc(b.market || '')}</small><div class="pz-hp"><b>${esc(b.prono || '')}</b> <span class="mut">· cote</span> <b>${cote(+b.odds || 1)}</b> <span class="mut">· mise</span> <b>${stF2(b.stake)} €</b>${W || P ? ` <span class="${W ? 'pz-pos' : 'pz-neg'}"><b>${eur(stGain(b))}</b></span>` : ''}</div></div>
+        <div class="pz-hs">${pastille(l.e, l.m)}<b class="pz-sc">${l.m ? scoreJambe(l) : ''}</b></div>
+        <div class="pz-act"><button class="sec pz-ib${W ? ' pz-onw' : ''}" data-pz="won" data-id="${id}" title="Gagné">✓</button><button class="sec pz-ib${P ? ' pz-onl' : ''}" data-pz="lost" data-id="${id}" title="Perdu">✗</button><button class="sec pz-ib" data-pz="edit" data-id="${id}" title="Modifier">✎</button><button class="sec pz-ib" data-pz="dup" data-id="${id}" title="Dupliquer (même championnat, marché et mise)">⧉</button><button class="sec pz-ib" data-pz="del" data-id="${id}" title="Supprimer">🗑</button></div></div>`;
+    };
+    const liste = F.length ? `<div class="card pz-hlist">${F.map(ligne).join('')}${tot > F.length ? `<div class="pz-fa" style="justify-content:center"><button class="sec" data-pz="hmore">Charger plus (${tot - F.length} restant${tot - F.length > 1 ? 's' : ''})</button></div>` : ''}</div>` : '<p class="mut">Aucun pari dans cette vue.</p>';
+    return `${barre}<p class="mut pz-hint" style="margin:4px 2px">${tot} pari${tot > 1 ? 's' : ''}${nf ? ' correspondant aux filtres' : ''} · le n° (#) suit l'ordre des paris réglés, comme dans PronoTracker</p>${liste}`;
   }
   function poser(v, html, force) {
     const foc = document.activeElement;
@@ -1038,9 +1174,9 @@
     const mx = tf.mixtes ? tf.mixtes + ' combiné' + (tf.mixtes > 1 ? 's' : '') + ' mêlant foot et tennis ' + (tf.mixtes > 1 ? 'restent' : 'reste') + ' à vérifier à la main (défais-' + (tf.mixtes > 1 ? 'les' : 'le') + ' puis range chaque pari dans son sport).' : '';
     const ban2 = (tf.n || tf.mixtes) ? `<div class="pz-ban"><span>🎾 ${tf.n ? tf.n + ' pari' + (tf.n > 1 ? 's' : '') + ' de tennis ' + (tf.n > 1 ? 'sont rangés' : 'est rangé') + ' dans le foot. ' : ''}${mx}</span>${tf.n ? '<button data-pz="totennis">Déplacer vers Tennis</button>' : ''}</div>` : '';
     const barre = filtre === 'cours' ? barreCombine(D) : '';
-    const ligne = `<div class="row pz-tabs">${ongletsHtml(D)}${filtre === 'cours' || filtre === 'hist' ? `<button class="pz-new" data-pz="new">＋ Nouveau pari</button><label class="pz-auto" title="Comme dans PronoTracker : règle Gagné / Perdu quand le match est terminé"><input type="checkbox" data-pz="auto"${auto ? ' checked' : ''}> Régler automatiquement</label>` : ''}</div>`;
+    const ligne = `<div class="row pz-tabs">${ongletsHtml(D)}${filtre === 'cours' || filtre === 'hist' ? `<button class="sec pz-ib" data-pz="paste" title="Coller plusieurs paris d'un coup">📋 Coller</button><button class="pz-new" data-pz="new">＋ Nouveau pari</button><label class="pz-auto" title="Comme dans PronoTracker : règle Gagné / Perdu quand le match est terminé"><input type="checkbox" data-pz="auto"${auto ? ' checked' : ''}> Régler automatiquement</label>` : ''}</div>`;
     let haut = '', corps = '';
-    if (filtre === 'cours') { haut = bilan(D, true); corps = corpsCours(D); }
+    if (filtre === 'cours') { haut = bilan(D, true) + impactEtResume(D); corps = (autoInfo && SP() === 'football' ? `<div class="pz-ban" id="pz-autoinfo"><span>${esc(autoInfo)}</span><button data-pz="autonow">Combiner maintenant</button></div>` : '') + corpsCours(D); }
     else if (filtre === 'hist') { haut = bilan(D, true); corps = corpsHist(D); }
     else if (filtre === 'tennis') { haut = bilan(T, true); corps = vueTennisPage(T); }
     else if (filtre === 'analyse') corps = vueAnalyse();
@@ -1226,11 +1362,128 @@
     return `<div class="row pz-tabs">${sw}</div>${ban}${kpis}${comboCard}<h2 class="pz-h2">Stats solo <span class="mut pz-hint">· chaque pari compté seul, y compris ceux des combinés</span></h2>${solo}`;
   }
 
+  /* --- Tennis : matchs du jour et cotes lus par le robot (Tennis Explorer), comme dans PronoTracker --- */
+  const TN_ROBOT = 'prono-tennis-robot', TN_SEUIL = 'prono-cotes-seuil', TN_MISE = 'prono-cotes-mise', TN_AUTO = 'prono-cotes-auto';
+  const TN = { off: 0, days: {}, busy: false, err: '', reg: false, lastReg: 0, edit: false };
+  const tnRobot = () => { try { return Object.assign({ url: '', key: '' }, JSON.parse(lsGet(TN_ROBOT) || '{}')); } catch (e) { return { url: '', key: '' }; } };
+  const tnNum = (k, d) => { const v = parseFloat(lsGet(k)); return v > 0 ? v : d; };
+  const tnIso = off => { const d = new Date(); d.setDate(d.getDate() + off); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  const tnN = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const tnKey = (d, m) => d + '|' + tnN(m.j1) + '|' + tnN(m.j2);
+  const tnAutoOn = () => lsGet(TN_AUTO) !== '0';
+  const tnMaj = () => { const h = document.getElementById('pzTennis'); if (h) { h.__pzH = null; tennisParis(); } };
+  async function tnLire(iso) {
+    const R = tnRobot(), r = await fetch(R.url.replace(/\/+$/, '') + '/tennis?date=' + iso, { headers: { 'x-key': R.key }, cache: 'no-store' });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 401) throw new Error('Clé refusée : vérifie la SYNC_KEY.');
+    if (!r.ok || !j.ok) throw new Error(j.error || ('Le robot a répondu ' + r.status));
+    j._t = Date.now(); return j;
+  }
+  async function tnCharger(force) {
+    const R = tnRobot(); if (!R.url || !R.key || TN.busy) return;
+    const iso = tnIso(TN.off), d = TN.days[iso];
+    if (!force && d && Date.now() - d._t < 5 * 60e3) return;
+    TN.busy = true; TN.err = ''; tnMaj();
+    try { TN.days[iso] = await tnLire(iso); if (tnAutoOn()) tnCombos(iso, false); }
+    catch (e) { TN.err = e.message === 'Failed to fetch' ? 'Robot injoignable : vérifie l\'adresse et ta connexion.' : e.message; }
+    TN.busy = false; tnMaj();
+  }
+  function tnPari(iso, m, n, mise) {
+    const k = tnKey(iso, m), c = n === 1 ? +m.c1 : +m.c2, who = n === 1 ? m.j1 : m.j2;
+    return { id: Date.now() + Math.floor(Math.random() * 1000), date: iso, type: 'Single', match: m.j1 + ' vs ' + m.j2, comp: m.tournoi || 'Tennis', market: 'Vainqueur du match', prono: 'Victoire ' + who, odds: c, stake: mise, status: 'Pending', tn: { k, j1: m.j1, j2: m.j2, p: n, h: m.heure || '' } };
+  }
+  function tnAjouter(iso, i, n) {
+    const m = ((TN.days[iso] || {}).matchs || [])[i]; if (!m) return;
+    const ex = (lireN().tennis || []).find(b => b.tn && b.tn.k === tnKey(iso, m));
+    if (ex && ex.tn.p === n) { toast('Déjà parié : ' + ex.prono); return; }
+    const b = tnPari(iso, m, n, tnNum(TN_MISE, 1));
+    muter(S => { S.tennis.unshift(b); }, 'Pari ajouté : ' + b.prono + ' · ' + cote(b.odds));
+  }
+  // favoris à cote basse (≤ seuil) associés deux par deux, meilleures cotes ensemble ; un joueur ne sert qu'une fois
+  function tnCombos(iso, manuel) {
+    const D = TN.days[iso]; if (!D || iso < tnIso(0)) return 0;
+    const seuil = tnNum(TN_SEUIL, 1.5), mise = tnNum(TN_MISE, 1), flag = 'prono-cotes-auto-' + iso;
+    if (!manuel && lsGet(flag)) return 0;
+    const S0 = lireN(), dejaC = new Set(), dejaP = new Set(), legIds = new Set();
+    S0.combos.tennis.forEach(c => (c.legIds || []).forEach(id => legIds.add(String(id))));
+    S0.tennis.forEach(b => { if (b.date !== iso || !b.tn) return; dejaP.add(tnN(b.tn.j1) + '|' + tnN(b.tn.j2)); if (b.comboId || legIds.has(String(b.id))) { dejaC.add(tnN(b.tn.j1)); dejaC.add(tnN(b.tn.j2)); } });
+    const cand = (D.matchs || []).filter(m => m.w !== 1 && m.w !== 2 && +m.c1 > 1 && +m.c2 > 1)
+      .map(m => { const n = +m.c1 <= +m.c2 ? 1 : 2; return { m, n, c: n === 1 ? +m.c1 : +m.c2 }; })
+      .filter(x => x.c <= seuil && !dejaP.has(tnN(x.m.j1) + '|' + tnN(x.m.j2)) && !dejaC.has(tnN(x.m.j1)) && !dejaC.has(tnN(x.m.j2)))
+      .sort((a, b) => b.c - a.c);
+    const paires = []; for (let i = 0; i + 1 < cand.length; i += 2) paires.push([cand[i], cand[i + 1]]);
+    if (cand.length >= 2) { try { localStorage.setItem(flag, '1'); } catch (e) {} }
+    if (!paires.length) { if (manuel) toast('Aucun combiné possible : il faut au moins 2 matchs avec un favori ≤ ' + cote(seuil) + ' pas encore utilisés.'); return 0; }
+    muter(S => paires.forEach(pr => {
+      const ids = pr.map(x => { const b = tnPari(iso, x.m, x.n, mise); S.tennis.unshift(b); return b.id; });
+      const cid = Date.now() + Math.floor(Math.random() * 100000);
+      ids.forEach(id => { const b = S.tennis.find(x => x.id === id); if (b) b.comboId = cid; });
+      S.combos.tennis.push({ id: cid, stake: mise, legIds: ids, createdAt: new Date().toISOString(), auto: true });
+    }), paires.length + ' combiné(s) tennis créé(s)');
+    return paires.length;
+  }
+  // règle les paris tennis en cours d'après les résultats lus par le robot
+  async function tnRegler(manuel) {
+    const R = tnRobot(); if (TN.reg || !R.url || !R.key) return 0;
+    const att = lireN().tennis.filter(b => b.status === 'Pending' && b.tn && b.date <= tnIso(0));
+    if (!att.length) { if (manuel) toast('Aucun pari tennis en cours à régler.'); return 0; }
+    TN.reg = true; TN.lastReg = Date.now(); const res = {};
+    try {
+      for (const d of [...new Set(att.map(b => b.date))]) {
+        let J; try { J = await tnLire(d); } catch (e) { continue; }
+        att.filter(b => b.date === d).forEach(b => {
+          const m = (J.matchs || []).find(x => tnKey(d, x) === b.tn.k) || (J.matchs || []).find(x => tnN(x.j1) === tnN(b.tn.j1) && tnN(x.j2) === tnN(b.tn.j2));
+          if (m && (m.w === 1 || m.w === 2)) res[b.id] = m.w === b.tn.p ? 'Won' : 'Lost';
+        });
+      }
+    } finally { TN.reg = false; }
+    const n = Object.keys(res).length;
+    if (n) muter(S => S.tennis.forEach(b => { if (res[b.id] && b.status === 'Pending') b.status = res[b.id]; }), n + ' pari(s) tennis réglé(s) d\'après les résultats');
+    else if (manuel) toast('Aucun nouveau résultat lisible (abandon, match pas fini ou score non lu : règle-le à la main).');
+    return n;
+  }
+  setInterval(() => { try { if (typeof ui !== 'undefined' && ui.sport === 'tennis' && document.getElementById('pzTennis') && !document.hidden) tnRegler(false); } catch (e) {} }, 5 * 60e3);
+  function vueRobot() {
+    const R = tnRobot();
+    if (!R.url || !R.key || TN.edit) return `<div class="card"><h2>🎾 Matchs du jour &amp; cotes</h2><p class="mut" style="margin:0 0 8px">Renseigne ton robot Cloudflare pour lire les matchs et les cotes (Tennis Explorer). C'est le même que dans PronoTracker.</p>
+      <div class="pz-fa" style="margin:0"><input id="pz-tn-url" class="pz-search" placeholder="https://statify-robot.xxx.workers.dev" value="${esc(R.url)}"><input id="pz-tn-key" class="pz-search" style="max-width:200px" type="password" placeholder="SYNC_KEY" value="${esc(R.key)}"><button data-pz="tnrobot">Enregistrer</button>${R.url ? '<button class="sec" data-pz="tnedit">Annuler</button>' : ''}</div></div>`;
+    const seuil = tnNum(TN_SEUIL, 1.5), mise = tnNum(TN_MISE, 1), iso = tnIso(TN.off), D = TN.days[iso];
+    if (!D && !TN.busy && !TN.err) setTimeout(() => tnCharger(false), 0);
+    const ctl = `<div class="row pz-chips" style="align-items:center">${puces(TN.off, [[0, 'Aujourd\'hui'], [1, 'Demain']], 'tnjour')}<label class="pz-auto" title="Chaque jour, forme tout seul des combinés de 2 matchs avec les favoris à cote basse"><input type="checkbox" data-pz="tnauto"${tnAutoOn() ? ' checked' : ''}> Combinés auto</label>
+      <label class="pz-auto">Favori ≤ <input id="pz-tn-seuil" class="pz-mini" type="number" step="0.05" min="1" value="${seuil}"></label><label class="pz-auto">Mise <input id="pz-tn-mise" class="pz-mini" type="number" step="0.5" min="0.5" value="${mise}"> €</label>
+      <button class="sec pz-ib" data-pz="tngen">⚡ Générer</button><button class="sec pz-ib" data-pz="tncotes">↻ Cotes</button><button class="sec pz-ib" data-pz="tnregler" title="Lit les résultats et règle tes paris en cours">✓ Régler d'après les résultats</button><button class="sec pz-ib" data-pz="tnedit" title="Changer l'adresse du robot">⚙️</button></div>`;
+    let corps;
+    if (TN.busy && !D) corps = '<p class="mut">Chargement des matchs…</p>';
+    else if (TN.err && !D) corps = `<p class="pz-neg">⚠️ ${esc(TN.err)}</p>`;
+    else if (!D) corps = '<p class="mut">Touche « ↻ Cotes » pour lire les matchs.</p>';
+    else {
+      const ms = (D.matchs || []).map((m, i) => ({ m, i })).filter(x => x.m.w !== 1 && x.m.w !== 2), parT = {};
+      ms.forEach(x => { (parT[x.m.tournoi || 'Tennis'] ||= []).push(x); });
+      const paris = lireN().tennis;
+      const btn = (x, n) => { const m = x.m, c = n === 1 ? m.c1 : m.c2, who = n === 1 ? m.j1 : m.j2, ex = paris.find(b => b.tn && b.tn.k === tnKey(iso, m)), pris = ex && ex.tn.p === n; return `<button class="${pris ? '' : 'sec'} pz-ib pz-tnj" data-pz="tnpari" data-d="${iso}" data-i="${x.i}" data-n="${n}"${c > 1 ? '' : ' disabled'} title="Ajouter « Victoire ${esc(who)} »"><b>${esc(who)}</b> ${c > 1 ? cote(+c) : '–'}${pris ? ' ✓' : ''}</button>`; };
+      corps = ms.length ? Object.keys(parT).map(t => `<h3 class="pz-h3">${esc(t)}</h3>` + parT[t].map(x => `<div class="pz-tnl"><span class="mut">${esc(x.m.heure || '')}</span>${btn(x, 1)}<span class="mut">vs</span>${btn(x, 2)}</div>`).join('')).join('') : '<p class="mut">Aucun match à venir pour ce jour (ou tous sont terminés).</p>';
+      corps += `<p class="mut pz-hint" style="margin-top:10px">Combinés auto : les favoris à cote basse sont associés deux par deux (les meilleures cotes ensemble), un joueur n'est jamais dans deux combinés. Matchs et cotes : Tennis Explorer (ATP / WTA, sans qualifications) via ton robot${D.perime ? ' · ⚠️ données mémorisées' : ''}.</p>`;
+    }
+    return `<div class="card"><h2>🎾 Matchs du jour &amp; cotes <span class="mut pz-hint">· un clic sur un joueur ajoute le pari</span></h2>${ctl}${corps}</div>`;
+  }
+  document.addEventListener('change', e => {
+    const id = e.target.id, v = e.target.value;
+    if (id === 'pz-k') majSugg();
+    if (id === 'pz-eh-du') { EH.du = v; vueExport(); } else if (id === 'pz-eh-au') { EH.au = v; vueExport(); }
+    if (id === 'pz-delai') { try { localStorage.setItem(RG_DELAI, v); localStorage.removeItem(RG_SIG); } catch (x) {} autoCombos(false); decorer(); }
+    if (e.target.dataset && e.target.dataset.col != null && COL && COL[+e.target.dataset.col]) COL[+e.target.dataset.col][e.target.dataset.f] = v;
+    if (id === 'pz-hper') { H.per = v; H.n = 25; decorer(); } else if (id === 'pz-hcomp') { H.comp = v; H.n = 25; decorer(); } else if (id === 'pz-hsort') { H.f = v; H.dir = v === 'date' || v === 'num' ? 'desc' : 'asc'; decorer(); }
+    else if (id === 'pz-hfrom') { H.from = v; decorer(); } else if (id === 'pz-hto') { H.to = v; decorer(); }
+    if (id === 'pz-tn-seuil' || id === 'pz-tn-mise') { const x = parseFloat(e.target.value); if (x > 0) { try { localStorage.setItem(id === 'pz-tn-seuil' ? TN_SEUIL : TN_MISE, String(x)); } catch (er) {} } }
+  });
+
   /* --- Tennis (paris saisis à la main : pas de score en direct) --- */
   function vueTennisPage(D) {
     const cours = corpsCours(D), hist = corpsHist(D);
-    return `<div class="row pz-tabs"><button class="pz-new" data-pz="new">＋ Nouveau pari tennis</button></div>
-      <p class="mut" style="margin:0">Les paris tennis se règlent à la main (✓ Gagné / ✗ Perdu) : Statify n'a pas de score en direct pour tes paris tennis.</p>${cours}${hist}${barreCombine(D)}${sel.size ? '<div class="pz-sp"></div>' : ''}`;
+    const R = tnRobot();
+    if (R.url && R.key && Date.now() - TN.lastReg > 5 * 60e3) setTimeout(() => tnRegler(false), 0);
+    return `${vueRobot()}<div class="row pz-tabs"><button class="pz-new" data-pz="new">＋ Nouveau pari tennis</button></div>
+      <p class="mut" style="margin:0">${R.url && R.key ? 'Les paris pris depuis les cotes se règlent tout seuls d\'après les résultats du robot (toutes les 5 minutes). Les autres se règlent à la main (✓ Gagné / ✗ Perdu).' : 'Sans robot, les paris tennis se règlent à la main (✓ Gagné / ✗ Perdu).'}</p>${cours}${hist}${barreCombine(D)}${sel.size ? '<div class="pz-sp"></div>' : ''}`;
   }
 
   /* --- Mes paris dans le sport Tennis (onglet de tennis.js) --- */
@@ -1243,14 +1496,316 @@
   }
   window.pzTennis = tennisParis;
 
+  /* ======================= OUTILS repris de PronoTracker ======================= */
+
+  /* --- Paires de combinés (mêmes règles que PronoTracker : championnats exclus et refus respectés) --- */
+  const RG_AUTO_CMB = 'pronotracker_autoCombos', RG_DELAI = 'pronotracker_auto_delai', RG_SIG = 'pronotracker_auto_sig';
+  const delaiMin = () => { const s = lsGet(RG_DELAI); if (s === null) return 5; const v = parseInt(s, 10); return v >= 0 ? v : 5; };
+  const autoCmbOn = () => lsGet(RG_AUTO_CMB) === '1';
+  function pairesDuJour(sp, j) {
+    const exc = stGenExclus(), refus = refusSet(), S = lireN(), dans = new Set();
+    (S.combos[sp] || []).forEach(c => (c.legIds || []).forEach(id => dans.add(String(id))));
+    const el = (S[sp] || []).filter(b => b.date === j && b.status === 'Pending' && !b.comboId && !dans.has(String(b.id)) && !exc.has((b.comp || '').trim()) && !refus.has(String(b.id))).map(b => Object.assign({}, b, { odds: +b.odds || 1 }));
+    const pr = paires(el), pris = new Set(pr.flat().map(b => String(b.id)));
+    return { paires: pr, restes: el.filter(b => !pris.has(String(b.id))), exclus: (S[sp] || []).filter(b => b.date === j && b.status === 'Pending' && !b.comboId && exc.has((b.comp || '').trim())) };
+  }
+  function pairesAVenir(sp) { const auj = jour(), S = lireN(); const js = [...new Set((S[sp] || []).filter(b => b.status === 'Pending' && b.date >= auj && !b.comboId).map(b => b.date))].sort(); return js.flatMap(j => pairesDuJour(sp, j).paires); }
+  function creerPaires(sp, pr, msg) {
+    if (!pr.length) return;
+    muter(S => { const base = Date.now(); pr.forEach(([x, y], k) => { const bx = S[sp].find(b => String(b.id) === String(x.id)), by = S[sp].find(b => String(b.id) === String(y.id)); if (!bx || !by || bx.comboId || by.comboId) return; const c = { id: base + k, stake: +bx.stake > 0 ? +bx.stake : 1, legIds: [bx.id, by.id], createdAt: new Date().toISOString() }; bx.comboId = c.id; by.comboId = c.id; S.combos[sp].push(c); }); }, msg);
+  }
+  // combinés automatiques avec délai : on attend la fin de ta saisie (le délai repart à zéro dès que la liste change)
+  let autoInfo = '';
+  function autoCombos(force) {
+    autoInfo = '';
+    if (!autoCmbOn()) return;
+    const pr = pairesAVenir('football');
+    if (!pr.length) { try { localStorage.removeItem(RG_SIG); } catch (e) {} return; }
+    const sig = pr.flat().map(b => b.id).join(',');
+    let st = null; try { st = JSON.parse(lsGet(RG_SIG) || 'null'); } catch (e) {}
+    if (!st || st.sig !== sig) { st = { sig, t: Date.now() }; try { localStorage.setItem(RG_SIG, JSON.stringify(st)); } catch (e) {} }
+    const reste = delaiMin() * 60000 - (Date.now() - st.t);
+    if (!force && reste > 0) { const mm = Math.floor(reste / 60000), ss = String(Math.floor(reste / 1000) % 60).padStart(2, '0'); autoInfo = `⏳ ${pr.length} combiné${pr.length > 1 ? 's' : ''} automatique${pr.length > 1 ? 's' : ''} dans ${mm}:${ss} (le temps que tu finisses de saisir)`; return; }
+    try { localStorage.removeItem(RG_SIG); } catch (e) {}
+    creerPaires('football', pr, pr.length + ' combiné(s) créé(s) automatiquement');
+  }
+  setInterval(() => { try { if (autoCmbOn() && typeof ui !== 'undefined' && ui.sport === 'foot' && !document.getElementById('pzOv') && !document.hidden) { const avant = autoInfo; autoCombos(false); const el = document.getElementById('pz-autoinfo'); if (el && autoInfo) el.firstChild.textContent = autoInfo; else if (window.__pzVue && filtre === 'cours' && !!autoInfo !== !!el) decorer(); } } catch (e) {} }, 1000);
+
+  /* --- Générateur de combinés (choix du jour et des paires) --- */
+  let GEN = null;
+  function vueGenerateur(j) {
+    const sp = SP(), S = lireN(), auj = jour();
+    const jours = [...new Set((S[sp] || []).filter(b => b.status === 'Pending' && b.date >= auj && !b.comboId).map(b => b.date))].sort();
+    j = j || (GEN && GEN.j) || jours[0] || auj;
+    const P = pairesDuJour(sp, j); GEN = { j, sp, paires: P.paires, on: P.paires.map(() => true) };
+    const ligne = (x, y, i) => `<label class="pz-gen"><input type="checkbox" data-pz="genon" data-i="${i}" checked><span><b>${esc(x.match)}</b> · ${esc(x.prono)} (${cote(x.odds)})<br><b>${esc(y.match)}</b> · ${esc(y.prono)} (${cote(y.odds)})</span><b class="pz-cote">${cote(x.odds * y.odds)}</b></label>`;
+    ov(`<div class="pz-fm"><h3>✨ Générer les combinés</h3><p class="mut" style="margin:0 0 8px">Les paris simples du jour sont associés par 2 pour que la cote du combiné tombe autour de 2,00 à 2,40 (jamais sous 2,00, jamais deux fois le même match). Les championnats exclus ne sont pas utilisés.</p>
+      <div class="row pz-chips">${jours.length ? jours.map(d => `<button class="${d === j ? '' : 'sec'} pz-ib" data-pz="genjour" data-k="${d}">${esc(libJour(Date.parse(d + 'T12:00:00')))}</button>`).join('') : '<span class="mut">Aucun pari simple en attente.</span>'}</div>
+      ${P.paires.length ? P.paires.map(([x, y], i) => ligne(x, y, i)).join('') : '<p class="mut">Aucune paire possible ce jour-là.</p>'}
+      ${P.restes.length ? `<p class="mut pz-hint">Restent seuls : ${P.restes.map(b => esc(b.match) + ' (' + cote(b.odds) + ')').join(' · ')}</p>` : ''}${P.exclus.length ? `<p class="mut pz-hint">Championnats exclus : ${P.exclus.length} pari(s) non utilisé(s).</p>` : ''}
+      <div class="pz-fa"><span style="flex:1"></span><button class="sec" data-pz="cancel">Fermer</button>${P.paires.length ? '<button data-pz="genok">Créer les combinés cochés</button>' : ''}</div></div>`);
+  }
+
+  /* --- Vérifier mes résultats : cohérence + comparaison aux scores finaux ESPN --- */
+  const VR_IGN = 'pronotracker_verif_ignores';
+  let VR = { per: 'tout', res: null, msg: '' };
+  const vrN = s => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const vrEq = m => { const p = String(m || '').split(/\s+(?:vs\.?|contre|-|–)\s+/i); return p.length >= 2 ? [p[0].trim(), p[1].trim()] : null; };
+  const vrLib = s => (s === 'Won' ? 'Gagné' : s === 'Lost' ? 'Perdu' : s === 'Pending' ? 'En cours' : 'Annulé');
+  function vrBornes() {
+    const t = new Date(); t.setHours(12, 0, 0, 0); const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    if (VR.per === '7' || VR.per === '30') { const d = new Date(t); d.setDate(d.getDate() - +VR.per + 1); return [iso(d), '']; }
+    if (VR.per === 'mois') return [iso(new Date(t.getFullYear(), t.getMonth(), 1)), iso(new Date(t.getFullYear(), t.getMonth() + 1, 0))];
+    if (VR.per === 'mois-1') return [iso(new Date(t.getFullYear(), t.getMonth() - 1, 1)), iso(new Date(t.getFullYear(), t.getMonth(), 0))];
+    return ['', ''];
+  }
+  function vrPick(txt, home, away) { const [h, a] = cote2(txt, home, away); return h ? 'H' : a ? 'A' : null; }
+  function vrParse(b) {
+    const eq = vrEq(b.match); if (!eq) return { kind: 'x', why: 'nom du match illisible (« Équipe A - Équipe B » attendu)' };
+    const [home, away] = eq, marche = vrN(b.market), prono = vrN(b.prono), txt = marche + ' | ' + prono, mt = /\bmt\b|mi.?temps|1ere mi|1re mi|premiere mi/.test(txt);
+    if (/buteur|scorer|premier but|joueur/.test(marche)) return { kind: 'x', why: 'marché « Buteur » (les buteurs ne sont pas disponibles)' };
+    if (/corner|carton|jaune|rouge|tirs?\b|faute|passe|possession|hors.?jeu|penalt/.test(txt)) return { kind: 'x', why: 'marché non lié au score (corners, cartons, tirs…)' };
+    let m = /(plus d[e']\s*|over\s*)(\d+(?:[.,]\d+)?)/.exec(prono) || /(\+)\s*(\d+(?:[.,]\d+)?)\s*buts?/.exec(prono), dir = m ? 'plus' : null;
+    if (!m) { m = /(moins d[e']\s*|under\s*)(\d+(?:[.,]\d+)?)/.exec(prono) || /(-)\s*(\d+(?:[.,]\d+)?)\s*buts?/.exec(prono); dir = m ? 'moins' : null; }
+    if (m) { if (vrPick(prono.slice(0, m.index).replace(/\(.*?\)/g, ''), home, away)) return { kind: 'x', why: 'total de buts d\'une seule équipe' }; const line = parseFloat(m[2].replace(',', '.')); if (!Number.isFinite(line) || Math.round(line * 2) !== line * 2) return { kind: 'x', why: 'ligne en quart de but (non gérée)' }; return { kind: 'ou', dir, line, mt }; }
+    if (/btts|deux equipes|both teams/.test(txt)) return { kind: 'btts', yes: !/ne marque pas|ne marquent pas|\bnon\b|\bno\b|pas de but/.test(prono), mt };
+    const dcM = /double chance/.test(marche); let set = null;
+    if (/(^|[^a-z0-9])(1x|x1|1n|n1)([^a-z0-9]|$)/.test(prono)) set = ['H', 'D']; else if (/(^|[^a-z0-9])(x2|2x|n2|2n)([^a-z0-9]|$)/.test(prono)) set = ['D', 'A']; else if (/(^|[^a-z0-9])(12|1-2)([^a-z0-9]|$)/.test(prono) && dcM) set = ['H', 'A'];
+    else if (/\sou\s/.test(prono)) { const pk = prono.replace(/\(.*?\)/g, '').split(/\s+ou\s+/).map(p => p.replace(/\b(victoire|gagne|double chance)\b/g, '').trim()).map(p => (/^(match )?nul$|^draw$|^x$/.test(p) ? 'D' : vrPick(p, home, away))).filter(Boolean); if (pk.length === 2 && pk[0] !== pk[1]) set = pk; }
+    if (set) return { kind: 'dc', set, mt };
+    if (dcM) return { kind: 'x', why: 'double chance non reconnue' };
+    const clean = prono.replace(/\(.*?\)/g, '').replace(/\b(victoire|gagne|gagnant|vainqueur|win|de|du|des|la|le)\b/g, ' ').replace(/\s+/g, ' ').trim(), est = /1n2|resultat|vainqueur|1x2|mi.?temps/.test(marche) || /^(match )?nul$/.test(clean) || mt;
+    if (/^(match )?nul$|^draw$|^x$/.test(clean)) return { kind: '1n2', pick: 'D', mt };
+    const pk = vrPick(clean, home, away); if (pk && (est || /victoire|gagne|vainqueur/.test(prono))) return { kind: '1n2', pick: pk, mt };
+    if (est) return { kind: 'x', why: 'équipe du pronostic non reconnue' };
+    return { kind: 'x', why: 'marché non géré (« ' + (b.market || 'Autre') + ' »)' };
+  }
+  function vrVerdict(sel, sc) {
+    if (sel.mt && !sc.mt) return { res: null, why: 'score à la mi-temps indisponible' };
+    if (!sel.mt && sc.extra) return { res: null, why: 'prolongations / tirs au but : le résultat à 90 minutes n\'est pas disponible' };
+    const hh = sel.mt ? sc.mt.h : sc.h, aa = sel.mt ? sc.mt.a : sc.a, T = hh + aa, sco = `Score ${sel.mt ? 'à la mi-temps' : 'final'} ${hh}-${aa}`, out = hh > aa ? 'H' : hh < aa ? 'A' : 'D';
+    if (sel.kind === '1n2') return { res: out === sel.pick ? 'Won' : 'Lost', why: sco };
+    if (sel.kind === 'dc') return { res: sel.set.includes(out) ? 'Won' : 'Lost', why: sco };
+    if (sel.kind === 'btts') { const both = hh > 0 && aa > 0; return { res: both === sel.yes ? 'Won' : 'Lost', why: sco + (both ? ' (les deux équipes ont marqué)' : ' (une équipe n\'a pas marqué)') }; }
+    if (sel.kind === 'ou') { if (T === sel.line) return { res: null, why: sco + ' : ligne atteinte pile (pari remboursé)' }; const plus = T > sel.line; return { res: (sel.dir === 'plus') === plus ? 'Won' : 'Lost', why: sco + ' : ' + T + ' but(s)' }; }
+    return { res: null, why: 'pari non vérifiable' };
+  }
+  function vrCoherence(bets, combos) {
+    const out = [], today = jour(), lim = new Date(); lim.setDate(lim.getDate() - 3); const vieux = lim.toISOString().slice(0, 10), seen = {};
+    const add = (niv, b, titre, det) => out.push({ niv, b: b || null, titre, det: det || '' });
+    bets.forEach(b => {
+      const d = String(b.date || '').slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) add('erreur', b, 'Date manquante ou invalide');
+      if (!(+b.stake > 0)) add('erreur', b, 'Mise manquante ou à 0');
+      if (!(+b.odds >= 1.01)) add('erreur', b, 'Cote invalide', 'Cote : ' + (b.odds == null || b.odds === '' ? 'vide' : b.odds)); else if (+b.odds > 50) add('doute', b, 'Cote très élevée', 'Cote : ' + b.odds + ' (faute de frappe possible ?)');
+      if (!['Won', 'Lost', 'Pending', 'ABORTED'].includes(b.status)) add('erreur', b, 'Statut inconnu', 'Statut : ' + b.status);
+      if ((b.status === 'Won' || b.status === 'Lost') && d > today) add('erreur', b, 'Marqué ' + vrLib(b.status) + ' alors que le match n\'a pas encore eu lieu', 'Date du match : ' + stFdf(d));
+      if (b.status === 'Pending' && d && d < vieux) add('info', b, 'Toujours « En cours » plus de 3 jours après le match', 'À régler : ' + stFdf(d));
+      if (!vrEq(b.match)) add('doute', b, 'Nom du match sans « Équipe A - Équipe B »');
+      if (!(b.comp || '').trim()) add('doute', b, 'Championnat vide');
+      const k = [d, vrN(b.match), vrN(b.market), vrN(b.prono)].join('|'); (seen[k] ||= []).push(b);
+    });
+    Object.values(seen).filter(l => l.length > 1).forEach(l => l.slice(1).forEach(b => add('doute', b, 'Doublon possible', 'Même match, même pronostic qu\'un autre pari')));
+    const pm = {}; bets.filter(b => b.status === 'Won').forEach(b => { (pm[String(b.date).slice(0, 10) + '|' + vrN(b.match)] ||= []).push(b); });
+    Object.values(pm).forEach(l => { if (l.length < 2) return; const s = l.map(b => ({ b, s: vrParse(b) })); for (let i = 0; i < s.length; i++) for (let j = i + 1; j < s.length; j++) { const x = s[i].s, y = s[j].s; let bad = false; if (x.kind === y.kind && !x.mt === !y.mt) { if (x.kind === '1n2' && x.pick !== y.pick) bad = true; if (x.kind === 'btts' && x.yes !== y.yes) bad = true; if (x.kind === 'ou' && x.dir !== y.dir) { const p = x.dir === 'plus' ? x : y, m = x.dir === 'plus' ? y : x; if (m.line <= p.line) bad = true; } if (x.kind === 'dc' && !x.set.some(v => y.set.includes(v))) bad = true; } if (bad) add('erreur', s[j].b, 'Deux pronostics contradictoires marqués « Gagné » sur le même match', (s[i].b.prono || '?') + ' / ' + (s[j].b.prono || '?')); } });
+    const parId = new Map(bets.map(b => [String(b.id), b])), dc = {};
+    (combos || []).forEach(c => { const ids = c.legIds || [], legs = ids.map(i => parId.get(String(i))).filter(Boolean);
+      if (legs.length < ids.length) add('erreur', null, 'Combiné : sélection introuvable', (ids.length - legs.length) + ' sélection(s) ne correspondent plus à un pari existant');
+      if (!(+c.stake > 0)) add('erreur', null, 'Combiné : mise manquante ou à 0');
+      const ms = legs.map(l => String(l.date).slice(0, 10) + '|' + vrN(l.match)); if (new Set(ms).size < ms.length) add('doute', null, 'Combiné : deux sélections sur le même match', legs.map(l => l.match).join(' + '));
+      ids.forEach(id => { (dc[String(id)] ||= []).push(c.id); }); });
+    Object.keys(dc).filter(k => dc[k].length > 1).forEach(k => { const b = parId.get(k); if (b) add('doute', b, 'Sélection utilisée dans plusieurs combinés'); });
+    bets.filter(b => b.comboId && !(combos || []).some(c => String(c.id) === String(b.comboId))).forEach(b => add('erreur', b, 'Rattaché à un combiné qui n\'existe plus'));
+    return out;
+  }
+  async function vrLancer() {
+    VR.msg = 'Contrôle de cohérence…'; VR.res = null; vueVerif();
+    const [mn, mx] = vrBornes(), dans = b => { const d = String(b.date || '').slice(0, 10); return !!d && (!mn || d >= mn) && (!mx || d <= mx); };
+    const S = lireN(), tous = S.football.filter(dans), combos = S.combos.football.filter(c => (c.legIds || []).some(id => { const b = S.football.find(x => String(x.id) === String(id)); return !b || dans(b); }));
+    const res = { total: tous.length, coh: vrCoherence(tous, combos), ok: [], ko: [], nv: [] };
+    const regles = tous.filter(b => b.status === 'Won' || b.status === 'Lost').map(b => ({ b, sel: vrParse(b), slug: slugEspn(b.comp) }));
+    const aV = regles.filter(p => p.sel.kind !== 'x' && p.slug);
+    // scores : un tableau ESPN par championnat et par jour (J-1, J, J+1, puis J-3…J+5 pour un match décalé)
+    const charger = async cles => { const todo = [...cles].filter(k => _extT[k] == null || (_extT[k] === 0)); todo.forEach(k => { _extT[k] = 0; }); let f = 0; for (let i = 0; i < todo.length; i += 6) await Promise.all(todo.slice(i, i + 6).map(async k => { _extT[k] = Date.now(); const [lg, j] = k.split('|'); try { const r = await fetch(ESPN + lg + '/scoreboard?dates=' + j.replace(/-/g, ''), { cache: 'no-store' }); if (r.ok) { const d = await r.json(); _ext[k] = (d.events || []).map(e => extMatch(e, lg)).filter(Boolean); } } catch (e) {} f++; VR.msg = 'Récupération des scores : ' + f + '/' + todo.length; vueVerif(true); })); };
+    const decal = (d, n) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + n); return x.toLocaleDateString('fr-CA'); };
+    const trouver = (b, ec) => { const [h, a] = cotes(b.match), L = []; ec.forEach(n => (_ext[b.slug + '|' + decal(b.date, n)] || []).forEach(m => L.push(m))); return L.find(m => pareil(h, m.hn) && pareil(a, m.an)) || (L.find(m => pareil(h, m.an) && pareil(a, m.hn)) ? Object.assign({ sw: 1 }, L.find(m => pareil(h, m.an) && pareil(a, m.hn))) : null); };
+    const cles = new Set(); aV.forEach(p => { p.b.slug = p.slug; [-1, 0, 1].forEach(n => cles.add(p.slug + '|' + decal(p.b.date, n))); });
+    await charger(cles);
+    const rates = aV.filter(p => !trouver(p.b, [0, -1, 1])), c2 = new Set(); rates.forEach(p => [-3, -2, 2, 3, 4, 5].forEach(n => c2.add(p.slug + '|' + decal(p.b.date, n))));
+    if (c2.size) await charger(c2);
+    const ign = (() => { try { return JSON.parse(lsGet(VR_IGN) || '{}'); } catch (e) { return {}; } })();
+    regles.forEach(({ b, sel, slug }) => {
+      if (sel.kind === 'x') return res.nv.push({ b, why: sel.why });
+      if (!slug) return res.nv.push({ b, why: 'championnat non couvert par ESPN (« ' + (b.comp || 'vide') + ' »)' });
+      const m = trouver(b, [0, -1, 1, -3, -2, 2, 3, 4, 5]); if (!m) return res.nv.push({ b, why: 'match introuvable chez ESPN (noms d\'équipes ou date ?)' });
+      if (!(m.done || m.st === 'post')) return res.nv.push({ b, why: 'match pas encore terminé selon ESPN' });
+      const sw = x => x && { h: x.a, a: x.h }, sc = m.sw ? { h: m.as, a: m.hs, mt: sw(m.ht), extra: false } : { h: m.hs, a: m.as, mt: m.ht, extra: false };
+      if (/AET|PEN|SHOOT|EXTRA/i.test(m.det || '')) sc.extra = true;
+      const v = vrVerdict(sel, sc);
+      if (v.res == null) return res.nv.push({ b, why: v.why });
+      if (v.res === b.status) return res.ok.push({ b, why: v.why });
+      const sig = b.status + '|' + sc.h + '-' + sc.a; if (ign[b.id] === sig) return;
+      res.ko.push({ b, att: v.res, why: v.why, sig });
+    });
+    VR.res = res; VR.msg = ''; vueVerif(true);
+  }
+  function vueVerif(maj) {
+    if (maj && !document.querySelector('#pzOv .pz-vr')) return;   // fenêtre fermée pendant la recherche : on ne la rouvre pas
+    const r = VR.res, per = [['tout', 'Tout'], ['7', '7 jours'], ['30', '30 jours'], ['mois', 'Ce mois-ci'], ['mois-1', 'Mois dernier']];
+    const L = b => `${esc(b.match || '?')} · ${esc(b.market || '')}${b.prono ? ' : ' + esc(b.prono) : ''} · cote ${cote(b.odds)} · ${stFdf(b.date)}`;
+    let corps = '';
+    if (VR.msg) corps = `<p class="mut">⏳ ${esc(VR.msg)}</p>`;
+    else if (!r) corps = `<p class="mut" style="margin:0">Contrôle d'abord la <b>cohérence</b> de tes paris (mises, cotes, dates, doublons, combinés…), puis compare tes paris <b>déjà réglés</b> aux <b>scores finaux</b> (ESPN). Rien n'est modifié sans ton accord.</p>`;
+    else {
+      const coh = r.coh, er = coh.filter(x => x.niv === 'erreur'), dt = coh.filter(x => x.niv === 'doute'), inf = coh.filter(x => x.niv === 'info');
+      const bloc = (t, a, cls) => a.length ? `<h3 class="pz-h3 ${cls || ''}">${t} (${a.length})</h3>${a.map(x => `<div class="pz-vrl"><b>${esc(x.titre)}</b>${x.det ? ` <span class="mut">· ${esc(x.det)}</span>` : ''}${x.b ? `<small class="mut">${L(x.b)}</small>` : ''}${x.b ? `<button class="sec pz-ib" data-pz="edit" data-id="${esc(x.b.id)}">✎ Modifier</button>` : ''}</div>`).join('')}` : '';
+      corps = `<div class="pz-bil pz-big pz-six">${tuile('Paris contrôlés', r.total)}${tuile('Scores confirmés', r.ok.length, 'pz-pos')}${tuile('À corriger', r.ko.length, r.ko.length ? 'pz-neg' : '')}${tuile('Non vérifiables', r.nv.length)}${tuile('Erreurs', er.length, er.length ? 'pz-neg' : '')}${tuile('Doutes', dt.length)}</div>
+        ${r.ko.length ? `<h3 class="pz-h3 pz-neg">Résultat différent du score (${r.ko.length})</h3>${r.ko.map(x => `<div class="pz-vrl"><b>Noté ${vrLib(x.b.status)} · devrait être ${vrLib(x.att)}</b> <span class="mut">· ${esc(x.why)}</span><small class="mut">${L(x.b)}</small><span><button class="pz-ib" data-pz="vrfix" data-id="${esc(x.b.id)}">Corriger</button> <button class="sec pz-ib" data-pz="vrign" data-id="${esc(x.b.id)}">Ignorer</button></span></div>`).join('')}<div class="pz-fa"><button data-pz="vrall">Tout corriger (${r.ko.length})</button></div>` : '<p class="pz-pos"><b>✅ Aucun pari réglé ne contredit les scores.</b></p>'}
+        ${bloc('Erreurs', er, 'pz-neg')}${bloc('Doutes', dt)}${bloc('À régler', inf)}
+        ${r.nv.length ? `<details class="pz-det2"><summary>Non vérifiables (${r.nv.length})</summary>${r.nv.map(x => `<div class="pz-vrl"><small class="mut">${L(x.b)} — ${esc(x.why)}</small></div>`).join('')}</details>` : ''}`;
+    }
+    ov(`<div class="pz-fm pz-vr"><h3>🔎 Vérifier mes résultats (foot)</h3><div class="row pz-chips">${per.map(([k, l]) => `<button class="${VR.per === k ? '' : 'sec'} pz-ib" data-pz="vrper" data-k="${k}">${l}</button>`).join('')}</div>${corps}
+      <div class="pz-fa"><span style="flex:1"></span><button class="sec" data-pz="cancel">Fermer</button>${VR.msg ? '' : `<button data-pz="vrgo">${r ? 'Relancer' : 'Lancer la vérification'}</button>`}</div></div>`);
+  }
+
+  /* --- Vérifier les championnats : un pari mal classé par rapport aux autres paris des mêmes équipes --- */
+  const VC_IGN = 'pronotracker_comp_ignores';
+  const vcEurope = c => /champions|europa|conf[ée]rence|coupe|cup|supercoupe/i.test(c || '');
+  function vcAnalyser() {
+    const S = lireN(), bets = S.football.filter(b => b.match), info = bets.map(b => ({ b, comp: (b.comp || '').trim(), eq: cotes(b.match).slice(0, 2) }));
+    let ig; try { ig = new Set(JSON.parse(lsGet(VC_IGN) || '[]').map(String)); } catch (e) { ig = new Set(); }
+    const top = (nom, sauf) => { const c = {}; info.forEach(o => { if (o.b === sauf || !o.comp || vcEurope(o.comp)) return; if (o.eq.some(t => proche(t, nom) && proche(nom, t))) c[o.comp] = (c[o.comp] || 0) + 1; }); const k = Object.keys(c).sort((x, y) => c[y] - c[x]); return k.length && c[k[0]] >= 2 ? { comp: k[0], n: c[k[0]], tout: c } : null; };
+    const deviner = (h, a) => { const m = matchs().find(x => pareil(h, x.hn) && pareil(a, x.an)) || matchs().find(x => pareil(h, x.hn) || pareil(h, x.an)); return m ? (FLGN[m.lg] || '') : ''; };
+    const grp = {}; info.forEach(o => { (grp[o.b.date + '|' + vrN(o.b.match)] ||= new Set()).add(o.comp); });
+    const out = [];
+    info.forEach(o => {
+      if (ig.has(String(o.b.id))) return;
+      const [h, a] = o.eq; let sugg = null, why = '';
+      if (!o.comp) { sugg = h && a ? deviner(h, a) : ''; why = 'Championnat vide'; }
+      else if (h && a) {
+        const th = top(h, o.b), ta = top(a, o.b);
+        if (th && ta && th.comp === ta.comp && th.comp !== o.comp) { sugg = th.comp; why = `Les deux équipes jouent ailleurs en ${th.comp} (${th.n} et ${ta.n} paris)`; }
+        else if (!vcEurope(o.comp)) { const un = th && !ta ? th : ta && !th ? ta : null; if (un && un.n >= 3 && !un.tout[o.comp] && un.comp !== o.comp) { sugg = un.comp; why = `Une des équipes est toujours notée ${un.comp} (${un.n} paris)`; } }
+      }
+      const g = grp[o.b.date + '|' + vrN(o.b.match)]; if (!why && g && g.size > 1) { sugg = o.comp; why = 'Ce même match existe avec deux championnats différents'; }
+      if (why) out.push({ b: o.b, sugg: sugg || '', why });
+    });
+    return out.sort((x, y) => (y.b.date || '').localeCompare(x.b.date || ''));
+  }
+  function vueVerifComp() {
+    const L = vcAnalyser();
+    ov(`<div class="pz-fm pz-vr"><h3>🏷️ Vérifier les championnats</h3><p class="mut" style="margin:0 0 8px">Compare le championnat de chaque pari avec celui des autres paris des mêmes équipes. Les matchs de coupe d'Europe entre équipes de pays différents sont considérés normaux.</p>
+      ${L.length ? `<p><b>${L.length} pari(s) à vérifier</b></p>` + L.map(x => `<div class="pz-vrl"><b>${esc(x.b.match)}</b> <span class="mut">· ${stFdf(x.b.date)} · noté « ${esc(x.b.comp || 'vide')} »</span><small class="mut">${esc(x.why)}</small><span class="pz-fa" style="margin:0"><input class="pz-sel" id="pz-vc-${esc(x.b.id)}" value="${esc(x.sugg)}" placeholder="Championnat"><button class="pz-ib" data-pz="vcfix" data-id="${esc(x.b.id)}">Appliquer</button><button class="sec pz-ib" data-pz="vcign" data-id="${esc(x.b.id)}">Ignorer</button></span></div>`).join('') : '<p class="pz-pos"><b>✅ Aucune incohérence trouvée.</b></p>'}
+      <div class="pz-fa"><span style="flex:1"></span><button class="sec" data-pz="cancel">Fermer</button></div></div>`);
+  }
+
+  /* --- Exporter l'historique (Excel .xlsx ou CSV), avec période et statuts --- */
+  const EH = { per: 'tout', du: '', au: '', fmt: 'xlsx', combos: true, st: { Won: true, Lost: true, Pending: true, Autre: true } };
+  function ehDonnees() {
+    const t = new Date(), iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    let mn = '', mx = '';
+    if (EH.per === '7' || EH.per === '30') { const d = new Date(t); d.setDate(d.getDate() - +EH.per + 1); mn = iso(d); }
+    else if (EH.per === 'mois') { mn = iso(new Date(t.getFullYear(), t.getMonth(), 1)); mx = iso(new Date(t.getFullYear(), t.getMonth() + 1, 0)); }
+    else if (EH.per === 'mois-1') { mn = iso(new Date(t.getFullYear(), t.getMonth() - 1, 1)); mx = iso(new Date(t.getFullYear(), t.getMonth(), 0)); }
+    else if (EH.per === 'perso') { mn = EH.du; mx = EH.au; }
+    const okD = d => !!d && (!mn || d >= mn) && (!mx || d <= mx), okS = s => !!EH.st[(s === 'Won' || s === 'Lost' || s === 'Pending') ? s : 'Autre'];
+    const S = lireN(), sp = SP(), bets = S[sp].filter(b => okD(String(b.date || '').slice(0, 10)) && okS(b.status)).sort((a, b) => String(a.date).localeCompare(String(b.date)) || (+a.id || 0) - (+b.id || 0));
+    const parId = new Map(S[sp].map(b => [String(b.id), b]));
+    const combos = EH.combos ? S.combos[sp].map(c => { const legs = (c.legIds || []).map(i => parId.get(String(i))).filter(Boolean), status = legs.some(l => l.status === 'Lost') ? 'Lost' : legs.length && legs.every(l => l.status === 'Won') ? 'Won' : 'Pending', odds = legs.reduce((p, l) => p * (+l.odds || 1), 1), stake = +c.stake || 0; return { c, legs, date: legs.reduce((m, l) => (l.date && l.date > m ? String(l.date).slice(0, 10) : m), ''), status, odds, stake, profit: status === 'Won' ? stake * (odds - 1) : status === 'Lost' ? -stake : 0 }; }).filter(r => r.legs.length && okD(r.date) && okS(r.status)).sort((a, b) => a.date.localeCompare(b.date)) : [];
+    return { bets, combos, sp };
+  }
+  const ehLib = s => (s === 'Won' ? 'Gagné' : s === 'Lost' ? 'Perdu' : s === 'Pending' ? 'En cours' : 'Annulé'), r2 = v => Math.round(v * 100) / 100;
+  function ehStats(items) { const reg = items.filter(i => i.status === 'Won' || i.status === 'Lost'), w = reg.filter(i => i.status === 'Won').length, mise = reg.reduce((s, i) => s + i.stake, 0), profit = reg.reduce((s, i) => s + i.profit, 0); return { n: items.length, w, l: reg.length - w, p: items.filter(i => i.status === 'Pending').length, taux: reg.length ? w / reg.length : null, mise: r2(mise), profit: r2(profit), roi: mise ? profit / mise : null, cote: items.length ? r2(items.reduce((s, i) => s + i.odds, 0) / items.length) : null }; }
+  function ehLignes(d) {
+    const P = d.bets.map(b => [String(b.date || '').slice(0, 10), b.match || '', b.comp || '', b.market || '', b.prono || '', +b.odds || 0, +b.stake || 0, ehLib(b.status), (b.status === 'Won' || b.status === 'Lost') ? r2(stGain(b)) : '', b.comboId ? 'Combiné #' + b.comboId : 'Simple', b.id]);
+    const C = d.combos.map(r => [r.date, r.legs.length, r.legs.map(l => (l.match || '?') + ' — ' + (l.prono || '?') + ' @' + (+l.odds || 0).toFixed(2)).join(' | '), r2(r.odds), r.stake, ehLib(r.status), (r.status === 'Won' || r.status === 'Lost') ? r2(r.profit) : '', r.c.id]);
+    return { P, C };
+  }
+  function chargerXlsx() { return new Promise((ok, ko) => { if (window.XlsxLite) return ok(); const s = document.createElement('script'); s.src = 'xlsx.js'; s.onload = () => ok(); s.onerror = () => ko(new Error('xlsx.js introuvable')); document.head.appendChild(s); }); }
+  async function ehTelecharger() {
+    const d = ehDonnees(); if (!d.bets.length && !d.combos.length) return;
+    const { P, C } = ehLignes(d), jourF = jour(), nom = `pronos-historique_${EH.per}_${jourF}.${EH.fmt}`;
+    let blob;
+    if (EH.fmt === 'xlsx') {
+      try { await chargerXlsx(); } catch (e) { toast('Export Excel indisponible (fichier xlsx.js manquant). Choisis CSV.'); return; }
+      const simples = d.bets.map(b => ({ status: b.status, odds: +b.odds || 0, stake: +b.stake || 0, profit: stGain(b), comp: (b.comp || '').trim() || 'Sans championnat' })), sS = ehStats(simples), sC = ehStats(d.combos);
+      const kv = (l, a, b, f) => [{ v: l, b: true }, { v: a, f }, { v: b, f }], pc = {}; simples.forEach(s => (pc[s.comp] ||= []).push(s));
+      const sheets = [{ name: 'Paris', header: ['Date', 'Match', 'Compétition', 'Marché', 'Pronostic', 'Cote', 'Mise (€)', 'Statut', 'Profit (€)', 'Compte dans', 'ID'], widths: [12, 34, 22, 18, 26, 8, 10, 11, 11, 16, 15], fmts: ['date', 'text', 'text', 'text', 'text', 'num', 'money', 'text', 'money', 'text', 'int'], rows: P }];
+      if (EH.combos) sheets.push({ name: 'Combinés', header: ['Date', 'Nb sélections', 'Sélections', 'Cote totale', 'Mise (€)', 'Statut', 'Profit (€)', 'ID'], widths: [12, 14, 70, 12, 10, 11, 11, 15], fmts: ['date', 'int', 'text', 'num', 'money', 'text', 'money', 'int'], rows: C });
+      sheets.push({ name: 'Résumé', header: ['', 'Paris (Bilan Solo)', 'Combinés (Bilan Combiné)'], widths: [26, 22, 26], plain: true, rows: [kv('Nombre de paris', sS.n, sC.n, 'int'), kv('Gagnés', sS.w, sC.w, 'int'), kv('Perdus', sS.l, sC.l, 'int'), kv('En cours', sS.p, sC.p, 'int'), kv('Taux de réussite', sS.taux, sC.taux, 'pct'), kv('Mise (paris réglés)', sS.mise, sC.mise, 'money'), kv('Profit', sS.profit, sC.profit, 'money'), kv('ROI', sS.roi, sC.roi, 'pct'), kv('Cote moyenne', sS.cote, sC.cote, 'num'), ['', '', ''], [{ v: 'Exporté le', b: true }, new Date().toLocaleString('fr-FR'), '']] });
+      sheets.push({ name: 'Par championnat', header: ['Championnat', 'Paris', 'Gagnés', 'Perdus', 'En cours', 'Réussite', 'Mise (€)', 'Profit (€)', 'ROI'], widths: [28, 8, 9, 9, 10, 10, 11, 11, 9], fmts: ['text', 'int', 'int', 'int', 'int', 'pct', 'money', 'money', 'pct'], rows: Object.keys(pc).map(k => ({ k, s: ehStats(pc[k]) })).sort((a, b) => b.s.n - a.s.n).map(({ k, s }) => [k, s.n, s.w, s.l, s.p, s.taux, s.mise, s.profit, s.roi]) });
+      blob = new Blob([XlsxLite.build(sheets)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    } else {
+      const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"', n = v => (v === '' || v == null ? '' : String(r2(+v)).replace('.', ','));
+      let out = ['Date', 'Match', 'Compétition', 'Marché', 'Pronostic', 'Cote', 'Mise (€)', 'Statut', 'Profit (€)', 'Compte dans', 'ID'].map(q).join(';') + '\n';
+      P.forEach(r => { out += [stFdf(r[0]), r[1], r[2], r[3], r[4]].map(q).join(';') + ';' + n(r[5]) + ';' + n(r[6]) + ';' + q(r[7]) + ';' + n(r[8]) + ';' + q(r[9]) + ';' + q(r[10]) + '\n'; });
+      if (EH.combos && C.length) { out += '\n' + ['Date', 'Nb sélections', 'Sélections', 'Cote totale', 'Mise (€)', 'Statut', 'Profit (€)', 'ID'].map(q).join(';') + '\n'; C.forEach(r => { out += [q(stFdf(r[0])), r[1], q(r[2]), n(r[3]), n(r[4]), q(r[5]), n(r[6]), q(r[7])].join(';') + '\n'; }); }
+      blob = new Blob(['﻿' + out], { type: 'text/csv;charset=utf-8' });
+    }
+    let file = null; try { file = new File([blob], nom, { type: blob.type }); } catch (e) {}
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Historique des paris' }).catch(er => { if (er && er.name !== 'AbortError') ancre(blob, nom); }); } else ancre(blob, nom);
+  }
+  function ancre(blob, nom) { const u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = nom; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1500); }
+  function vueExport() {
+    const d = ehDonnees(), vide = !d.bets.length && !d.combos.length, ch = (on, l, k, v) => `<button class="${on ? '' : 'sec'} pz-ib" data-pz="eh" data-k="${k}" data-v="${v || ''}">${l}</button>`;
+    ov(`<div class="pz-fm"><h3>📊 Exporter l'historique (${d.sp === 'tennis' ? 'tennis' : 'foot'})</h3>
+      <h3 class="pz-h3">Période</h3><div class="row pz-chips">${[['tout', 'Tout'], ['7', '7 jours'], ['30', '30 jours'], ['mois', 'Ce mois-ci'], ['mois-1', 'Mois dernier'], ['perso', 'Dates…']].map(([k, l]) => ch(EH.per === k, l, 'per', k)).join('')}</div>
+      ${EH.per === 'perso' ? `<div class="pz-fa" style="margin:6px 0 0"><span class="mut">Du</span><input id="pz-eh-du" class="pz-sel" type="date" value="${esc(EH.du)}"><span class="mut">au</span><input id="pz-eh-au" class="pz-sel" type="date" value="${esc(EH.au)}"></div>` : ''}
+      <h3 class="pz-h3">Statuts</h3><div class="row pz-chips">${[['Won', 'Gagnés'], ['Lost', 'Perdus'], ['Pending', 'En cours'], ['Autre', 'Annulés']].map(([k, l]) => ch(EH.st[k], l, 'st', k)).join('')}</div>
+      <h3 class="pz-h3">Contenu</h3><div class="row pz-chips">${ch(EH.combos, 'Inclure la feuille Combinés', 'combos')}</div>
+      <h3 class="pz-h3">Format</h3><div class="row pz-chips">${ch(EH.fmt === 'xlsx', 'Excel / Google Sheets (.xlsx)', 'fmt', 'xlsx')}${ch(EH.fmt === 'csv', 'CSV', 'fmt', 'csv')}</div>
+      <p class="mut">${d.bets.length} pari(s)${EH.combos ? ' · ' + d.combos.length + ' combiné(s)' : ''} dans cet export.</p>
+      <div class="pz-fa"><span style="flex:1"></span><button class="sec" data-pz="cancel">Fermer</button><button data-pz="ehgo"${vide ? ' disabled' : ''}>⬇️ Télécharger</button></div></div>`);
+  }
+
+  /* --- Barre d'impact + résumé du jour (en haut de « En cours ») --- */
+  function impactEtResume(D) {
+    const sp = SP(), S = lireN(), L = S[sp] || [], auj = jour(), parId = new Map(L.map(b => [String(b.id), b]));
+    const g = b => stGain(b), net = L.filter(stReg).reduce((s, b) => s + g(b), 0);
+    let pj = 0; L.forEach(b => { if (b.date === auj && stReg(b)) pj += g(b); });
+    let pc = 0, netC = 0; (S.combos[sp] || []).forEach(c => { const legs = (c.legIds || []).map(i => parId.get(String(i))).filter(Boolean); if (!legs.length) return; const st = legs.some(l => l.status === 'Lost') ? 'Lost' : legs.every(l => l.status === 'Won') ? 'Won' : 'P', od = legs.reduce((p, l) => p * (+l.odds || 1), 1), k = +c.stake || 0, v = st === 'Won' ? k * (od - 1) : st === 'Lost' ? -k : 0; netC += v; const d = legs.reduce((m, l) => (l.date > m ? l.date : m), ''); if (d === auj) pc += v; });
+    const live = D.C.reduce((n, x) => n + x.legs.filter(l => l.m && l.m.st === 'in' && l.b.status === 'Pending').length, 0) + D.ouvertsS.filter(s => s.m && s.m.st === 'in').length;
+    const barre = `<div class="pz-imp">${[['Bilan du jour · paris', pj], ['Bilan du jour · combinés', pc]].map(([l, v]) => `<div><span>${l}</span><b class="${stCls(v)}">${eur(v)}</b></div>`).join('')}${live ? `<div class="pz-livek"><span>En direct</span><b>🔴 ${live}</b></div>` : ''}</div>`;
+    // projection : ce que rapportent les paris en attente s'ils passent, jour par jour
+    const dans = new Set(); (S.combos[sp] || []).forEach(c => (c.legIds || []).forEach(id => dans.add(String(id))));
+    const jr = {}, J = d => jr[d] ||= { ns: 0, ms: 0, gs: 0, nc: 0, mc: 0, gc: 0 };
+    L.filter(b => b.status === 'Pending' && b.date >= auj && !dans.has(String(b.id)) && !b.comboId && (+b.stake || 0) > 0).forEach(b => { const j = J(b.date); j.ns++; j.ms += +b.stake; j.gs += ((+b.odds || 1) - 1) * b.stake; });
+    (S.combos[sp] || []).forEach(c => { const legs = (c.legIds || []).map(i => parId.get(String(i))).filter(Boolean); if (!legs.length || legs.some(l => l.status === 'Lost') || legs.every(l => l.status === 'Won')) return; const d = legs.reduce((m, l) => (l.date > m ? l.date : m), ''); if (d < auj) return; const j = J(d), k = +c.stake || 0; j.nc++; j.mc += k; j.gc += k * (legs.reduce((p, l) => p * (+l.odds || 1), 1) - 1); });
+    const nS = L.filter(b => b.date === auj && !dans.has(String(b.id)) && !b.comboId).length, nC = D.C.filter(x => x.jour === auj).length;
+    const cel = (n, m, gg, mot) => n ? `<b class="pz-pos">${eur(gg)}</b><small class="mut">${n} ${mot}${n > 1 ? 's' : ''} · mise ${stF2(m)} €</small>` : '<span class="mut">—</span>';
+    const jours = Object.keys(jr).sort(), lignes = (jr[auj] ? [auj] : []).concat(jours.filter(d => d > auj).slice(0, 4)).map(d => { const j = jr[d], m = j.ms + j.mc, gg = j.gs + j.gc; return `<tr><td class="l"><b>${d === auj ? '🎯 Aujourd\'hui' : esc(libJour(Date.parse(d + 'T12:00:00')))}</b></td><td>${cel(j.ns, j.ms, j.gs, 'simple')}</td><td>${cel(j.nc, j.mc, j.gc, 'combiné')}</td><td><b class="pz-pos">${eur(gg)}</b><small class="mut">mise ${stF2(m)} € → retour ${stF2(m + gg)} €</small></td></tr>`; });
+    const resume = (nS || nC || lignes.length) ? `<div class="card pz-rj"><p style="margin:0 0 6px"><b>Aujourd'hui :</b> ${nS} pari${nS > 1 ? 's' : ''} simple${nS > 1 ? 's' : ''}, ${nC} combiné${nC > 1 ? 's' : ''} <span class="mut">(les paris d'un combiné ne sont comptés que dans leur combiné)</span></p>${lignes.length ? stTab(['', 'Paris simples', 'Combinés', 'Total si tout est bon'], lignes) : ''}</div>` : '';
+    return barre + resume;
+  }
+
+  /* --- Secours football-data.org (clé facultative) pour les matchs qu'ESPN ne trouve pas --- */
+  const FD_CFG = 'pronotracker_scores_cfg';
+  const fdCfg = () => { try { return JSON.parse(lsGet(FD_CFG) || '{}') || {}; } catch (e) { return {}; } };
+  function fdMatch(m) {
+    const sc = m.score || {}, ft = sc.regularTime || sc.fullTime || {}, ht = sc.halfTime || {}, st = m.status || '';
+    const etat = /IN_PLAY|PAUSED|LIVE/.test(st) ? 'in' : /FINISHED|AWARDED/.test(st) ? 'post' : 'pre';
+    return { id: 'f' + m.id, ext: true, lg: 'fd', d: m.utcDate, st: etat, done: etat === 'post', det: st === 'PAUSED' ? 'HT' : '', clk: m.minute ? m.minute + '\'' : '', per: st === 'PAUSED' ? 1 : etat === 'in' ? (m.minute > 45 ? 2 : 1) : 0, hn: (m.homeTeam || {}).name || (m.homeTeam || {}).shortName || '', an: (m.awayTeam || {}).name || (m.awayTeam || {}).shortName || '', hs: +ft.home || 0, as: +ft.away || 0, ht: (etat === 'post' || (etat === 'in' && m.minute > 45)) && ht.home != null ? { h: +ht.home, a: +ht.away } : null, x: { ev: [] } };
+  }
+  async function fdCharger(j) {
+    const c = fdCfg(), key = (c.key || '').trim(); if (!key) return;
+    const k = 'fd|' + j; if (_extT[k] != null) return; _extT[k] = Date.now();
+    const dec = n => { const x = new Date(j + 'T12:00:00'); x.setDate(x.getDate() + n); return x.toLocaleDateString('fr-CA'); };
+    try { const r = await fetch((c.relay || 'https://api.football-data.org').replace(/\/+$/, '') + '/v4/matches?dateFrom=' + dec(-1) + '&dateTo=' + dec(1), { headers: { 'X-Auth-Token': key } }); if (!r.ok) return; const d = await r.json(); _ext[k] = (d.matches || []).map(fdMatch); cache = null; rafraichir(); } catch (e) {}
+  }
+
   /* --- Réglages --- */
   function vueReglagesPage() {
     const auto = lsGet(AUTO) === '1', mk = marchesFoot();
     return `<div class="pz-grid pz-2">
       <div class="card"><h2>⚡ Règlement automatique</h2><label class="pz-auto" style="font-size:14px;color:var(--txt)"><input type="checkbox" data-pz="auto"${auto ? ' checked' : ''}> Régler Gagné / Perdu quand le match est terminé</label><p class="mut" style="margin:8px 0 0">D'après le score final de Statify. Sinon, une bannière te propose « Tout régler ». Chaque règlement reste annulable.</p></div>
-      <div class="card"><h2>✨ Combinés automatiques</h2><p class="mut" style="margin:0 0 10px">Associe tes paris simples à venir par deux, pour une cote totale d'environ 2,00–2,40 (jamais deux fois le même match). Tu peux annuler juste après.</p><button data-pz="autocombo">✨ Combiner mes paris simples maintenant</button></div>
+      <div class="card"><h2>✨ Combinés automatiques</h2><p class="mut" style="margin:0 0 10px">Associe tes paris simples à venir par deux, pour une cote totale d'environ 2,00–2,40 (jamais sous 2,00, jamais deux fois le même match). Les championnats exclus ne sont pas utilisés. Tu peux annuler juste après.</p>
+        <label class="pz-auto" style="font-size:14px;color:var(--txt)"><input type="checkbox" data-pz="autocmb"${autoCmbOn() ? ' checked' : ''}> Créer les combinés tout seuls</label>
+        <label class="pz-auto" style="margin-top:8px">après <select id="pz-delai" class="pz-sel">${[[0, 'tout de suite'], [1, '1 min'], [2, '2 min'], [5, '5 min']].map(([v, l]) => `<option value="${v}"${delaiMin() === v ? ' selected' : ''}>${l}</option>`).join('')}</select> <span class="mut">(le temps que tu finisses de saisir)</span></label>
+        <div class="pz-fa"><button class="sec" data-pz="ogen">✨ Générer et choisir les paires…</button><button data-pz="autocombo">Combiner maintenant</button></div></div>
+      <div class="card"><h2>🛠️ Vérifications</h2><p class="mut" style="margin:0 0 10px">Rien n'est modifié sans ton accord.</p><div class="pz-fa" style="margin:0"><button class="sec" data-pz="overif">🔎 Vérifier mes résultats</button><button class="sec" data-pz="ovc">🏷️ Vérifier les championnats</button></div>
+        <p class="mut" style="margin:12px 0 4px">Clé <b>football-data.org</b> (facultative) : sert de secours pour les matchs qu'ESPN ne trouve pas. Elle reste sur cet appareil.</p><div class="pz-fa" style="margin:0"><input id="pz-fd-key" class="pz-search" type="password" placeholder="Clé API football-data.org" value="${esc(fdCfg().key || '')}"><button class="sec" data-pz="fdsave">Enregistrer</button></div></div>
       <div class="card"><h2>🎯 Types de marché (foot)</h2><div class="pz-mks">${mk.map((m, i) => `<span class="pz-mk">${esc(m)}<button class="sec" data-pz="mkdel" data-i="${i}" title="Retirer">✕</button></span>`).join('')}</div><div class="pz-fa"><input id="pz-mkn" class="pz-search" placeholder="Nouveau marché (ex. Double Chance)"><button data-pz="mkadd">Ajouter</button></div></div>
-      <div class="card"><h2>💾 Données &amp; synchronisation</h2><div class="pz-fa" style="margin:0"><button class="sec" data-pz="csv">📄 Exporter l'historique (CSV)</button><button class="sec" data-pz="ext" data-b="btnExport">⬇️ Sauvegarde complète</button><button class="sec" data-pz="ext" data-b="btnImport">⬆️ Importer</button><button class="sec" data-pz="ext" data-b="btnCloud">☁️ Cloud</button></div><p class="mut" style="margin:10px 0 0">Le Cloud de Statify synchronise maintenant aussi tes paris entre appareils (dernier envoi gagnant : envoie depuis l'appareil à jour, puis récupère sur l'autre).</p><button class="sec pz-ib" data-pz="f" data-k="sync" style="margin-top:8px">☁️ Ancienne synchro PronoTracker (Supabase / Firebase)</button></div></div>`;
+      <div class="card"><h2>💾 Données &amp; synchronisation</h2><div class="pz-fa" style="margin:0"><button class="sec" data-pz="oexp">📊 Exporter l'historique (Excel / CSV)</button><button class="sec" data-pz="ext" data-b="btnExport">⬇️ Sauvegarde complète</button><button class="sec" data-pz="ext" data-b="btnImport">⬆️ Importer</button><button class="sec" data-pz="ext" data-b="btnCloud">☁️ Cloud</button></div><p class="mut" style="margin:10px 0 0">Le Cloud de Statify synchronise maintenant aussi tes paris entre appareils (dernier envoi gagnant : envoie depuis l'appareil à jour, puis récupère sur l'autre).</p><button class="sec pz-ib" data-pz="f" data-k="sync" style="margin-top:8px">☁️ Ancienne synchro PronoTracker (Supabase / Firebase)</button></div></div>`;
   }
   const marchesFoot = () => { try { const s = JSON.parse(lsGet(MARCHES)); if (Array.isArray(s) && s.length) return s; } catch (e) {} return ['1N2', 'BTTS', 'Over/Under', 'Buteur', 'Mi-Temps', 'Autre']; };
   function majMarches(fn) { const m = marchesFoot().slice(); fn(m); try { localStorage.setItem(MARCHES, JSON.stringify(m)); } catch (e) {} const v = document.getElementById('view'); if (v) v.__pzH = null; decorer(); }
@@ -1299,7 +1854,8 @@
   }
   function combinerAuto() {
     const sp = SP(), D = donnees(sp), auj = jour(), parJour = {};
-    D.ouvertsS.filter(s => s.b.date && s.b.date >= auj).forEach(s => { (parJour[s.b.date] ||= []).push(s.b); });
+    const exc = stGenExclus(), refus = refusSet();
+    D.ouvertsS.filter(s => s.b.date && s.b.date >= auj && !exc.has((s.b.comp || '').trim()) && !refus.has(String(s.b.id))).forEach(s => { (parJour[s.b.date] ||= []).push(s.b); });
     const pr = []; Object.keys(parJour).sort().forEach(j => paires(parJour[j]).forEach(p => pr.push(p)));
     if (!pr.length) { toast('Aucune paire possible (il faut deux paris simples à venir dont la cote totale fait entre 2,00 et 3,00).'); return; }
     muter(S => { const base = Date.now(); pr.forEach(([x, y], k) => { const bx = S[sp].find(b => String(b.id) === String(x.id)), by = S[sp].find(b => String(b.id) === String(y.id)); if (!bx || !by) return; const c = { id: base + k, stake: +bx.stake > 0 ? +bx.stake : 1, legIds: [bx.id, by.id], createdAt: new Date().toISOString() }; bx.comboId = c.id; by.comboId = c.id; S.combos[sp].push(c); }); },
@@ -1392,7 +1948,7 @@
   .pz-onw{background:color-mix(in srgb,var(--ok) 22%,transparent)!important;color:var(--ok)!important;border-color:var(--ok)!important}.pz-onl{background:color-mix(in srgb,var(--bad) 20%,transparent)!important;color:var(--bad)!important;border-color:var(--bad)!important}
   .pz-cf{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
   .pz-ck{display:flex;align-items:center;gap:8px;cursor:pointer}.pz-ck input{width:18px;height:18px;accent-color:#7c3aed}.pz-hint{text-transform:none;letter-spacing:0;font-weight:600}
-  .pz-new{margin-left:auto}.pz-auto{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mut);cursor:pointer}.pz-auto input{width:16px;height:16px;accent-color:var(--acc)}
+  .pz-new{margin-left:auto}.pz-auto{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mut);cursor:pointer}.pz-auto input[type=checkbox]{width:16px;height:16px;accent-color:var(--acc)}
   .pz-ban{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between;padding:10px 14px;border-radius:14px;background:color-mix(in srgb,var(--ok) 14%,transparent);font-weight:700;font-size:13.5px}
   .pz-bar{position:fixed;left:12px;right:12px;bottom:84px;z-index:40;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;border-radius:16px;background:var(--card);border:2px solid #7c3aed;box-shadow:0 8px 30px rgba(0,0,0,.25)}
   .pz-bar input{width:70px;font:inherit;font-weight:700;color:var(--txt);background:var(--field);border:1px solid var(--line);border-radius:10px;padding:5px 8px}.pz-bar label{display:flex;align-items:center;gap:6px;font-weight:700}
@@ -1424,7 +1980,7 @@
   @media (min-width:1100px){.pz-bar{left:252px;bottom:16px}}.pz-sp{height:150px}.pz-diag{font-size:10.5px;line-height:1.35}.pz-jour{font-size:12.5px;opacity:.85;margin-top:14px}  .pz-tbw{overflow-x:auto}.pz-tb{width:100%;border-collapse:collapse;font-size:12.5px}.pz-tb th{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);padding:6px 8px;text-align:center;border-bottom:1px solid var(--line);white-space:nowrap}.pz-tb td{padding:7px 8px;text-align:center;border-bottom:1px solid var(--line)}.pz-tb .l{text-align:left}.pz-clk{cursor:pointer}.pz-clk:hover,.pz-tb tr.pz-on{background:var(--field)}.pz-tb tr.pz-exc{background:rgba(220,60,60,.08)}.pz-pt{color:var(--acc)}  .pz-cat{border:1px solid var(--line);border-radius:14px;margin-top:10px;overflow:hidden}.pz-cath{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:12px 14px;cursor:pointer}.pz-cath b:first-child{flex:1;min-width:140px}.pz-catb{padding:4px 14px 14px;border-top:1px solid var(--line)}
   .pz-dfs{background:var(--field);border-radius:14px;padding:12px;margin:10px 0}.pz-dl{margin-top:8px}.pz-pb{height:6px;border-radius:6px;background:var(--line);overflow:hidden;margin-top:4px}.pz-pb i{display:block;height:100%;background:var(--bad)}
   .pz-jh,.pz-jr{display:grid;grid-template-columns:.8fr 1fr 1fr 1fr 1fr 1.2fr;gap:4px;font-size:12.5px;padding:8px 4px;text-align:center}.pz-jh{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);border-bottom:1px solid var(--line)}.pz-jr{cursor:pointer;border-bottom:1px solid var(--line)}.pz-jr span:first-child{text-align:left}.pz-jr span:last-child{text-align:right}.pz-jh span:last-child{text-align:right}.pz-jh span:first-child{text-align:left}.pz-jd{padding:6px 10px;font-size:12px;border-bottom:1px solid var(--line);background:var(--field)}
-  .pz-h2{font-size:16px;margin:18px 0 4px}
+  .pz-h2{font-size:16px;margin:18px 0 4px}.pz-imp{display:flex;flex-wrap:wrap;gap:6px;margin:-2px 0 10px}.pz-imp>div{flex:1 1 110px;background:var(--field);border-radius:12px;padding:7px 10px;display:flex;flex-direction:column}.pz-imp span{font-size:9.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--mut)}.pz-imp b{font-size:14px}.pz-rj small{display:block}.pz-gen{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}.pz-gen span{flex:1}.pz-vrl{display:flex;flex-direction:column;gap:3px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}.pz-vrl button{align-self:flex-start}.pz-det2 summary{cursor:pointer;font-weight:700;margin:10px 0}#pzOv .pz-vr{max-width:820px;width:calc(100vw - 32px)}.pz-sugg{display:flex;flex-wrap:wrap;gap:6px;margin-top:-4px}.pz-sugg:empty{display:none}.pz-col textarea{width:100%;box-sizing:border-box;font:inherit;font-size:13px;color:var(--txt);background:var(--field);border:1px solid var(--line);border-radius:12px;padding:10px}.pz-colt input,.pz-colt select{font:inherit;font-size:12.5px;color:var(--txt);background:var(--field);border:1px solid var(--line);border-radius:8px;padding:5px 6px;min-width:0;width:100%;box-sizing:border-box}.pz-colt td{padding:4px}.pz-colt input[type=checkbox]{width:16px}.pz-warn td{background:rgba(245,158,11,.12)}#pzOv .pz-col{max-width:1100px;width:calc(100vw - 32px)}.pz-hbar .pz-chips{margin-bottom:8px}.pz-cnt{opacity:.7;font-weight:600;margin-left:2px}.pz-sepv{width:1px;align-self:stretch;background:var(--line);margin:0 4px}.pz-hf{margin:0;flex-wrap:wrap;gap:8px}.pz-sel{font:inherit;font-size:13px;color:var(--txt);background:var(--field);border:1px solid var(--line);border-radius:12px;padding:8px 10px}.pz-hlist{padding:4px 14px}.pz-hr{display:grid;grid-template-columns:44px minmax(0,1fr) auto auto;gap:6px 12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}.pz-hr:last-of-type{border-bottom:0}.pz-hw{box-shadow:inset 3px 0 0 var(--ok)}.pz-hl{box-shadow:inset 3px 0 0 var(--bad)}.pz-num{font-weight:800;font-size:12px;color:var(--mut);text-align:center}.pz-hm{min-width:0;display:flex;flex-direction:column;gap:2px}.pz-hp{font-size:13px}.pz-hs{display:flex;flex-direction:column;align-items:flex-end;gap:3px;text-align:right}@media (max-width:700px){.pz-hf .pz-sel,.pz-hf .pz-ib{flex:1 1 40%}.pz-hf .pz-search{flex-basis:100%;min-width:0}.pz-hr{grid-template-columns:34px minmax(0,1fr) auto}.pz-hr .pz-act{grid-column:2/-1}}.pz-mini{width:70px;font:inherit;color:var(--txt);background:var(--field);border:1px solid var(--line);border-radius:8px;padding:4px 6px}.pz-tnl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:3px 0}.pz-tnl>span:first-child{width:44px;font-size:11.5px}.pz-tnj{text-align:left}
 .pz-sec{font-size:15px}`; document.head.appendChild(st);
 
   // L'onglet « Pronos » s'ouvre ici au lieu d'aller sur prono.html ; actions sur les paris
@@ -1433,6 +1989,10 @@
     if (z) {
       const k = z.dataset.pz, id = z.dataset.id;
       if (k === 'sel') { if (z.checked) sel.add(String(id)); else sel.delete(String(id)); decorer(); return; }
+      if (k === 'genon') { if (GEN) GEN.on[+z.dataset.i] = z.checked; return; }
+      if (k === 'autocmb') { try { localStorage.setItem(RG_AUTO_CMB, z.checked ? '1' : '0'); localStorage.removeItem(RG_SIG); } catch (x) {} autoCombos(false); decorer(); return; }
+      if (k === 'colinc') { if (COL && COL[+z.dataset.i]) COL[+z.dataset.i].on = z.checked; const n = document.getElementById('pz-col-n'); if (n) n.textContent = COL.filter(b => b.on !== false).length; return; }
+      if (k === 'tnauto') { try { localStorage.setItem(TN_AUTO, z.checked ? '1' : '0'); } catch (x) {} if (z.checked) tnCombos(tnIso(TN.off), false); tnMaj(); return; }
       if (k === 'auto') { try { localStorage.setItem(AUTO, z.checked ? '1' : '0'); } catch (x) {} const v = document.getElementById('view'); if (v) v.__pzH = null; decorer(); return; }
       e.preventDefault(); e.stopImmediatePropagation();
       if (k === 'open') { window.__pzVue = true; decorer(); window.scrollTo(0, 0); }
@@ -1456,6 +2016,42 @@
       else if (k === 'cbmore') { cbN += 15; decorer(); }
       else if (k === 'stsp') { stSport = z.dataset.k; decorer(); }
       else if (k === 'stper') { stPer = +z.dataset.k; decorer(); }
+      else if (k === 'tnjour') { TN.off = +z.dataset.k; tnCharger(false); tnMaj(); }
+      else if (k === 'tnauto') { try { localStorage.setItem(TN_AUTO, z.checked ? '1' : '0'); } catch (x) {} if (z.checked) tnCombos(tnIso(TN.off), false); tnMaj(); }
+      else if (k === 'tngen') tnCombos(tnIso(TN.off), true);
+      else if (k === 'tncotes') tnCharger(true);
+      else if (k === 'tnregler') tnRegler(true);
+      else if (k === 'tnpari') tnAjouter(z.dataset.d, +z.dataset.i, +z.dataset.n);
+      else if (k === 'tnedit') { TN.edit = !TN.edit; tnMaj(); }
+      else if (k === 'tnrobot') { const u = (document.getElementById('pz-tn-url') || {}).value || '', kk = (document.getElementById('pz-tn-key') || {}).value || ''; try { localStorage.setItem(TN_ROBOT, JSON.stringify({ url: u.trim(), key: kk.trim() })); } catch (x) {} TN.edit = false; TN.days = {}; TN.err = ''; tnCharger(true); tnMaj(); }
+      else if (k === 'hst') { H.st = z.dataset.k; H.n = 25; decorer(); }
+      else if (k === 'hty') { H.ty = z.dataset.k; H.n = 25; decorer(); }
+      else if (k === 'hdir') { H.dir = H.dir === 'asc' ? 'desc' : 'asc'; decorer(); }
+      else if (k === 'hmore') { H.n += 25; decorer(); }
+      else if (k === 'hreset') { Object.assign(H, { q: '', st: 'ALL', ty: 'ALL', per: 'ALL', from: '', to: '', comp: 'ALL', n: 25 }); decorer(); }
+      else if (k === 'dup') { const b = (lire()[SP()] || []).find(x => String(x.id) === String(id)); if (b) formulaire({ comp: b.comp, market: b.market, stake: b.stake }); }
+      else if (k === 'paste') vueColler(COL && COL.texte);
+      else if (k === 'colan') collerAnalyser();
+      else if (k === 'colback') vueColler(COL && COL.texte);
+      else if (k === 'colok') collerValider();
+      else if (k === 'sugg') { const p = document.getElementById('pz-p'); if (p) { p.value = z.dataset.v; p.focus(); } }
+      else if (k === 'newmatch') { ['pz-m', 'pz-p', 'pz-o'].forEach(i => { const x = document.getElementById(i); if (x) x.value = ''; }); majSugg(); const m = document.getElementById('pz-m'); if (m) m.focus(); }
+      else if (k === 'ogen') vueGenerateur();
+      else if (k === 'genjour') vueGenerateur(z.dataset.k);
+      else if (k === 'genok') { const pr = GEN.paires.filter((p, i) => GEN.on[i]); fermer(); creerPaires(GEN.sp, pr, pr.length + ' combiné(s) créé(s)'); }
+      else if (k === 'autonow') autoCombos(true);
+      else if (k === 'overif') { VR.res = null; VR.msg = ''; vueVerif(); }
+      else if (k === 'vrper') { VR.per = z.dataset.k; VR.res = null; vueVerif(); }
+      else if (k === 'vrgo') vrLancer();
+      else if (k === 'vrfix' || k === 'vrall') { const L = k === 'vrall' ? VR.res.ko.slice() : VR.res.ko.filter(x => String(x.b.id) === String(id)); const m = {}; L.forEach(x => { m[x.b.id] = x.att; }); VR.res.ko = VR.res.ko.filter(x => !(x.b.id in m)); L.forEach(x => VR.res.ok.push(x)); muter(S => S.football.forEach(b => { if (b.id in m) b.status = m[b.id]; }), L.length + ' pari(s) corrigé(s) d\'après les scores'); vueVerif(); }
+      else if (k === 'vrign') { const x = VR.res.ko.find(y => String(y.b.id) === String(id)); if (x) { let ig = {}; try { ig = JSON.parse(lsGet(VR_IGN) || '{}'); } catch (er) {} ig[x.b.id] = x.sig; try { localStorage.setItem(VR_IGN, JSON.stringify(ig)); } catch (er) {} VR.res.ko = VR.res.ko.filter(y => y !== x); } vueVerif(); }
+      else if (k === 'ovc') vueVerifComp();
+      else if (k === 'vcfix') { const v = ((document.getElementById('pz-vc-' + id) || {}).value || '').trim(); if (v) { muter(S => { const b = S.football.find(x => String(x.id) === String(id)); if (b) b.comp = v; }, 'Championnat corrigé : ' + v); vueVerifComp(); } }
+      else if (k === 'vcign') { let ig = []; try { ig = JSON.parse(lsGet(VC_IGN) || '[]'); } catch (er) {} ig.push(String(id)); try { localStorage.setItem(VC_IGN, JSON.stringify(ig)); } catch (er) {} vueVerifComp(); }
+      else if (k === 'oexp') vueExport();
+      else if (k === 'eh') { const kk = z.dataset.k, v = z.dataset.v; if (kk === 'per') EH.per = v; else if (kk === 'st') EH.st[v] = !EH.st[v]; else if (kk === 'combos') EH.combos = !EH.combos; else if (kk === 'fmt') EH.fmt = v; vueExport(); }
+      else if (k === 'ehgo') ehTelecharger();
+      else if (k === 'fdsave') { const key = ((document.getElementById('pz-fd-key') || {}).value || '').trim(); const c = fdCfg(); c.key = key; try { localStorage.setItem(FD_CFG, JSON.stringify(c)); } catch (er) {} Object.keys(_extT).filter(x => x.startsWith('fd|')).forEach(x => delete _extT[x]); toast(key ? 'Clé football-data enregistrée' : 'Clé football-data retirée'); rafraichir(); }
       else if (k === 'stdc') { stDcPer = +z.dataset.k; decorer(); }
       else if (k === 'stsans') { stSans = !stSans; decorer(); }
       else if (k === 'stjour') { const d = z.dataset.k; if (stJ.has(d)) stJ.delete(d); else stJ.add(d); decorer(); }
@@ -1480,9 +2076,9 @@
       return;
     }
     const pa = e.target.closest('#tabs [data-act=pzanalyse]');
-    if (pa) { e.preventDefault(); e.stopImmediatePropagation(); window.__pzVue = true; filtre = 'analyse'; decorer(); window.scrollTo(0, 0); return; }
+    if (pa) { e.preventDefault(); e.stopImmediatePropagation(); allerFoot(); window.__pzVue = true; filtre = 'analyse'; decorer(); window.scrollTo(0, 0); return; }
     const p = e.target.closest('#tabs [data-act=pronos]');
-    if (p) { e.preventDefault(); e.stopImmediatePropagation(); window.__pzVue = true; if (filtre === 'analyse' && window.innerWidth >= 1100) filtre = 'cours'; decorer(); window.scrollTo(0, 0); return; }
+    if (p) { e.preventDefault(); e.stopImmediatePropagation(); allerFoot(); window.__pzVue = true; if (filtre === 'analyse' && window.innerWidth >= 1100) filtre = 'cours'; decorer(); window.scrollTo(0, 0); return; }
     if (e.target.closest('#pzOv') === null && document.getElementById('pzOv') && e.target.id === 'pzOv') { fermer(); return; }
     if (e.target.closest('#tabs button') || e.target.closest('[data-act=sport]')) { window.__pzVue = false; window.__pzFrame = false; }
     const m = e.target.closest('[data-act=fmatch]'); if (m) fiche(m.dataset.id);
@@ -1496,6 +2092,9 @@
   document.addEventListener('input', e => {
     const t = e.target;
     if (t.id === 'pz-an-t') anTexte = t.value;
+    if (t.dataset && t.dataset.col != null && COL && COL[+t.dataset.col]) COL[+t.dataset.col][t.dataset.f] = t.value;
+    if (t.id === 'pz-m') majSugg();
+    if (t.id === 'pz-hq') { H.q = t.value; H.n = 25; const pos = t.selectionStart; window.__pzForce = true; try { decorer(); } finally { window.__pzForce = false; } const n = document.getElementById('pz-hq'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (x) {} } }
     if (t.id === 'pz-cq') { cbQ = t.value; cbN = 15; const pos = t.selectionStart; window.__pzForce = true; try { decorer(); } finally { window.__pzForce = false; } const n = document.getElementById('pz-cq'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (x) {} } }
     const q = /^pz-an-([ckps])-(\d+)$/.exec(t.id || '');
     if (q && AN && AN.rows[+q[2]]) {
