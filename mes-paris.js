@@ -31,7 +31,7 @@
     const [h, a] = cotes(b.match); if (!h || !a) return null;
     const j = b.date ? Date.parse(b.date) : 0;
     const ok = cache.filter(m => pareil(h, m.hn) && pareil(a, m.an));
-    if (!ok.length) return null;
+    if (!ok.length) { manque(b); return null; }
     ok.sort((x, y) => Math.abs(Date.parse(x.d) - j) - Math.abs(Date.parse(y.d) - j));
     const m = ok[0];
     return (!j || Math.abs(Date.parse(m.d) - j) < 2.5 * 864e5) ? m : null;
@@ -56,6 +56,22 @@
     const p1 = g.filter(e => (+e.m || 0) <= 45);
     return { h: p1.filter(e => e.s === 'h').length, a: p1.filter(e => e.s === 'a').length, final: true };
   }
+
+  /* ---------- Matchs hors de la période chargée par Statify : on les va chercher ---------- */
+  const _jours = new Set(); let _tm = 0;
+  function manque(b) {
+    if (b.status === 'Won' || b.status === 'Lost' || !/^\d{4}-\d{2}-\d{2}$/.test(b.date || '') || _jours.has(b.date)) return;
+    const dt = Date.parse(b.date + 'T12:00:00'); if (!dt || Math.abs(dt - Date.now()) > 21 * 864e5) return;
+    _jours.add(b.date); clearTimeout(_tm); _tm = setTimeout(chargerJours, 600);
+  }
+  async function chargerJours() {
+    if (typeof footGet !== 'function' || typeof footIngest !== 'function' || typeof FLG === 'undefined') return;
+    const jours = [..._jours].filter(j => !_faits.has(j)); let n = 0;
+    for (const j of jours) { _faits.add(j); const d8 = j.replace(/-/g, '');
+      await Promise.all(FLG.map(async ([lg]) => { try { n += footIngest({ __foot: 'scores', league: lg, data: await footGet('https://site.api.espn.com/apis/site/v2/sports/soccer/' + lg + '/scoreboard?dates=' + d8) }) || 0; } catch (e) {} })); }
+    if (n) { try { footSave(); } catch (e) {} cache = null; rafraichir(); }
+  }
+  const _faits = new Set();
 
   /* ---------- État d'un pari d'après le score ---------- */
   // won = gagné (ou déjà acquis), ok = en passe, live = en cours, pre = à venir, lost = perdu, end = à régler, nf = pas suivi par Statify
@@ -921,16 +937,33 @@
     const pend = s.b.status === 'Pending' || !s.b.status;
     return `<div class="pz-combo"><div class="pz-ch">${pend ? `<label class="pz-ck" title="Cocher pour faire un combiné"><input type="checkbox" data-pz="sel" data-id="${esc(s.b.id)}"${sel.has(String(s.b.id)) ? ' checked' : ''}><b>Solo · ${cote(s.b.odds)}</b></label>` : `<b>Solo · ${cote(s.b.odds)}</b>`}${pastille(s.e, s.m)}</div><small class="mut">Mise ${eur(+s.b.stake || 0).replace('+', '')} · ${esc(s.b.date || '')}</small>${jambe(s, true)}</div>`;
   }
+  const JOURF = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Paris' });
+  const cleJour = ms => new Date(ms).toLocaleDateString('fr-CA', { timeZone: 'Europe/Paris' });
+  function libJour(ms) {
+    const k = cleJour(ms), a = cleJour(Date.now()), dem = cleJour(Date.now() + 864e5), hier = cleJour(Date.now() - 864e5);
+    const t = JOURF.format(ms), T = t.charAt(0).toUpperCase() + t.slice(1);
+    return k === a ? "Aujourd'hui · " + T : k === dem ? 'Demain · ' + T : k === hier ? 'Hier · ' + T : T;
+  }
+  const msLeg = l => { const t = Date.parse(l.m ? l.m.d : ''); return t || Date.parse((l.b.date || '') + 'T12:00:00') || 0; };
+  const msCombo = x => Math.min(...x.legs.map(msLeg).filter(Boolean).concat([Infinity]));
+  const msSolo = s => msLeg(s);
+  // regroupe par jour de match (ordre croissant, ou décroissant pour l'historique)
+  function parJour(arr, ms, rend, desc, cls) {
+    const L = arr.map(x => ({ x, t: ms(x) })).sort((a, b) => desc ? b.t - a.t : a.t - b.t), G = [];
+    L.forEach(o => { const k = isFinite(o.t) && o.t ? cleJour(o.t) : '?'; let g = G[G.length - 1]; if (!g || g.k !== k) { g = { k, t: o.t, a: [] }; G.push(g); } g.a.push(o.x); });
+    return G.map(g => `<h3 class="pz-h3 pz-jour">${g.k === '?' ? 'Date inconnue' : esc(libJour(g.t))}</h3><div class="pz-grid">${g.a.map(rend).join('')}</div>`).join('');
+  }
   function corpsCours(D) {
     const enCours = D.ouvertsC, live = enCours.filter(x => x.legs.some(l => l.m && l.m.st === 'in')), avenir = enCours.filter(x => !live.includes(x));
-    const grp = (titre, arr) => arr.length ? `<h3 class="pz-h3">${titre}</h3><div class="pz-grid">${arr.map(x => carteCombo(x, true)).join('')}</div>` : '';
-    const solosO = D.ouvertsS.map(carteSolo).join('');
-    return (grp('🔴 En direct', live) + grp('⏳ À venir', avenir) + (solosO ? `<h3 class="pz-h3">📌 Paris simples <span class="mut pz-hint">· coche-en plusieurs pour faire un combiné</span></h3><div class="pz-grid">${solosO}</div>` : '')) || '<p class="mut">Aucun pari en cours. Ajoute-en un avec « ＋ Nouveau pari ».</p>';
+    const grp = (titre, arr) => arr.length ? `<h3 class="pz-h3">${titre}</h3><div class="pz-grid">${arr.slice().sort((a, b) => msCombo(a) - msCombo(b)).map(x => carteCombo(x, true)).join('')}</div>` : '';
+    const solosO = D.ouvertsS.length ? `<h3 class="pz-h3">📌 Paris simples <span class="mut pz-hint">· coche-en plusieurs pour faire un combiné</span></h3>${parJour(D.ouvertsS, msSolo, carteSolo, false)}` : '';
+    const venir = avenir.length ? `<h3 class="pz-h3 pz-sec">⏳ À venir</h3>${parJour(avenir, msCombo, x => carteCombo(x, true), false)}` : '';
+    return (grp('🔴 En direct', live) + venir + solosO) || '<p class="mut">Aucun pari en cours. Ajoute-en un avec « ＋ Nouveau pari ».</p>';
   }
   function corpsHist(D) {
     const regles = D.C.filter(x => x.regle).sort((a, b) => (b.jour > a.jour ? 1 : -1)).slice(0, 30);
     const soloH = D.solos.filter(s => s.b.status === 'Won' || s.b.status === 'Lost').sort((a, b) => ((b.b.date || '') > (a.b.date || '') ? 1 : -1)).slice(0, 40);
-    return `${regles.length ? `<h3 class="pz-h3">Combinés réglés</h3><div class="pz-grid">${regles.map(x => carteCombo(x, true)).join('')}</div>` : ''}${soloH.length ? `<h3 class="pz-h3">Paris simples réglés</h3><div class="pz-grid">${soloH.map(carteSolo).join('')}</div>` : ''}` || '<p class="mut">Rien de réglé pour l\'instant.</p>';
+    return `${regles.length ? `<h3 class="pz-h3 pz-sec">Combinés réglés</h3>${parJour(regles, msCombo, x => carteCombo(x, true), true)}` : ''}${soloH.length ? `<h3 class="pz-h3 pz-sec">Paris simples réglés</h3>${parJour(soloH, msSolo, carteSolo, true)}` : ''}` || '<p class="mut">Rien de réglé pour l\'instant.</p>';
   }
   function poser(v, html, force) {
     const foc = document.activeElement;
@@ -962,7 +995,7 @@
     else if (filtre === 'tennis') { haut = bilan(T, true); corps = vueTennisPage(T); }
     else if (filtre === 'analyse') corps = vueAnalyse();
     else if (filtre === 'combos') corps = vueCombinesPage(D);
-    else if (filtre === 'stats') corps = vueStatsPage(D);
+    else if (filtre === 'stats') corps = vueStatsPage();
     else corps = vueReglagesPage();
     const html = `<div class="pz-view">${haut}${ligne}${ban}${ban2}${corps}${barre}${barre ? '<div class="pz-sp"></div>' : ''}</div>`;
     poser(v, html, window.__pzForce);
@@ -1020,20 +1053,127 @@
   }
 
   /* --- Stats --- */
-  function vueStatsPage(D) {
-    const T = stSport === 'tennis' ? donnees('tennis') : D;
-    const S = calcStats(elements(T), stPer);
+  /* --- Stats : reprise complète de PronoTracker (combinés, solo, championnats, marchés, cotes, équipes, jours) --- */
+  let stComp = new Set(), stMode = 'include', stMk = null, stCo = null, stOpen = {}, stJ = new Set(), stDcPer = 0, stSans = false;
+  try { stComp = new Set(JSON.parse(lsGet('pronotracker_compFilters') || '[]')); stMode = lsGet('pronotracker_compFilterMode') === 'exclude' ? 'exclude' : 'include'; } catch (e) {}
+  const stSave = () => { try { localStorage.setItem('pronotracker_compFilters', JSON.stringify([...stComp])); localStorage.setItem('pronotracker_compFilterMode', stMode); } catch (e) {} };
+  const ST_CATS = ['Top 5 Européen', 'Coupes Européennes', 'L2 / National', 'Autres / Non classés'], ST_COUL = { 'Top 5 Européen': '#2563eb', 'Coupes Européennes': '#d97706', 'L2 / National': '#059669', 'Autres / Non classés': '#64748b' };
+  function stCat(c) {
+    const t = String(c || '').trim(); if (!t) return null;
+    if (/champions\s*league|ligue\s+des\s+champions|europa\s+league|ligue\s+europa|conf[ée]rence\s+league|ligue\s+conf[ée]rence/i.test(t)) return 'Coupes Européennes';
+    if (/premier\s+league|la\s*liga|primera\s*divisi[oó]n|\bliga\b(?!\s*(portugal|mx|argentina|femenina))|serie\s+a|bundesliga|ligue\s+1\b/i.test(t)) return 'Top 5 Européen';
+    if (/ligue\s+2\b|national\b/i.test(t)) return 'L2 / National';
+    return null;
+  }
+  const ST_TR = ['1.00 – 1.49', '1.50 – 1.99', '2.00 et +'], stBr = o => o < 1.5 ? ST_TR[0] : o < 2 ? ST_TR[1] : ST_TR[2];
+  const stGain = b => b.status === 'Won' ? ((+b.odds || 1) - 1) * (+b.stake || 0) : b.status === 'Lost' ? -(+b.stake || 0) : 0;
+  const stReg = b => b.status === 'Won' || b.status === 'Lost';
+  const stCls = v => v > 0.004 ? 'pz-pos' : v < -0.004 ? 'pz-neg' : '';
+  const stF2 = n => (Number(n) || 0).toFixed(2).replace('.', ','), stPc = (n, d) => d ? (n / d * 100).toFixed(1).replace('.', ',') : '0,0';
+  const stFd = d => { const p = String(d || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] : d; };
+  const stFdf = d => String(d || '').split('-').reverse().join('/');
+  function stAgg(list) { const o = { n: 0, w: 0, mise: 0, profit: 0, cotes: 0 }; list.forEach(b => { if (!stReg(b)) return; o.n++; o.mise += +b.stake || 0; o.cotes += +b.odds || 1; o.profit += stGain(b); if (b.status === 'Won') o.w++; }); return o; }
+  function stTab(head, rows, empty) {
+    if (!rows.length) return `<p class="mut">${empty || 'Aucune donnée.'}</p>`;
+    return `<div class="pz-tbw"><table class="pz-tb"><thead><tr>${head.map((h, i) => `<th${i ? '' : ' class="l"'}>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+  }
+  const stLigne = (nom, o, extra) => `<tr${extra || ''}><td class="l"><b>${nom}</b></td><td>${o.n}</td><td>${stPc(o.w, o.n)} %</td><td class="${stCls(o.profit)}">${eur(o.profit)}</td><td class="${stCls(o.profit)}">${o.mise ? (o.profit >= 0 ? '+' : '−') + stPc(Math.abs(o.profit), o.mise) + ' %' : '–'}</td></tr>`;
+  function stTabMap(map, ordre, clic, actif) {
+    const keys = (ordre ? ordre.filter(k => map[k]) : Object.keys(map)).sort((a, b) => ordre ? 0 : map[b].n - map[a].n);
+    return stTab(['Type', 'Joués', 'Réussite', 'Profit net', 'ROI'], keys.map(k => stLigne(esc(k) + (actif === k ? ' <span class="pz-pt">●</span>' : ''), map[k], clic ? ` class="pz-clk${actif === k ? ' pz-on' : ''}" data-pz="${clic}" data-k="${esc(k)}"` : '')));
+  }
+  const stGrp = (list, fn) => { const m = {}; list.forEach(b => { if (!stReg(b)) return; const k = fn(b); const o = m[k] || (m[k] = { n: 0, w: 0, mise: 0, profit: 0 }); o.n++; o.mise += +b.stake || 0; o.profit += stGain(b); if (b.status === 'Won') o.w++; }); return m; };
+  function stGenExclus() { try { const p = JSON.parse(lsGet('pronotracker_gen_pref') || 'null'); if (p && Array.isArray(p.exclus)) return new Set(p.exclus); } catch (e) {} return new Set(['Ligue 2', 'Ligue Europa', 'Ligue Conférence', 'Ligue Europa Q', 'Ligue Conférence Q']); }
+
+  function vueStatsPage() {
+    const sp = stSport === 'tennis' ? 'tennis' : 'football', S = lireN(), tous = S[sp] || [], foot = sp === 'football';
+    const lim = stPer ? new Date(Date.now() - stPer * 864e5).toISOString().slice(0, 10) : '';
+    const perOk = b => !lim || (b.date || '') >= lim;
+    const compOk = b => { if (!stComp.size) return true; const k = (b.comp || 'Non spécifié').trim(); return stMode === 'exclude' ? !stComp.has(k) : stComp.has(k); };
+    const base = tous.filter(b => perOk(b) && compOk(b));                                   // alimente le Bilan, la courbe et les jours
+    const kpi = base.filter(b => (!stMk || (b.market || 'Autre') === stMk) && (!stCo || stBr(+b.odds || 1) === stCo));
     const sw = puces(stSport, [['football', '⚽ Foot'], ['tennis', '🎾 Tennis']], 'stsp') + puces(stPer, [[0, 'Tout'], [7, '7 jours'], [30, '30 jours']], 'stper');
-    if (!S.n) return `<div class="row pz-tabs">${sw}</div><p class="mut">Aucun pari réglé sur cette période.</p>`;
-    const perdus = S.L.filter(i => !i.won && i.t === 'C').length, nbC = S.L.filter(i => i.t === 'C').length;
-    const agr = fn => { const o = {}; S.L.forEach(i => i.legs.forEach(b => { if (b.status !== 'Won' && b.status !== 'Lost') return; const k = fn(b) || 'Autre'; (o[k] ||= { n: 0, ok: 0 }); o[k].n++; if (b.status === 'Won') o[k].ok++; })); return o; };
-    const carte = (t, o) => Object.keys(o).length ? `<div class="card"><h2>${t}</h2>${Object.entries(o).sort((a, b) => b[1].n - a[1].n).map(([k, c]) => `<div class="rr"><div class="rt">${esc(k)}</div><div class="mut">${c.ok}/${c.n} · ${Math.round(100 * c.ok / c.n)} %</div></div>`).join('')}</div>` : '';
-    return `<div class="row pz-tabs">${sw}</div>
-      <div class="pz-bil pz-big pz-six">${tuile('Réglés', S.n)}${tuile('Gagnés', `${S.g} (${Math.round(100 * S.g / S.n)} %)`)}${tuile('Profit', eur(S.profit), S.profit < 0 ? 'pz-neg' : 'pz-pos')}${tuile('ROI', (S.roi >= 0 ? '+' : '−') + Math.abs(S.roi).toFixed(1).replace('.', ',') + ' %', S.roi < 0 ? 'pz-neg' : 'pz-pos')}${tuile('Cote moy.', cote(S.coteMoy))}${tuile('Jours +', `${S.jp}/${S.dk.length}`)}</div>
-      ${nbC ? `<div class="card"><h2>Défaites</h2><p style="margin:0;font-weight:800;color:var(--bad)">${perdus} sur ${nbC} combinés · ${Math.round(100 * perdus / nbC)} %</p><small class="mut">Un combiné est perdu dès qu'un pronostic est perdu, même si l'autre n'est pas encore joué.</small></div>` : ''}
-      <div class="pz-grid pz-2"><div class="card"><h2>Évolution du bankroll</h2>${svgCourbe(S.courbe)}</div><div class="card"><h2>Bilan par jour</h2>${svgBarres(S)}</div></div>
-      <div class="pz-grid pz-2"><div class="pz-k pz-okbg"><span>Meilleur jour</span><b>${S.best ? joliJour(S.best) + ' · ' + eur(S.jours[S.best]) : '—'}</b></div><div class="pz-k pz-kobg"><span>Pire jour</span><b>${S.worst ? joliJour(S.worst) + ' · ' + eur(S.jours[S.worst]) : '—'}</b></div><div class="pz-k"><span>Plus longue série gagnante</span><b>${S.mw}</b></div><div class="pz-k"><span>Plus longue série perdante</span><b>${S.ml}</b></div></div>
-      <div class="pz-grid">${carte('📊 Réussite par championnat', agr(b => b.comp))}${carte('🎯 Réussite par marché', agr(b => b.market))}</div>`;
+
+    // combinés du sport (indépendants des filtres du Bilan, comme dans PronoTracker)
+    const combos = ((S.combos || {})[sp] || []).map(c => {
+      const legs = (c.legIds || []).map(i => tous.find(b => String(b.id) === String(i))).filter(Boolean);
+      const status = legs.some(l => l.status === 'Lost') ? 'Lost' : (legs.length && legs.every(l => l.status === 'Won')) ? 'Won' : 'Pending';
+      const odds = legs.reduce((p, l) => p * (+l.odds || 1), 1), stake = +c.stake || 0;
+      return { c, legs, status, odds, stake, profit: status === 'Won' ? stake * (odds - 1) : status === 'Lost' ? -stake : 0, date: legs.reduce((m, l) => (l.date && l.date > m ? l.date : m), '') };
+    }).filter(r => r.legs.length && r.date);
+
+    // ---- Bandeau de filtres actifs ----
+    const nf = (stComp.size ? 1 : 0) + (stMk ? 1 : 0) + (stCo ? 1 : 0);
+    const ban = nf ? `<div class="pz-ban"><span>🔎 Bilan calculé sur la sélection filtrée : ${[stComp.size ? (stMode === 'exclude' ? stComp.size + ' championnat(s) exclu(s)' : stComp.size + ' championnat(s) inclus') : '', stMk ? 'marché « ' + esc(stMk) + ' »' : '', stCo ? 'cote ' + esc(stCo) : ''].filter(Boolean).join(' · ')}</span><button data-pz="streset">Réinitialiser les filtres</button></div>` : '';
+
+    // ---- Cartes KPI globales ----
+    const a = stAgg(kpi), cr = combos.filter(r => r.status !== 'Pending' && perOk({ date: r.date })), cp = cr.reduce((s, r) => s + r.profit, 0), cm = cr.reduce((s, r) => s + r.stake, 0);
+    const roiS = a.mise ? 100 * a.profit / a.mise : 0, roiC = cm ? 100 * cp / cm : 0;
+    const kpis = `<div class="pz-bil pz-big pz-six">${tuile('Cote / mise moy.', a.n ? stF2(a.cotes / a.n) + ' @ ' + (a.mise / a.n).toFixed(1).replace('.', ',') + ' €' : '–')}${tuile('Bilan net solo', eur(a.profit), stCls(a.profit))}${tuile('ROI solo', (roiS >= 0 ? '+' : '−') + Math.abs(roiS).toFixed(1).replace('.', ',') + ' %', stCls(a.profit))}${tuile('Bilan net combiné', eur(cp), stCls(cp))}${tuile('ROI combiné', (roiC >= 0 ? '+' : '−') + Math.abs(roiC).toFixed(1).replace('.', ',') + ' %', stCls(cp))}${tuile('Paris réglés', a.n)}</div>`;
+
+    // ---- Stats combinés ----
+    const exc = stGenExclus(), lc = stDcPer ? new Date(Date.now() - stDcPer * 864e5).toISOString().slice(0, 10) : '';
+    let rows = combos.filter(r => (!lc || r.date >= lc) && (!stSans || !r.legs.some(l => exc.has((l.comp || '').trim()))));
+    const reg = rows.filter(r => r.status !== 'Pending').sort((x, y) => x.date.localeCompare(y.date) || (+x.c.id || 0) - (+y.c.id || 0)), N = reg.length, W = reg.filter(r => r.status === 'Won').length;
+    const jmap = {}; rows.forEach(r => { const j = jmap[r.date] || (jmap[r.date] = { date: r.date, n: 0, w: 0, l: 0, p: 0, profit: 0, cotes: [], items: [] }); j.n++; j.items.push(r); if (r.status === 'Won') j.w++; else if (r.status === 'Lost') j.l++; else j.p++; if (r.status !== 'Pending') { j.profit += r.profit; j.cotes.push(r.odds); } });
+    const jours = Object.values(jmap).sort((x, y) => x.date.localeCompare(y.date)), jReg = jours.filter(j => j.w + j.l > 0);
+    const dcMise = reg.reduce((s, r) => s + r.stake, 0), dcProf = reg.reduce((s, r) => s + r.profit, 0), dcCote = N ? reg.reduce((s, r) => s + r.odds, 0) / N : 0;
+    const bestJ = jReg.slice().sort((x, y) => y.profit - x.profit)[0], worstJ = jReg.slice().sort((x, y) => x.profit - y.profit)[0];
+    let ser = 0, mp = 0, mg = 0, sg = 0; reg.forEach(r => { if (r.status === 'Lost') { ser++; sg = 0; mp = Math.max(mp, ser); } else { sg++; ser = 0; mg = Math.max(mg, sg); } });
+    const parNb = {}; reg.forEach(r => { const o = parNb[r.legs.length] || (parNb[r.legs.length] = { n: 0, w: 0, mise: 0, profit: 0 }); o.n++; if (r.status === 'Won') o.w++; o.mise += r.stake; o.profit += r.profit; });
+    const TR = [['Moins de 2,50', 0, 2.5], ['2,50 – 3,49', 2.5, 3.5], ['3,50 – 4,99', 3.5, 5], ['5,00 et +', 5, 1e9]];
+    const trRows = TR.map(([nom, lo, hi]) => { const rs = reg.filter(r => r.odds >= lo && r.odds < hi); if (!rs.length) return ''; return stLigne(nom, { n: rs.length, w: rs.filter(r => r.status === 'Won').length, mise: rs.reduce((s, r) => s + r.stake, 0), profit: rs.reduce((s, r) => s + r.profit, 0) }); }).filter(Boolean);
+    const perdus = reg.filter(r => r.status === 'Lost'), parPerte = {};
+    perdus.forEach(r => { const n = r.legs.length, k = r.legs.filter(l => l.status === 'Lost').length, o = parPerte[k + '/' + n] || (parPerte[k + '/' + n] = { k, n, nb: 0, g: 0, att: 0 }); o.nb++; const au = r.legs.filter(l => l.status !== 'Lost'); if (au.length) { if (au.every(l => l.status === 'Won')) o.g++; else o.att++; } });
+    const defs = N ? `<div class="pz-dfs"><div class="pz-ch"><b>Défaites</b><span class="pz-st pz-lost">${perdus.length} sur ${N} · ${stPc(perdus.length, N)} %</span></div>${Object.values(parPerte).sort((x, y) => (x.n - y.n) || (y.k - x.k)).map(o => { const pc = Math.round(100 * o.nb / N); return `<div class="pz-dl"><div class="pz-ch"><span>${o.k === o.n ? `Les ${o.n} pronos perdus` : `${o.k} prono${o.k > 1 ? 's' : ''} perdu${o.k > 1 ? 's' : ''} sur ${o.n}`}</span><span><b class="pz-neg">${o.nb}</b> combiné${o.nb > 1 ? 's' : ''} · <b class="pz-neg">${pc} %</b></span></div><div class="pz-pb"><i style="width:${pc}%"></i></div>${o.k < o.n && (o.g || o.att) ? `<small class="mut">${[o.g ? 'l\'autre gagné : ' + o.g : '', o.att ? 'autre pas encore joué : ' + o.att : ''].filter(Boolean).join(' · ')}</small>` : ''}</div>`; }).join('') || '<p class="mut">Aucun combiné perdu sur cette période.</p>'}<small class="mut">Un combiné est perdu dès qu'un prono est perdu, même si l'autre n'est pas encore joué.</small></div>` : '';
+    let cum = 0; const courbeC = reg.map(r => (cum += r.profit));
+    const jj = {}; jReg.forEach(j => { jj[j.date] = j.profit; });
+    const lignesJ = jours.slice().reverse().map(j => {
+      const rg = j.w + j.l, ouv = stJ.has(j.date);
+      const det = ouv ? j.items.map(r => `<div class="pz-jd"><b class="${r.status === 'Won' ? 'pz-pos' : r.status === 'Lost' ? 'pz-neg' : ''}">${r.status === 'Won' ? 'Gagné' : r.status === 'Lost' ? 'Perdu' : 'En cours'}</b> · cote ${stF2(r.odds)} · mise ${stF2(r.stake)} € · <b class="${stCls(r.profit)}">${eur(r.profit)}</b>${r.legs.map(l => `<div class="mut">${l.status === 'Won' ? '✅' : l.status === 'Lost' ? '❌' : '⏳'} ${esc(l.match || '')} — ${esc(l.prono || '')} <span>(${stF2(l.odds)})</span></div>`).join('')}</div>`).join('') : '';
+      return `<div class="pz-jr" data-pz="stjour" data-k="${esc(j.date)}"><span><b>${stFd(j.date)}</b></span><span>${j.n}</span><span><b class="pz-pos">${j.w}</b>/<b class="pz-neg">${j.l}</b>${j.p ? '/<b>' + j.p + '</b>' : ''}</span><span>${rg ? Math.round(100 * j.w / rg) + ' %' : '–'}</span><span>${j.cotes.length ? stF2(j.cotes.reduce((x, y) => x + y, 0) / j.cotes.length) : '–'}</span><span class="${stCls(j.profit)}"><b>${rg ? eur(j.profit) : '–'}</b></span></div>${det}`;
+    }).join('');
+    const tailles = Object.keys(parNb).sort((x, y) => x - y).map(k => stLigne(k + ' matchs', parNb[k]));
+    const comboCard = `<div class="card"><h2>📊 Stats des combinés</h2><div class="row pz-chips">${puces(stDcPer, [[0, 'Tout'], [7, '7 jours'], [30, '30 jours']], 'stdc')}<button class="${stSans ? '' : 'sec'} pz-ib" data-pz="stsans">${stSans ? '✓ ' : ''}Sans championnats exclus</button></div>
+      ${N ? `<div class="pz-bil pz-big pz-six">${tuile('Réglés', N)}${tuile('Gagnés', W + ' (' + Math.round(100 * W / N) + ' %)')}${tuile('Profit', eur(dcProf), stCls(dcProf))}${tuile('ROI', dcMise ? (dcProf >= 0 ? '+' : '−') + stPc(Math.abs(dcProf), dcMise) + ' %' : '–', stCls(dcProf))}${tuile('Cote moy.', stF2(dcCote))}${tuile('Jours +', jReg.filter(j => j.profit > 0).length + '/' + jReg.length)}</div>${defs}
+      <div class="pz-grid pz-2"><div><h3 class="pz-h3">Évolution du bankroll (combiné après combiné)</h3>${svgCourbe(courbeC)}</div><div><h3 class="pz-h3">Bilan par jour</h3>${svgBarres({ dk: jReg.map(j => j.date), jours: jj })}</div></div>
+      <div class="pz-bil pz-big"><div class="pz-k pz-okbg"><span>Meilleur jour</span><b>${bestJ ? stFd(bestJ.date) + ' · ' + eur(bestJ.profit) : '–'}</b></div><div class="pz-k pz-kobg"><span>Pire jour</span><b>${worstJ ? stFd(worstJ.date) + ' · ' + eur(worstJ.profit) : '–'}</b></div><div class="pz-k"><span>Plus longue série gagnante</span><b>${mg} combiné(s)</b></div><div class="pz-k"><span>Plus longue série perdante</span><b>${mp} combiné(s)</b></div></div>
+      <div class="pz-grid pz-2"><div><h3 class="pz-h3">Par nombre de matchs</h3>${stTab(['Taille', 'Nb', 'Réussite', 'Profit', 'ROI'], tailles)}</div><div><h3 class="pz-h3">Par tranche de cote</h3>${stTab(['Tranche', 'Joués', 'Réussite', 'Profit', 'ROI'], trRows)}</div></div>` : '<p class="mut">Aucun combiné réglé sur cette période.</p>'}
+      <h3 class="pz-h3">Jour par jour <span class="mut pz-hint">· touche un jour pour voir ses combinés</span></h3>
+      <div class="pz-jh"><span>Jour</span><span>Combinés</span><span>G/P</span><span>Réussite</span><span>Cote moy.</span><span>Profit</span></div>${lignesJ || '<p class="mut">Rien à afficher.</p>'}</div>`;
+
+    // ---- Stats solo ----
+    let cs = 0; const ord = base.filter(stReg).slice().sort((x, y) => (x.date || '').localeCompare(y.date || '') || (+x.id || 0) - (+y.id || 0));
+    const courbeS = ord.map(b => (cs += stGain(b)));
+    const dm = {}; base.forEach(b => { if (!b.date) return; const d = dm[b.date] || (dm[b.date] = { n: 0, w: 0, l: 0, mise: 0, profit: 0 }); if (stReg(b)) { d.n++; d.mise += +b.stake || 0; d.profit += stGain(b); if (b.status === 'Won') d.w++; else d.l++; } });
+    const dLignes = Object.keys(dm).sort().reverse().map(d => { const o = dm[d]; return `<tr><td class="l"><b>${stFdf(d)}</b></td><td>${o.n} (${o.w}G/${o.l}P)</td><td class="${stCls(o.profit)}">${eur(o.profit)}</td><td class="${stCls(o.profit)}">${o.mise ? (o.profit >= 0 ? '+' : '−') + stPc(Math.abs(o.profit), o.mise) + ' %' : '–'}</td></tr>`; });
+    const src = base;  // marché / cote : mêmes filtres mais sans se filtrer eux-mêmes
+    const mkMap = stGrp(src, b => b.market || 'Autre'), coMap = stGrp(src, b => stBr(+b.odds || 1));
+    const eq = {}; src.forEach(b => { if (!stReg(b)) return; const p = String(b.match || '').split(/\s+(?:vs\.?|contre|-|–)\s+/i).map(x => x.trim()).filter(Boolean); if (p.length !== 2) return; const g = stGain(b); p.forEach(nom => { const k = mots(nom).join(' ') || nom.toLowerCase(), e = eq[k] || (eq[k] = { noms: {}, n: 0, w: 0, profit: 0 }); e.noms[nom] = (e.noms[nom] || 0) + 1; e.n++; if (b.status === 'Won') e.w++; e.profit += g; }); });
+    const eqL = Object.values(eq).filter(e => e.n >= 3).map(e => (e.nom = Object.keys(e.noms).sort((x, y) => e.noms[y] - e.noms[x])[0], e));
+    const eqLigne = e => `<tr><td class="l"><b>${esc(e.nom)}</b></td><td>${e.n}</td><td>${Math.round(100 * e.w / e.n)} %</td><td class="${stCls(e.profit)}">${eur(e.profit)}</td></tr>`;
+    const eqT = arr => stTab(['Équipe', 'Paris', 'Réussite', 'Profit'], arr.map(eqLigne), 'Pas encore assez de paris (3 minimum par équipe).');
+    // catégories de championnat (foot)
+    let cats = '';
+    if (foot) {
+      const modeBtns = `<div class="row pz-chips"><span class="mut">Cases à cocher :</span><button class="${stMode === 'include' ? '' : 'sec'} pz-ib" data-pz="stmode" data-k="include" title="Cocher un championnat = ne garder que celui-ci dans le Bilan">✅ Inclure</button><button class="${stMode === 'exclude' ? '' : 'sec'} pz-ib" data-pz="stmode" data-k="exclude" title="Cocher un championnat = le retirer du Bilan">🚫 Exclure</button></div>`;
+      cats = `<div class="card"><h2>🏆 Stats par catégorie de championnat</h2>${modeBtns}${ST_CATS.map(cat => {
+        const bets = tous.filter(b => stReg(b) && ((stCat(b.comp) || 'Autres / Non classés') === cat)), o = stAgg(bets), ouv = !!stOpen[cat], col = ST_COUL[cat];
+        const cmap = {}; bets.forEach(b => { const k = (b.comp || 'Non spécifié').trim(); const t = cmap[k] || (cmap[k] = { n: 0, w: 0, mise: 0, profit: 0 }); t.n++; t.mise += +b.stake || 0; t.profit += stGain(b); if (b.status === 'Won') t.w++; });
+        const cks = Object.keys(cmap).sort((x, y) => x.localeCompare(y, 'fr', { sensitivity: 'base' })), nbCk = cks.filter(k => stComp.has(k)).length;
+        let cc = 0; const cb = bets.slice().sort((x, y) => (x.date || '').localeCompare(y.date || '') || (+x.id || 0) - (+y.id || 0)).map(b => (cc += stGain(b)));
+        const compT = stTab(['<input type="checkbox" data-pz="stcompall" data-k="' + esc(cat) + '"' + (cks.length && nbCk === cks.length ? ' checked' : '') + ' title="Tout cocher / décocher">', 'Championnat', 'Joués', 'Réussite', 'Profit', 'ROI'], cks.map(k => { const t = cmap[k], on = stComp.has(k); return `<tr class="${on ? (stMode === 'exclude' ? 'pz-exc' : 'pz-on') : ''}"><td><input type="checkbox" data-pz="stcomp" data-k="${esc(k)}"${on ? ' checked' : ''}></td><td class="l" data-pz="stcomp" data-k="${esc(k)}"><b>${esc(k)}</b>${on && stMode === 'exclude' ? ' <span class="pz-neg">(exclu)</span>' : ''}</td><td>${t.n}</td><td>${stPc(t.w, t.n)} %</td><td class="${stCls(t.profit)}">${eur(t.profit)}</td><td class="${stCls(t.profit)}">${t.mise ? (t.profit >= 0 ? '+' : '−') + stPc(Math.abs(t.profit), t.mise) + ' %' : '–'}</td></tr>`; }), 'Aucune donnée.');
+        return `<div class="pz-cat" style="border-left:4px solid ${col}"><div class="pz-cath" data-pz="stopen" data-k="${esc(cat)}"><b>${esc(cat)}</b><span class="mut">${o.n} pari(s)</span><span class="${stCls(o.profit)}"><b>${eur(o.profit)}</b></span><span class="${stCls(o.profit)}">ROI ${o.mise ? (o.profit >= 0 ? '+' : '−') + stPc(Math.abs(o.profit), o.mise) : '0,0'} %</span><span>${ouv ? '▴' : '▾'}</span></div>
+          ${ouv ? `<div class="pz-catb"><div class="pz-bil pz-big pz-six">${tuile('Joués', o.n)}${tuile('Réussite', stPc(o.w, o.n) + ' %')}${tuile('Cote moy.', o.n ? stF2(o.cotes / o.n) : '1,00')}${tuile('Profit net', eur(o.profit), stCls(o.profit))}${tuile('ROI', o.mise ? (o.profit >= 0 ? '+' : '−') + stPc(Math.abs(o.profit), o.mise) + ' %' : '0,0 %', stCls(o.profit))}</div><h3 class="pz-h3">Évolution cumulée</h3>${svgCourbe(cb)}<h3 class="pz-h3">Par championnat <span class="mut pz-hint">· ${stMode === 'exclude' ? 'coche pour exclure du Bilan' : 'coche pour n\'inclure que ceux cochés dans le Bilan'}</span></h3>${compT}<div class="pz-grid pz-2"><div><h3 class="pz-h3">Par type de prono</h3>${stTabMap(stGrp(bets, b => b.market || 'Autre'))}</div><div><h3 class="pz-h3">Par tranche de cote</h3>${stTabMap(stGrp(bets, b => stBr(+b.odds || 1)), ST_TR)}</div></div></div>` : ''}</div>`;
+      }).join('')}</div>`;
+    }
+    const solo = `<div class="card"><h2>📈 Évolution du bankroll <span class="mut pz-hint">· profit cumulé sur la sélection filtrée</span></h2>${svgCourbe(courbeS)}</div>
+      ${cats}
+      <div class="card"><h2>📅 Bilan quotidien · jour par jour</h2>${stTab(['JJ/MM/AAAA', 'Joués (G/P)', 'Gain net', 'ROI'], dLignes, 'Aucun résultat quotidien enregistré.')}</div>
+      <div class="pz-grid pz-2"><div class="card"><h2>🎯 Stats par type de prono (marché)</h2><p class="mut pz-hint">Touche une ligne pour filtrer le Bilan.</p>${stTabMap(mkMap, null, 'stmk', stMk)}</div>
+      <div class="card"><h2>💶 Stats par tranche de cote</h2><p class="mut pz-hint">Touche une ligne pour filtrer le Bilan.</p>${stTabMap(coMap, ST_TR, 'stco', stCo)}</div></div>
+      <div class="card"><h2>👥 Stats par équipe : où tu gagnes, où tu perds</h2><p class="mut pz-hint">Compte tous tes paris terminés sur les matchs de l'équipe, quel que soit le marché. Seules les équipes avec au moins 3 paris sont listées.</p><div class="pz-grid pz-2"><div><h3 class="pz-h3">✅ Les plus rentables</h3>${eqT(eqL.filter(e => e.profit > 0).sort((x, y) => y.profit - x.profit).slice(0, 5))}</div><div><h3 class="pz-h3">⚠️ Les pièges (les plus coûteuses)</h3>${eqT(eqL.filter(e => e.profit < 0).sort((x, y) => x.profit - y.profit).slice(0, 5))}</div></div></div>`;
+    return `<div class="row pz-tabs">${sw}</div>${ban}${kpis}${comboCard}<h2 class="pz-h2">Stats solo <span class="mut pz-hint">· chaque pari compté seul, y compris ceux des combinés</span></h2>${solo}`;
   }
 
   /* --- Tennis (paris saisis à la main : pas de score en direct) --- */
@@ -1231,7 +1371,11 @@
   .pz-mks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.pz-mk{display:inline-flex;align-items:center;gap:6px;padding:4px 6px 4px 12px;border-radius:999px;background:var(--field);font-weight:700;font-size:13px}.pz-mk button{padding:1px 7px!important;border-radius:999px!important;font-size:11px!important;box-shadow:none!important}
   @media (max-width:900px){.pz-six{grid-template-columns:repeat(2,1fr)!important}.pz-2{grid-template-columns:1fr}.pz-search{min-width:100%}}
   @media (max-width:700px){.pz-if{height:calc(100dvh - 200px)}.pz-fg{grid-template-columns:1fr}.pz-bar{bottom:84px;gap:8px 10px;padding:10px 12px}.pz-bar>span[style]{display:none}.pz-bar button{flex:1;padding:9px 10px!important}.pz-bar>b{flex:1 0 100%}}
-  @media (min-width:1100px){.pz-bar{left:252px;bottom:16px}}.pz-sp{height:150px}`; document.head.appendChild(st);
+  @media (min-width:1100px){.pz-bar{left:252px;bottom:16px}}.pz-sp{height:150px}.pz-jour{font-size:12.5px;opacity:.85;margin-top:14px}  .pz-tbw{overflow-x:auto}.pz-tb{width:100%;border-collapse:collapse;font-size:12.5px}.pz-tb th{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);padding:6px 8px;text-align:center;border-bottom:1px solid var(--line);white-space:nowrap}.pz-tb td{padding:7px 8px;text-align:center;border-bottom:1px solid var(--line)}.pz-tb .l{text-align:left}.pz-clk{cursor:pointer}.pz-clk:hover,.pz-tb tr.pz-on{background:var(--field)}.pz-tb tr.pz-exc{background:rgba(220,60,60,.08)}.pz-pt{color:var(--acc)}  .pz-cat{border:1px solid var(--line);border-radius:14px;margin-top:10px;overflow:hidden}.pz-cath{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:12px 14px;cursor:pointer}.pz-cath b:first-child{flex:1;min-width:140px}.pz-catb{padding:4px 14px 14px;border-top:1px solid var(--line)}
+  .pz-dfs{background:var(--field);border-radius:14px;padding:12px;margin:10px 0}.pz-dl{margin-top:8px}.pz-pb{height:6px;border-radius:6px;background:var(--line);overflow:hidden;margin-top:4px}.pz-pb i{display:block;height:100%;background:var(--bad)}
+  .pz-jh,.pz-jr{display:grid;grid-template-columns:.8fr 1fr 1fr 1fr 1fr 1.2fr;gap:4px;font-size:12.5px;padding:8px 4px;text-align:center}.pz-jh{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);border-bottom:1px solid var(--line)}.pz-jr{cursor:pointer;border-bottom:1px solid var(--line)}.pz-jr span:first-child{text-align:left}.pz-jr span:last-child{text-align:right}.pz-jh span:last-child{text-align:right}.pz-jh span:first-child{text-align:left}.pz-jd{padding:6px 10px;font-size:12px;border-bottom:1px solid var(--line);background:var(--field)}
+  .pz-h2{font-size:16px;margin:18px 0 4px}
+.pz-sec{font-size:15px}`; document.head.appendChild(st);
 
   // L'onglet « Pronos » s'ouvre ici au lieu d'aller sur prono.html ; actions sur les paris
   document.addEventListener('click', e => {
@@ -1262,6 +1406,16 @@
       else if (k === 'cbmore') { cbN += 15; decorer(); }
       else if (k === 'stsp') { stSport = z.dataset.k; decorer(); }
       else if (k === 'stper') { stPer = +z.dataset.k; decorer(); }
+      else if (k === 'stdc') { stDcPer = +z.dataset.k; decorer(); }
+      else if (k === 'stsans') { stSans = !stSans; decorer(); }
+      else if (k === 'stjour') { const d = z.dataset.k; if (stJ.has(d)) stJ.delete(d); else stJ.add(d); decorer(); }
+      else if (k === 'stopen') { const c = z.dataset.k; stOpen[c] = !stOpen[c]; decorer(); }
+      else if (k === 'stmode') { stMode = z.dataset.k; stSave(); decorer(); }
+      else if (k === 'stcomp') { const c = z.dataset.k; if (stComp.has(c)) stComp.delete(c); else stComp.add(c); stSave(); decorer(); }
+      else if (k === 'stcompall') { const cat = z.dataset.k, on = z.checked; const S0 = lireN(); S0.football.filter(b => stReg(b) && ((stCat(b.comp) || 'Autres / Non classés') === cat)).forEach(b => { const kk = (b.comp || 'Non spécifié').trim(); if (on) stComp.add(kk); else stComp.delete(kk); }); stSave(); decorer(); }
+      else if (k === 'stmk') { const m = z.dataset.k; stMk = stMk === m ? null : m; decorer(); }
+      else if (k === 'stco') { const m = z.dataset.k; stCo = stCo === m ? null : m; decorer(); }
+      else if (k === 'streset') { stComp = new Set(); stMk = null; stCo = null; stSave(); decorer(); }
       else if (k === 'autocombo') combinerAuto();
       else if (k === 'totennis') deplacerTennis();
       else if (k === 'csv') exporterCsv();
