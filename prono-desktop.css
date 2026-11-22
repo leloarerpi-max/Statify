@@ -98,3 +98,7 @@
     width:min(580px,90vw);max-height:90vh;overflow:auto;grid-column:auto!important}
   #mainGrid:not(.form-replie)::before{content:"";position:fixed;inset:0;background:rgba(16,35,59,.45);z-index:199}
 }
+@media (min-width:1100px){
+  /* Stats combinés : uniquement dans l'onglet Stats */
+  body:not([data-page=stats]) #comboStatsDetails{display:none!important}
+}
