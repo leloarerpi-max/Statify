@@ -36,8 +36,9 @@
   /* Pages : Pronos (défaut), Combinés, Stats — pilotées par body[data-page] */
   body:not([data-page=stats]) #colD~*,
   body[data-page=combos] #colG,body[data-page=combos] #resumeJour,body[data-page=combos] #vueTabs,
-  body[data-page=stats] #colG,body[data-page=stats] #colD,body[data-page=stats] #resumeJour,body[data-page=stats] #vueTabs{display:none!important}
+  body[data-page=stats] #colG,body[data-page=stats] #combosCard,body[data-page=stats] #resumeJour,body[data-page=stats] #vueTabs{display:none!important}
   body[data-page=combos] #colD{grid-column:1/-1;position:static;max-height:none}
+  body[data-page=stats] #colD{grid-column:1/-1;position:static;max-height:none;overflow:visible}
   body[data-page=stats] #colD~*{grid-column:1/-1}
   /* En-tête = barre de titre fine ; actions (Sync, Exporter…) rangées en bas de la barre latérale */
   #appRoot>div.surface:first-child{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;transform:none!important;filter:none!important;animation:none!important;will-change:auto!important;contain:none!important;opacity:1!important;position:static!important;z-index:auto!important;isolation:auto!important;overflow:visible!important;background:none!important;border:0!important;box-shadow:none!important;padding:0!important;min-height:0}
@@ -54,14 +55,46 @@
   #hdrActions{position:fixed;left:0;bottom:0;width:240px;box-sizing:border-box;flex-direction:column!important;align-items:stretch!important;
     gap:6px!important;padding:12px 14px!important;background:var(--card);border-right:1px solid var(--line);z-index:61;margin:0!important}
   #hdrActions>*{width:100%!important;flex:none!important;justify-content:center}
-  #gnav{padding-bottom:290px!important;overflow-y:auto}
+  #gnav{padding-bottom:200px!important;overflow-y:auto}
 }
 @media (min-width:1100px) and (max-height:760px){
   #hdrActions{display:grid!important;grid-template-columns:1fr 1fr;gap:5px!important;padding:8px 10px!important}
   #hdrActions>#ambianceSelect,#hdrActions>label{grid-column:1/-1}
-  #gnav{padding-bottom:190px!important}
+  #gnav{padding-bottom:170px!important}
 }
 /* Très grands écrans : un peu plus d'air pour la colonne de droite */
 @media (min-width:1900px){
   #trackerViewContent{grid-template-columns:minmax(0,2.2fr) minmax(520px,1fr)!important}
+}
+
+/* ===== Maquette v2 (ordinateur) ===== */
+#btnReglages{display:none}
+@media (min-width:1100px){
+  /* Fond calme : pas de feuilles / confettis */
+  #ambianceCanvas{display:none!important}
+
+  /* Combiné en grand, en premier */
+  #impactBar{display:grid!important;grid-template-columns:2.2fr 1fr 1fr 1fr 1fr auto;align-items:stretch}
+  #impactBar>.ib-cell:nth-child(2){order:-1;border:2px solid #6d3fd1;padding:14px 20px}
+  #impactBar>.ib-cell:nth-child(2) span{color:#6d3fd1;font-weight:800}
+  #impactBar>.ib-cell:nth-child(2) b{font-size:40px}
+  #impactBar>.ib-cell:nth-child(2) span::after{content:" · bilan"}
+
+  /* Barre latérale : Sync, Exporter, Réglages ; le reste derrière « Réglages » */
+  #btnReglages{display:flex!important}
+  #hdrActions #btnTheme,#hdrActions #ambianceSelect,#hdrActions [onclick^="exportJSON"],#hdrActions>label{display:none!important}
+  #hdrActions.open #btnTheme,#hdrActions.open #ambianceSelect,#hdrActions.open [onclick^="exportJSON"],#hdrActions.open>label{display:flex!important}
+  #hdrActions>#btnReglages{order:99}
+
+  /* Historique : un seul bouton principal */
+  button[onclick="ouvrirScores()"],button[onclick="ouvrirGenerateurCombines()"],button[onclick="ouvrirVerifComp()"]{
+    background:var(--card)!important;color:var(--txt)!important;border:1px solid var(--line)!important;box-shadow:none!important}
+  button[onclick="ouvrirVerif()"]{background:var(--acc)!important;color:var(--onacc)!important;box-shadow:none!important}
+
+  /* « + Pari » ouvre le formulaire dans une fenêtre */
+  #mainGrid{grid-template-columns:minmax(0,1fr)!important}
+  #mainGrid.form-replie #formCard{display:none!important}
+  #mainGrid:not(.form-replie) #formCard{position:fixed;z-index:200;top:50%;left:calc(50% + 120px);transform:translate(-50%,-50%);
+    width:min(580px,90vw);max-height:90vh;overflow:auto;grid-column:auto!important}
+  #mainGrid:not(.form-replie)::before{content:"";position:fixed;inset:0;background:rgba(16,35,59,.45);z-index:199}
 }

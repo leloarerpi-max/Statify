@@ -51,6 +51,7 @@
           <i class="fa-solid fa-upload text-amber-600"></i> Importer
           <input type="file" id="importFile" accept=".json,application/json,text/plain,text/json,application/octet-stream" onchange="importJSON(event)" class="hidden">
         </label>
+        <button type="button" id="btnReglages" onclick="document.getElementById('hdrActions').classList.toggle('open')" class="justify-center bg-slate-50 text-slate-700 text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-slate-200">Réglages</button>
       </div>
     </div>
 
@@ -754,6 +755,11 @@ function gnavGo(e,page,view){
   window.scrollTo({top:0});
 }
 (function(){var h=(location.hash||'').slice(1);if(h==='combos'||h==='stats'){document.addEventListener('DOMContentLoaded',function(){var a=document.querySelector('#gnav a[href="#'+h+'"]');gnavGo({preventDefault:function(){},currentTarget:a},h);});}})();
+</script>
+<script>
+document.addEventListener('DOMContentLoaded',function(){if(window.innerWidth>=1100&&typeof basculerFormulaire==='function')basculerFormulaire(true);});
+document.addEventListener('click',function(e){var g=document.getElementById('mainGrid');if(g&&e.target===g&&!g.classList.contains('form-replie')&&window.innerWidth>=1100)basculerFormulaire(true);});
+document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;var g=document.getElementById('mainGrid');if(g&&!g.classList.contains('form-replie')&&window.innerWidth>=1100)basculerFormulaire(true);});
 </script>
 </body>
 </html>
