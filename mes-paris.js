@@ -30,7 +30,7 @@
     if (!cache || Date.now() - cacheT > 3000) { cache = matchs(); cacheT = Date.now(); }
     const [h, a] = cotes(b.match); if (!h || !a) return null;
     const j = b.date ? Date.parse(b.date) : 0;
-    const ok = cache.filter(m => pareil(h, m.hn) && pareil(a, m.an));
+    const ok = cache.filter(m => (pareil(h, m.hn) && pareil(a, m.an)) || (pareil(h, m.an) && pareil(a, m.hn)));   // domicile/extérieur parfois inversés à la saisie
     if (!ok.length) { manque(b); return null; }
     ok.sort((x, y) => Math.abs(Date.parse(x.d) - j) - Math.abs(Date.parse(y.d) - j));
     const m = ok[0];
@@ -163,7 +163,7 @@
   function scoreJambe(l) {
     if (!l.m || !estMT(l.b)) return scoreDe(l.m);
     const ht = scoreMT(l.m); if (!ht || l.m.st === 'pre') return scoreDe(l.m);
-    return `MT ${ht.h}-${ht.a}${ht.final ? '' : ' ·'}<small class="mut" style="display:block;font-weight:600">${scoreDe(l.m)}</small>`;
+    return `${scoreDe(l.m)}<small class="mut" style="display:block;font-weight:600;font-size:11px">MT ${ht.h}-${ht.a}${ht.final ? '' : ' ·'}</small>`;
   }
   function carteCombo(x, edit) {
     const [e, t] = etatCombo(x), cid = esc(x.c.id);
@@ -204,7 +204,9 @@
       if (br && !tabs.querySelector('.pz-brand')) { const c = br.cloneNode(true); c.classList.add('pz-brand'); c.removeAttribute('id'); tabs.prepend(c); }
     }
     const t = document.querySelector('#tabs [data-act=pronos]');
-    if (t) { const s = t.querySelector('span'); if (s && s.textContent !== 'Mes paris') s.textContent = 'Mes paris'; t.classList.toggle('on', !!window.__pzVue); if (D.nbAttente && !t.querySelector('.pz-badge')) t.insertAdjacentHTML('beforeend', `<em class="pz-badge">${D.nbAttente}</em>`); }
+    if (t && grand && !tabs.querySelector('[data-act=pzanalyse]')) { const a = t.cloneNode(false); a.setAttribute('data-act', 'pzanalyse'); a.removeAttribute('id'); a.innerHTML = '<i>🔍</i><span>Analyseur</span>'; t.insertAdjacentElement('afterend', a); }
+    const ta = document.querySelector('#tabs [data-act=pzanalyse]'); if (ta) ta.classList.toggle('on', !!window.__pzVue && filtre === 'analyse');
+    if (t) { const s = t.querySelector('span'); if (s && s.textContent !== 'Mes paris') s.textContent = 'Mes paris'; t.classList.toggle('on', !!window.__pzVue && !(grand && filtre === 'analyse')); if (D.nbAttente && !t.querySelector('.pz-badge')) t.insertAdjacentHTML('beforeend', `<em class="pz-badge">${D.nbAttente}</em>`); }
     if (lsGet(AUTO) === '1' && D.aRegler.length && !window.__pzAuto && !window.__pzFrame) { window.__pzAuto = 1; try { appliquer(D.aRegler, true); } finally { setTimeout(() => { window.__pzAuto = 0; }, 1500); } return; }
     if (window.__pzVue) vueParis(D);
   }
@@ -925,7 +927,7 @@
   // Pages de l'ancien PronoTracker encore accessibles (matchs ATP / cotes, ancienne synchro)
   const FRAMES = { atp: ['🎾 ATP & cotes', 'prono.html?embed=1&sport=tennis'], sync: ['☁️ Synchro PronoTracker', 'prono.html?embed=1&page=reglages'] };
   const TABS = [['cours', 'En cours'], ['hist', 'Historique'], ['analyse', '🔍 Analyseur'], ['combos', '🔀 Combinés'], ['stats', '📊 Stats'], ['reglages', '⚙️ Réglages']];
-  const ongletsHtml = D => { const act = filtre === 'atp' ? 'tennis' : filtre === 'sync' ? 'reglages' : filtre; return TABS.map(([k, l]) => `<button class="${act === k ? '' : 'sec'}" data-pz="f" data-k="${k}">${l}${k === 'cours' && D ? ' · ' + D.nbAttente : ''}</button>`).join(''); };
+  const ongletsHtml = D => { const act = filtre === 'atp' ? 'tennis' : filtre === 'sync' ? 'reglages' : filtre; return TABS.filter(([k]) => !(k === 'analyse' && window.innerWidth >= 1100)).map(([k, l]) => `<button class="${act === k ? '' : 'sec'}" data-pz="f" data-k="${k}">${l}${k === 'cours' && D ? ' · ' + D.nbAttente : ''}</button>`).join(''); };
   function barreCombine(D) {
     sel = new Set([...sel].filter(i => D.ouvertsS.some(s => String(s.b.id) === i)));
     if (!sel.size) return '';
@@ -972,7 +974,7 @@
   }
   function vueParis(D) {
     const v = document.getElementById('view'); if (!v) return;
-    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.act === 'pronos'));
+    { const an = filtre === 'analyse' && window.innerWidth >= 1100; document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', an ? b.dataset.act === 'pzanalyse' : b.dataset.act === 'pronos')); }
     ['railL', 'railR'].forEach(id => { const r = document.getElementById(id); if (r) r.innerHTML = ''; });
     if (FRAMES[filtre]) {
       window.__pzFrame = true;
@@ -1429,8 +1431,10 @@
       else if (k === 'anexport') anExport();
       return;
     }
+    const pa = e.target.closest('#tabs [data-act=pzanalyse]');
+    if (pa) { e.preventDefault(); e.stopImmediatePropagation(); window.__pzVue = true; filtre = 'analyse'; decorer(); window.scrollTo(0, 0); return; }
     const p = e.target.closest('#tabs [data-act=pronos]');
-    if (p) { e.preventDefault(); e.stopImmediatePropagation(); window.__pzVue = true; decorer(); window.scrollTo(0, 0); return; }
+    if (p) { e.preventDefault(); e.stopImmediatePropagation(); window.__pzVue = true; if (filtre === 'analyse' && window.innerWidth >= 1100) filtre = 'cours'; decorer(); window.scrollTo(0, 0); return; }
     if (e.target.closest('#pzOv') === null && document.getElementById('pzOv') && e.target.id === 'pzOv') { fermer(); return; }
     if (e.target.closest('#tabs button') || e.target.closest('[data-act=sport]')) { window.__pzVue = false; window.__pzFrame = false; }
     const m = e.target.closest('[data-act=fmatch]'); if (m) fiche(m.dataset.id);
