@@ -59,7 +59,7 @@ const K={fav:'suivi-tennis-fav',pref:'suivi-tennis-pref',cache:'suivi-tennis-cac
 const jl=(k,d)=>{ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } };
 const js_=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
 const P0=jl(K.pref,{});
-const S={errT:{},tab:['home','today','draw','rank','mine','stats'].includes(P0.tab)?P0.tab:'home',qual:!!P0.qual,dmode:P0.dmode==='list'?'list':'tree',autoDraw:{},tour:P0.tour==='wta'?'wta':'atp',day:0,mine:!!P0.mine,rankN:P0.rankN||50,more:0,
+const S={errT:{},tab:['home','today','draw','rank','mine','paris','stats'].includes(P0.tab)?P0.tab:'home',qual:!!P0.qual,dmode:P0.dmode==='list'?'list':'tree',autoDraw:{},tour:P0.tour==='wta'?'wta':'atp',day:0,mine:!!P0.mine,rankN:P0.rankN||50,more:0,
   fav:jl(K.fav,{}),cache:jl(K.cache,{board:{},rank:{}}),draw:jl(K.draw,{}),busy:{},err:{},open:{},evSel:'',diag:null,pasteT:0};
 S.cache.board=S.cache.board||{}; S.cache.rank=S.cache.rank||{};
 const savePref=()=>js_(K.pref,{tab:S.tab,tour:S.tour,mine:S.mine,rankN:S.rankN,qual:S.qual,dmode:S.dmode});
@@ -452,9 +452,10 @@ function vHome(){ const t=myTour(), k=bKey(t,0), live=allMatches(t).some(m=>m.st
     tzSave(); dragId=null; clean(); render(); });
   document.addEventListener('dragend',()=>{ dragId=null; clean(); });
 })();
-const TABS=[['home','🏠','Accueil'],['today','📅',"Aujourd'hui"],['draw','🏆','Tableau'],['rank','📊','Classement'],['mine','⭐','Mes joueurs'],['stats','📈','Stats ATP']];
+const TABS=[['home','🏠','Accueil'],['today','📅',"Aujourd'hui"],['draw','🏆','Tableau'],['rank','📊','Classement'],['mine','⭐','Mes joueurs'],['paris','🎯','Mes paris'],['stats','📈','Stats ATP']];
 window.tennisRender=function(){ $('#tabs').innerHTML=TABS.map(([k,i,l])=>`<button data-act="tab" data-t="${k}" class="${S.tab===k?'on':''}"><i>${i}</i><span>${esc(l)}</span></button>`).join('');
-  const f={home:vHome,today:vToday,draw:vDraw,rank:vRank,mine:vMine,stats:()=>'<div id="tennisViewContent"></div>'}[S.tab]; $('#view').innerHTML=f(); ensure();
+  const f={home:vHome,today:vToday,draw:vDraw,rank:vRank,mine:vMine,paris:()=>'<div id="pzTennis"></div>',stats:()=>'<div id="tennisViewContent"></div>'}[S.tab]; $('#view').innerHTML=f(); ensure();
+  if(S.tab==='paris') setTimeout(()=>{ try{ window.pzTennis&&window.pzTennis(); }catch(e){} },0);
   // Stats ATP = l'ancien onglet Tennis de PronoTracker (Elo, palmarès, fiches joueurs, duels, historique), affiché ici
   if(S.tab==='stats') setTimeout(()=>{ try{ window.__tennis&&window.__tennis.render(); }catch(e){} },0);
   // les matchs ATP terminés s'enregistrent tout seuls (comme avant dans PronoTracker) dès qu'on ouvre le tennis

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<script>if(/[?&]embed=1/.test(location.search))document.documentElement.classList.add('embed');</script>
   <meta charset="UTF-8">
   <script>try{var t=localStorage.getItem('suivi-nba-theme');if(!t)t=(window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark';document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme='dark'}</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -760,6 +761,11 @@ function gnavGo(e,page,view){
 document.addEventListener('DOMContentLoaded',function(){if(window.innerWidth>=1100&&typeof basculerFormulaire==='function')basculerFormulaire(true);});
 document.addEventListener('click',function(e){var g=document.getElementById('mainGrid');if(g&&e.target===g&&!g.classList.contains('form-replie')&&window.innerWidth>=1100)basculerFormulaire(true);});
 document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;var g=document.getElementById('mainGrid');if(g&&!g.classList.contains('form-replie')&&window.innerWidth>=1100)basculerFormulaire(true);});
+</script>
+<script>
+/* Mode « intégré dans Statify » (?embed=1) : sans barre latérale, ouvert directement sur la page demandée */
+(function(){var q=location.search;if(!/[?&]embed=1/.test(q))return;var sp=(q.match(/[?&]sport=(\w+)/)||[])[1],pg=(q.match(/[?&]page=(\w+)/)||[])[1];
+document.addEventListener('DOMContentLoaded',function(){setTimeout(function(){if(sp==='tennis'&&typeof switchView==='function')switchView('tennis');if(pg==='reglages')document.body.setAttribute('data-page','reglages');},300);});})();
 </script>
 </body>
 </html>

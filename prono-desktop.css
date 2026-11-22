@@ -102,3 +102,17 @@
   /* Stats combinés : uniquement dans l'onglet Stats */
   body:not([data-page=stats]) #comboStatsDetails{display:none!important}
 }
+
+/* ===== Mode intégré dans Statify (prono.html?embed=1) ===== */
+html.embed #gnav,html.embed #ambianceCanvas,html.embed #btnReglages{display:none!important}
+html.embed body{padding:10px 12px 16px!important}
+html.embed #appRoot{max-width:none!important}
+html.embed #appRoot>div:has(>#btnViewTracker){display:none!important}
+html.embed body:not([data-page=reglages]) #appRoot>div.surface:first-child{display:none!important}
+html.embed #hdrActions{position:static!important;width:auto!important;display:flex!important;flex-direction:row!important;flex-wrap:wrap;align-items:center!important;background:none!important;border:0!important;padding:0!important;gap:8px!important}
+html.embed #hdrActions>*{width:auto!important;flex:none!important}
+html.embed #hdrActions #btnTheme,html.embed #hdrActions #ambianceSelect,html.embed #hdrActions [onclick^="exportJSON"],html.embed #hdrActions>label{display:flex!important}
+html.embed body[data-page=reglages] #analyzerViewContent,html.embed body[data-page=reglages] #colG>:not(#quickSettle),html.embed body[data-page=reglages] #colD,html.embed body[data-page=reglages] #colD~*,html.embed body[data-page=reglages] #resumeJour,html.embed body[data-page=reglages] #vueTabs,html.embed body[data-page=reglages] #impactBar{display:none!important}
+html.embed body[data-page=reglages] #trackerViewContent{display:block!important}
+html.embed body[data-page=reglages] #quickSettle{max-width:900px}
+html.embed #mainGrid:not(.form-replie) #formCard{left:50%!important}
