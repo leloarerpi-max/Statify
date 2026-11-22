@@ -37,6 +37,26 @@
     return (!j || Math.abs(Date.parse(m.d) - j) < 2.5 * 864e5) ? m : null;
   }
 
+  /* ---------- Score à la mi-temps (d'après les buts datés de Statify) ---------- */
+  const estMT = b => /mi-temps|1[eè]re mt|\bmt\b|half/i.test(String(b.prono || '')) || /^mi-temps$/i.test(String(b.market || ''));
+  const _dl = new Set();
+  function scoreMT(m) {
+    if (!m || m.st === 'pre') return null;
+    const per = +m.per || 0, fini = m.done || m.st === 'post', hs = +m.hs || 0, as = +m.as || 0;
+    if (m.st === 'in' && per <= 1) return { h: hs, a: as, final: /^ht$|half|mi-temps/i.test(String(m.det || '').trim()) };
+    if (!hs && !as) return { h: 0, a: 0, final: true };
+    const g = ((m.x && m.x.ev) || []).filter(e => e.t === 'g' || e.t === 'pg' || e.t === 'og');
+    if (g.length !== hs + as || g.some(e => e.s !== 'h' && e.s !== 'a')) {
+      if (!m.x && !_dl.has(m.id) && typeof footGet === 'function' && typeof footIngest === 'function') {   // détail des buts pas encore chargé : on le demande une fois
+        _dl.add(m.id);
+        footGet('https://site.api.espn.com/apis/site/v2/sports/soccer/' + m.lg + '/summary?event=' + m.id).then(d => { footIngest({ __foot: 'summary', league: m.lg, id: m.id, data: d }); try { footSave(); } catch (e) {} rafraichir(); }).catch(() => {});
+      }
+      return null;
+    }
+    const p1 = g.filter(e => (+e.m || 0) <= 45);
+    return { h: p1.filter(e => e.s === 'h').length, a: p1.filter(e => e.s === 'a').length, final: true };
+  }
+
   /* ---------- État d'un pari d'après le score ---------- */
   // won = gagné (ou déjà acquis), ok = en passe, live = en cours, pre = à venir, lost = perdu, end = à régler, nf = pas suivi par Statify
   function etatM(b, m) {
@@ -46,7 +66,17 @@
     if (m.st === 'pre') return 'pre';
     const h = +m.hs || 0, a = +m.as || 0, t = h + a, fini = m.done || m.st === 'post';
     const p = String(b.prono || '').toLowerCase();
-    if (/mi-temps|1[eè]re mt|\bmt\b|half/.test(p)) return fini ? 'end' : 'live';
+    if (estMT(b)) {
+      const ht = scoreMT(m); if (!ht) return fini ? 'end' : 'live';
+      const hh = ht.h, aa = ht.a, tt = hh + aa; let bon = null, acq = false, y;
+      if (/deux|btts|both/.test(p)) { bon = hh > 0 && aa > 0; acq = bon; }
+      else if ((y = p.match(/(?:plus de|over|\+)\s*(\d+(?:[.,]\d+)?)/))) { bon = tt > parseFloat(y[1].replace(',', '.')); acq = bon; }
+      else if ((y = p.match(/(?:moins de|under)\s*(\d+(?:[.,]\d+)?)/))) bon = tt < parseFloat(y[1].replace(',', '.'));
+      else { const dom = pareil(p, m.hn), ext = pareil(p, m.an); if (/nul|draw/.test(p) && !dom && !ext) bon = hh === aa; else if (dom) bon = hh > aa; else if (ext) bon = aa > hh; }
+      if (bon === null) return fini ? 'end' : 'live';
+      if (ht.final) return bon ? 'won' : 'lost';
+      return acq ? 'won' : bon ? 'ok' : 'live';
+    }
     let bon = null, acquis = false;
     let x;
     if (/deux|btts|both/.test(p)) { bon = h > 0 && a > 0; acquis = bon; }
@@ -112,7 +142,12 @@
     const ic = { won: '✅', lost: '❌', ok: '🟢', live: '🔴', pre: '⏳', end: '❔', nf: '➖' }[l.e];
     const id = esc(l.b.id), W = l.b.status === 'Won', P = l.b.status === 'Lost';
     const act = edit ? `<span class="pz-act"><button class="sec pz-ib${W ? ' pz-onw' : ''}" data-pz="won" data-id="${id}" title="Marquer gagné">✓ Gagné</button><button class="sec pz-ib${P ? ' pz-onl' : ''}" data-pz="lost" data-id="${id}" title="Marquer perdu">✗ Perdu</button><button class="sec pz-ib" data-pz="edit" data-id="${id}" title="Modifier">✎</button><button class="sec pz-ib" data-pz="del" data-id="${id}" title="Supprimer">🗑</button></span>` : '';
-    return `<div class="pz-leg"><span>${ic}</span><div class="pz-lt"><b ${l.m ? `class="link" data-act="fmatch" data-id="${esc(l.m.id)}"` : ''}>${esc(l.b.match.replace(/\s+vs\s+/i, ' – '))}</b><small class="mut">${esc(l.b.prono)} · ${cote(l.b.odds)}${l.e === 'nf' ? ' · pas suivi par Statify' : ''}</small>${act}</div><b class="pz-sc">${scoreDe(l.m)}</b></div>`;
+    return `<div class="pz-leg"><span>${ic}</span><div class="pz-lt"><b ${l.m ? `class="link" data-act="fmatch" data-id="${esc(l.m.id)}"` : ''}>${esc(l.b.match.replace(/\s+vs\s+/i, ' – '))}</b><small class="mut">${esc(l.b.prono)} · ${cote(l.b.odds)}${l.e === 'nf' ? ' · pas suivi par Statify' : ''}</small>${act}</div><b class="pz-sc">${scoreJambe(l)}</b></div>`;
+  }
+  function scoreJambe(l) {
+    if (!l.m || !estMT(l.b)) return scoreDe(l.m);
+    const ht = scoreMT(l.m); if (!ht || l.m.st === 'pre') return scoreDe(l.m);
+    return `MT ${ht.h}-${ht.a}${ht.final ? '' : ' ·'}<small class="mut" style="display:block;font-weight:600">${scoreDe(l.m)}</small>`;
   }
   function carteCombo(x, edit) {
     const [e, t] = etatCombo(x), cid = esc(x.c.id);
