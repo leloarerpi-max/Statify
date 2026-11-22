@@ -1,0 +1,27 @@
+/* Mise en page ordinateur : barre latérale + page pleine largeur.
+   Chargé après prono.css ; ne s'applique qu'à partir de 1100 px de large. */
+@media (min-width:1100px){
+  body{padding-left:calc(240px + 2rem)!important;padding-bottom:2rem!important}
+
+  /* Navigation : le bandeau du bas devient une barre latérale fixe */
+  #gnav{position:fixed!important;left:0!important;top:0!important;bottom:0!important;transform:none!important;
+    width:240px!important;display:flex!important;flex-direction:column!important;gap:6px!important;
+    padding:24px 14px!important;border-radius:0!important;background:var(--card)!important;
+    border:0!important;border-right:1px solid var(--line)!important;box-shadow:none!important;z-index:60}
+  #gnav::before{content:"PronoTracker Pro";display:block;font-size:20px;font-weight:800;color:var(--txt);padding:0 10px 18px}
+  #gnav a{flex-direction:row!important;justify-content:flex-start!important;gap:12px!important;
+    padding:12px 14px!important;border-radius:12px!important;font-size:15px!important}
+  #gnav a i{font-size:18px}
+  #gnav a span{font-size:15px}
+
+  /* Page pleine largeur (remplace le plafond à 1560 px) */
+  #appRoot,#appRoot:has(#trackerViewContent:not(.hidden)){max-width:2200px!important;margin-left:auto;margin-right:auto}
+
+  /* Deux colonnes de travail : À régler / historique à gauche, Mes combinés à droite */
+  #trackerViewContent{grid-template-columns:minmax(0,2fr) minmax(420px,1fr)!important}
+  #colD{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow-y:auto}
+}
+/* Très grands écrans : un peu plus d'air pour la colonne de droite */
+@media (min-width:1900px){
+  #trackerViewContent{grid-template-columns:minmax(0,2.2fr) minmax(520px,1fr)!important}
+}
