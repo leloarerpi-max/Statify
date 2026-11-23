@@ -475,15 +475,25 @@
     const MOIS = { janvier: 1, fevrier: 2, mars: 3, avril: 4, mai: 5, juin: 6, juillet: 7, aout: 8, septembre: 9, octobre: 10, novembre: 11, decembre: 12 };
     lignes.forEach((l, i) => {
       const n = l.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-      let d = n.match(/^(?:\w+\s+)?(\d{1,2})[\/.-](\d{1,2})(?:[\/.-](\d{2,4}))?\s*$/) , dm = n.match(/^(?:\w+\s+)?(\d{1,2})\s+([a-z]+)(?:\s+(\d{4}))?\s*$/);
+      let d = n.match(/^(?:(?:lun|mar|mer|jeu|ven|sam|dim)[a-z]*\.?\s+)?(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?\s*$/) , dm = n.match(/^(?:\w+\s+)?(\d{1,2})\s+([a-z]+)(?:\s+(\d{4}))?\s*$/);
       if (/^demain\b/.test(n)) { const x = new Date(); x.setDate(x.getDate() + 1); date = x.toLocaleDateString('fr-CA'); return; }
       if (/^aujourd/.test(n)) { date = jour(); return; }
       if (d) { const y = d[3] ? (d[3].length === 2 ? '20' + d[3] : d[3]) : String(new Date().getFullYear()); date = `${y}-${String(d[2]).padStart(2, '0')}-${String(d[1]).padStart(2, '0')}`; return; }
       if (dm && MOIS[dm[2]]) { date = `${dm[3] || new Date().getFullYear()}-${String(MOIS[dm[2]]).padStart(2, '0')}-${String(dm[1]).padStart(2, '0')}`; return; }
       const c = (l.includes('\t') ? l.split('\t') : l.includes('|') ? l.split('|') : l.split(/\s{2,}/)).map(x => x.trim()).filter(Boolean);
-      if (c.length < 4 || !/^\d{1,2}[:hH]\d{2}$/.test(c[0])) return;   // en-tête ou ligne inconnue
-      const heure = c[0].replace(/h/i, ':').padStart(5, '0'), match = c[1], type = c[2].toLowerCase(), pari = c.slice(3).join(' ').trim(), pl = pari.toLowerCase();
-      const eq = match.split(/\s+(?:–|-|vs\.?|contre)\s+|–/).map(x => x.trim()).filter(Boolean); if (eq.length < 2) return;
+      // colonnes reconnues quel que soit leur ordre : date, heure, match, compétition, type, pari, cote, mise
+      const RX_D = /^(?:(?:lun|mar|mer|jeu|ven|sam|dim)[a-z]*\.?\s+)?(?:\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?|\d{1,2}\.\d{1,2}\.\d{2,4})$/i, RX_H = /^\d{1,2}[:hH]\d{2}$/, RX_M = /\s(?:–|-|vs\.?|contre)\s|–/i;
+      const RX_T = /^(btts|les deux|deux [ée]quipes|double chance|dc|1n2|1x2|r[ée]sultat|vainqueur|victoire|over\s*\/?\s*under|plus\s*\/\s*moins|total|buts|mi[\s-]?temps|1re mi|1[eè]re mi|half|buteur)/i;
+      const iM = c.findIndex(x => RX_M.test(' ' + x + ' ') && !RX_D.test(x) && !/^\d/.test(x)); if (iM < 0) return;
+      const iD = c.findIndex(x => RX_D.test(x)), iH = c.findIndex(x => RX_H.test(x)), iT = c.findIndex((x, k) => k !== iM && RX_T.test(x));
+      if (iT < 0) return;   // en-tête ou ligne sans type de pari
+      const iP = c.findIndex((x, k) => k > iT && k !== iM && k !== iD && k !== iH);
+      const reste = c.map((x, k) => ({ x, k })).filter(o => ![iM, iD, iH, iT, iP].includes(o.k));
+      const nums = reste.filter(o => /^\d+(?:[.,]\d+)?\s*€?$/.test(o.x)), comp0 = (reste.find(o => !/^\d+(?:[.,]\d+)?\s*€?$/.test(o.x)) || {}).x || '';
+      let coteTxt = '', miseTxt = ''; nums.forEach(o => { const v = parseFloat(o.x.replace(',', '.')); if (/€/.test(o.x)) miseTxt = v; else if (!coteTxt && v > 1 && /[.,]/.test(o.x)) coteTxt = v; else if (!miseTxt) miseTxt = v; });
+      let dLigne = date; if (iD >= 0) { const q = c[iD].match(/(\d{1,2})[\/.-](\d{1,2})(?:[\/.-](\d{2,4}))?$/); const y = q[3] ? (q[3].length === 2 ? '20' + q[3] : q[3]) : String(new Date().getFullYear()); dLigne = `${y}-${q[2].padStart(2, '0')}-${q[1].padStart(2, '0')}`; }
+      const heure = iH >= 0 ? c[iH].replace(/h/i, ':').padStart(5, '0') : '', match = c[iM], type = c[iT].toLowerCase(); let pari = iP >= 0 ? c[iP] : '', pl = pari.toLowerCase();
+      const eq = match.split(/\s+(?:–|-|vs\.?|contre)\s+|–/i).map(x => x.trim()).filter(Boolean); if (eq.length < 2) return;
       const [h, a] = eq;
       let market = 'Autre', prono = pari, mk = null, sel = null, pt = null, y;
       const cote2t = t => { const [x1, x2] = cote2(t, h, a); return x1 ? 'H' : x2 ? 'A' : null; };
@@ -495,16 +505,16 @@
         else if ((y = pl.match(/(under|moins de|-)\s*(\d+(?:[.,]\d+)?)/))) { pt = parseFloat(y[2].replace(',', '.')); prono = `Moins de ${pt} buts en 1ère MT`; mk = 'totals_h1'; sel = 'under'; }
         else { const t = /nul|^x\b/.test(pl) ? 'D' : cote2t(pari.replace(/\b(1re|1ere|1ère|mt|mi-temps)\b/gi, '')); if (t) { prono = t === 'D' ? 'Nul (MT)' : `Victoire ${t === 'H' ? h : a} (MT)`; mk = 'h2h_3_way_h1'; sel = t; } }
       }
-      else if (/over|under|plus|moins|buts/.test(type) || /^(over|under|plus|moins)/.test(pl)) {
-        market = 'Over/Under';
+      else if (/over|under|plus|moins|buts|total/.test(type) || /^(over|under|plus|moins)/.test(pl)) {
+        market = 'Over/Under'; if (!/\d/.test(pl) && (y = type.match(/(\d+(?:[.,]\d+)?)/))) { pari += ' ' + y[1]; pl = pari.toLowerCase(); }
         if ((y = pl.match(/(over|plus de|\+)\s*(\d+(?:[.,]\d+)?)/))) { pt = parseFloat(y[2].replace(',', '.')); prono = `Plus de ${pt} buts`; mk = 'totals'; sel = 'over'; }
         else if ((y = pl.match(/(under|moins de|-)\s*(\d+(?:[.,]\d+)?)/))) { pt = parseFloat(y[2].replace(',', '.')); prono = `Moins de ${pt} buts`; mk = 'totals'; sel = 'under'; }
       }
       else if (/1n2|1x2|resultat|résultat|vainqueur|victoire/.test(type)) {
-        market = '1N2'; const t = /^(nul|x|n|match nul|draw)$/.test(pl) ? 'D' : pl === '1' ? 'H' : pl === '2' ? 'A' : cote2t(pari);
+        market = '1N2'; const t = /^(nul|x|n|match nul|draw)$/.test(pl) ? 'D' : /^1$/.test(pl) ? 'H' : /^2$/.test(pl) ? 'A' : cote2t(pari);
         if (t) { prono = t === 'D' ? 'Match nul' : (t === 'H' ? h : a); mk = 'h2h'; sel = t; }
       }
-      out.push({ id: Date.now() + i, type: 'Single', status: 'Pending', date, heure, match: `${h} vs ${a}`, h, a, comp: '', market, prono, odds: '', stake: mise, req: mk ? { mk } : null, mk, sel, pt, unres: !mk, oa: mk ? '' : 'Type de pari non reconnu : vérifie le marché et la cote.' });
+      out.push({ id: Date.now() + i, type: 'Single', status: 'Pending', date: dLigne, heure, match: `${h} vs ${a}`, h, a, comp: comp0, market, prono, odds: coteTxt || '', oddsOk: !!coteTxt, stake: miseTxt || mise, req: mk ? { mk } : null, mk, sel, pt, unres: !mk, oa: mk ? '' : 'Type de pari non reconnu : vérifie le marché et la cote.' });
     });
     return out;
   }
