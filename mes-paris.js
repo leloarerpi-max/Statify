@@ -384,6 +384,7 @@
   const OA_BOOKS = [['pinnacle', 'Pinnacle'], ['unibet_fr', 'Unibet'], ['winamax_fr', 'Winamax'], ['betclic_fr', 'Betclic']];
   const oaAutres = () => OA_BOOKS.filter(b => b[0] !== oaCfg().book).map(b => b[1]).join(' / ');
   const oaCfg = () => { try { const c = Object.assign({ key: '', book: 'pinnacle', repli: true, reste: null, maj: 0 }, JSON.parse(lsGet(OA_CFG) || '{}')); if (!c.v2) { c.book = 'pinnacle'; c.v2 = 1; } return c; } catch (e) { return { key: '', book: 'pinnacle', repli: true, reste: null }; } };
+  const oaReduc = () => { const v = parseFloat(String(oaCfg().reduc ?? 8).replace(',', '.')); return v >= 0 && v < 50 ? v : 8; };
   const oaSave = c => { try { localStorage.setItem(OA_CFG, JSON.stringify(c)); } catch (e) {} };
   // compétitions les plus probables d'abord (listes de matchs gratuites)
   const OA_PRIO = ['soccer_uefa_champs_league', 'soccer_uefa_europa_league', 'soccer_uefa_europa_conference_league', 'soccer_france_ligue_one', 'soccer_france_ligue_two', 'soccer_epl', 'soccer_spain_la_liga', 'soccer_italy_serie_a', 'soccer_germany_bundesliga', 'soccer_netherlands_eredivisie', 'soccer_portugal_primeira_liga', 'soccer_belgium_first_div', 'soccer_turkey_super_league', 'soccer_france_coupe_de_france', 'soccer_efl_champ', 'soccer_spain_segunda_division', 'soccer_italy_serie_b', 'soccer_germany_bundesliga2'];
@@ -460,9 +461,9 @@
         L.forEach(r => {
           const p = oaPrix(ev, od || {}, r);
           if (!r.compManuelle) r.comp = OA_COMP[r.sk] || (ev.sport_title || r.comp);
-          if (p) { r.odds = p.odds; r.bk = p.bk; r.oddsOk = true; r.oa = ''; }
-          else {   // ce que l'API a réellement renvoyé pour ce type de pari (pour comprendre et ajuster)
-            const recu = (od && od.bookmakers || []).map(bk => { const ms = (bk.markets || []).filter(x => x.key === r.mk || x.key === 'alternate_' + r.mk), outs = ms.flatMap(x => x.outcomes || []); return outs.length ? (OA_BOOKS.find(b => b[0] === bk.key) || [0, bk.key])[1] + ' : ' + [...new Set(outs.map(o => o.name + (o.point != null ? ' ' + o.point : '')))].slice(0, 6).join(', ') : ''; }).filter(Boolean);
+          if (p) { const red = oaReduc(); r.brut = p.odds; r.odds = red ? Math.round(p.odds * (1 - red / 100) * 100) / 100 : p.odds; r.bk = p.bk + (red ? ' ' + String(p.odds).replace('.', ',') + ' −' + String(red).replace('.', ',') + ' %' : ''); r.oddsOk = true; r.oa = ''; }
+          else { if (r.brut) { r.odds = ''; r.brut = null; r.bk = ''; }   // ce que l'API a réellement renvoyé pour ce type de pari (pour comprendre et ajuster)
+            const recu = (od && od.bookmakers || []).map(bk => { const ms = (bk.markets || []).filter(x => x.key === r.mk || x.key === 'alternate_' + r.mk), outs = ms.flatMap(x => x.outcomes || []); return outs.length ? (OA_BOOKS.find(b => b[0] === bk.key) || [0, bk.key])[1] + ' : ' + [...new Set(outs.filter(o => r.mk.startsWith('totals') ? /^over/i.test(o.name) : true).sort((x, y) => (+x.point || 0) - (+y.point || 0)).map(o => o.name + (o.point != null ? ' ' + o.point : '')))].slice(0, 14).join(', ') : ''; }).filter(Boolean);
             r.oa = recu.length ? 'Cote présente mais pas reconnue → ' + recu.join(' | ') : `Aucun bookmaker ne propose « ${r.mk} » pour ce match : saisis la cote.`;
           }
         });
@@ -573,7 +574,7 @@
   }
   function vueApercu(dup) {
     const mk = marches(), cot = COL.some(b => b.req);
-    ov(`<div class="pz-fm pz-col"><h3>📋 Vérifie avant d'ajouter</h3><p class="mut" style="margin:0">${COL.length} pari(s) analysé(s). Corrige si besoin, décoche ceux à ignorer.${dup ? ` <b>${dup} doublon(s) déjà présent(s) ont été ignorés.</b>` : ''}${cot ? ` Cotes : <b>${esc((OA_BOOKS.find(b => b[0] === oaCfg().book) || OA_BOOKS[0])[1])}</b>${oaCfg().repli ? ' (sinon ${esc(oaAutres())})' : ''} via The Odds API${oaCfg().reste != null ? ` · ${oaCfg().reste} crédits restants` : ''}.` : ''}</p>
+    ov(`<div class="pz-fm pz-col"><h3>📋 Vérifie avant d'ajouter</h3><p class="mut" style="margin:0">${COL.length} pari(s) analysé(s). Corrige si besoin, décoche ceux à ignorer.${dup ? ` <b>${dup} doublon(s) déjà présent(s) ont été ignorés.</b>` : ''}${cot ? ` Cotes : <b>${esc((OA_BOOKS.find(b => b[0] === oaCfg().book) || OA_BOOKS[0])[1])}</b>${oaCfg().repli ? ' (sinon ' + esc(oaAutres()) + ')' : ''}${oaReduc() ? ` · cotes réduites de ${String(oaReduc()).replace('.', ',')} %` : ''} via The Odds API${oaCfg().reste != null ? ` · ${oaCfg().reste} crédits restants` : ''}.` : ''}</p>
       <div class="pz-tbw"><table class="pz-tb pz-colt"><thead><tr><th></th><th class="l">Date</th><th class="l">Match</th><th class="l">Compétition</th><th class="l">Marché</th><th class="l">Pronostic</th><th>Cote</th><th>Mise</th></tr></thead><tbody>
       ${COL.map((b, i) => `<tr class="${b.unres ? 'pz-warn' : ''}"><td><input type="checkbox" data-pz="colinc" data-i="${i}"${b.on !== false ? ' checked' : ''}></td><td><input data-col="${i}" data-f="date" type="date" value="${esc(b.date)}">${b.heure ? `<small class="mut">${esc(b.heure)}</small>` : ''}</td><td><input data-col="${i}" data-f="match" value="${esc(b.match)}"></td><td><input data-col="${i}" data-f="comp" value="${esc(b.comp)}"></td><td><select data-col="${i}" data-f="market">${(mk.includes(b.market) ? mk : mk.concat(b.market)).map(m => `<option${m === b.market ? ' selected' : ''}>${esc(m)}</option>`).join('')}</select></td><td><input data-col="${i}" data-f="prono" value="${esc(b.prono)}"></td><td><input data-col="${i}" data-f="odds" type="number" step="0.01" value="${esc(b.odds)}" style="width:74px"${b.oa && /⏳/.test(b.oa) ? ' placeholder="…"' : ''}>${b.bk ? `<small class="pz-bk">${esc(b.bk)}</small>` : ''}${b.oa ? `<small class="mut pz-oa">${esc(b.oa)}</small>` : ''}</td><td><input data-col="${i}" data-f="stake" type="number" step="0.5" value="${esc(b.stake)}" style="width:60px"></td></tr>`).join('')}
       </tbody></table></div><p class="mut pz-hint">Les lignes en orange : marché non reconnu, à vérifier.${cot && !oaCfg().key ? ' Pour remplir les cotes tout seul, ajoute ta clé The Odds API dans Réglages.' : ''}</p>
@@ -590,7 +591,7 @@
     vueApercu(r.dup);
   }
   function collerValider() {
-    const add = COL.filter(b => b.on !== false).map(b => { const x = Object.assign({}, b); ['on', 'unres', 'heure', 'h', 'a', 'req', 'mk', 'sel', 'pt', 'oa', 'bk', 'ev', 'sk', 'sw', 'oddsOk'].forEach(k => delete x[k]); if (b.bk) x.book = b.bk; x.odds = parseFloat(String(x.odds).replace(',', '.')) || 1; x.stake = parseFloat(String(x.stake).replace(',', '.')) || 1; return x; });
+    const add = COL.filter(b => b.on !== false).map(b => { const x = Object.assign({}, b); ['on', 'unres', 'heure', 'h', 'a', 'req', 'mk', 'sel', 'pt', 'oa', 'bk', 'ev', 'sk', 'sw', 'oddsOk', 'brut', 'compManuelle'].forEach(k => delete x[k]); if (b.bk) x.book = b.bk.split(' ')[0]; if (b.brut) x.coteBrute = b.brut; x.odds = parseFloat(String(x.odds).replace(',', '.')) || 1; x.stake = parseFloat(String(x.stake).replace(',', '.')) || 1; return x; });
     if (!add.length) return;
     fermer(); COL = null;
     const nv = [...new Set(add.map(b => b.market))].filter(m => !marches().includes(m)); if (nv.length) majMarches(m => nv.forEach(t => { if (!m.includes(t)) m.push(t); }));
@@ -2072,6 +2073,7 @@
         <div class="pz-fa"><button class="sec" data-pz="ogen">✨ Générer et choisir les paires…</button><button data-pz="autocombo">Combiner maintenant</button></div></div>
       <div class="card"><h2>💶 Cotes automatiques</h2><p class="mut" style="margin:0 0 10px">Quand tu colles ton tableau de paris, Statify va chercher les cotes chez The Odds API. La clé gratuite (500 crédits par mois) se crée sur the-odds-api.com avec juste un e-mail ; elle reste sur cet appareil. Retrouver les matchs ne coûte rien ; chaque match coûte environ 1 crédit par type de pari.</p>
         <div class="pz-fa" style="margin:0"><input id="pz-oa-key" class="pz-search" type="password" placeholder="Clé The Odds API" value="${esc(oaCfg().key)}"><select id="pz-oa-book" class="pz-sel">${OA_BOOKS.map(([k, l]) => `<option value="${k}"${oaCfg().book === k ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+        <label class="pz-auto" style="margin-top:8px">Réduire les cotes trouvées de <input id="pz-oa-red" class="pz-mini" type="number" step="0.5" min="0" max="49" value="${oaReduc()}"> % <span class="mut">(comme l'Analyseur ; 0 = cote brute)</span></label>
         <label class="pz-auto" style="margin-top:8px"><input type="checkbox" id="pz-oa-repli"${oaCfg().repli ? ' checked' : ''}> Si la cote manque, prendre ${esc(oaAutres())} (le bookmaker est indiqué)</label>
         <div class="pz-fa"><span class="mut">${oaCfg().reste != null ? `Crédits restants ce mois-ci : <b>${oaCfg().reste}</b>` : 'Crédits restants : affichés après la première recherche'}</span><span style="flex:1"></span><button data-pz="oasave">Enregistrer</button></div></div>
       <div class="card"><h2>🛠️ Vérifications</h2><p class="mut" style="margin:0 0 10px">Rien n'est modifié sans ton accord.</p><div class="pz-fa" style="margin:0"><button class="sec" data-pz="overif">🔎 Vérifier mes résultats</button><button class="sec" data-pz="ovc">🏷️ Vérifier les championnats</button></div>
@@ -2307,7 +2309,7 @@
       else if (k === 'colback') vueColler(COL && COL.texte);
       else if (k === 'colok') collerValider();
       else if (k === 'colcote') { const T = COL; T.forEach(r => { if (r.bk) { r.oddsOk = false; } }); Object.keys(OA_OD).forEach(x => delete OA_OD[x]); oaCoter(T, () => { if (COL === T && document.querySelector('#pzOv .pz-col')) vueApercu(0); }); }
-      else if (k === 'oasave') { const c = oaCfg(); c.key = ((document.getElementById('pz-oa-key') || {}).value || '').trim(); c.book = (document.getElementById('pz-oa-book') || {}).value || 'pinnacle'; c.v2 = 1; c.repli = !!(document.getElementById('pz-oa-repli') || {}).checked; oaSave(c); toast(c.key ? 'Cotes automatiques activées' : 'Clé retirée'); decorer(); }
+      else if (k === 'oasave') { const c = oaCfg(); c.key = ((document.getElementById('pz-oa-key') || {}).value || '').trim(); c.book = (document.getElementById('pz-oa-book') || {}).value || 'pinnacle'; c.v2 = 1; c.repli = !!(document.getElementById('pz-oa-repli') || {}).checked; { const v = parseFloat(String((document.getElementById('pz-oa-red') || {}).value || '8').replace(',', '.')); c.reduc = v >= 0 && v < 50 ? v : 8; } oaSave(c); toast(c.key ? 'Cotes automatiques activées' : 'Clé retirée'); decorer(); }
       else if (k === 'sugg') { const p = document.getElementById('pz-p'); if (p) { p.value = z.dataset.v; p.focus(); } }
       else if (k === 'newmatch') { ['pz-m', 'pz-p', 'pz-o'].forEach(i => { const x = document.getElementById(i); if (x) x.value = ''; }); majSugg(); const m = document.getElementById('pz-m'); if (m) m.focus(); }
       else if (k === 'ogen') vueGenerateur();
