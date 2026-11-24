@@ -231,6 +231,11 @@
       return str.toLowerCase().replace(/vs|\-|\_/g, ' ').replace(/\s+/g, ' ').trim();
     }
 
+    // Les paris peuvent arriver d'une autre page (synchro cloud de Statify) : on relit pour ne pas les écraser avec une vieille copie
+    window.addEventListener('storage', e => {
+      if (e.key !== 'prono_tracker_multisport_data' || !e.newValue) return;
+      try { const n = JSON.parse(e.newValue); if (n && typeof n === 'object') { state = n; if (!Array.isArray(state.football)) state.football = []; try { populateCompFilterOptions(); } catch (x) {} try { render(); } catch (x) {} } } catch (x) {}
+    });
     function saveState() {
       localStorage.setItem('prono_tracker_multisport_data', JSON.stringify(state));
       populateCompFilterOptions();

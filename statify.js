@@ -2870,6 +2870,68 @@ async function cloudPull(){
     if(c){ try{ const v=JSON.parse(c); if(k===KEY||k===KEYFO){ try{ localStorage.setItem(k,c); }catch(e){ try{ localStorage.removeItem(k); }catch(x){} } try{ localStorage.setItem('suivi-ts-'+k,String(Date.now())); }catch(e){} await idbSet(k,{t:Date.now(),v}).catch(()=>{}); } else localStorage.setItem(k,c); n++; }catch(e){} } }
   cloud.last=Date.now(); cloud.remote=g.updated_at; cloud.sig=cloudSig(); cloudSave(); return n;
 }
+/* ---------- Paris dans le cloud (espace séparé « Statify - paris », petit et vérifié souvent) ----------
+   Chaque pari / combiné est un élément horodaté. On fusionne élément par élément avec le cloud :
+   ajout d'un côté = ajout partout ; modification = la plus récente gagne ; suppression = transmise (mémorisée 90 jours).
+   Un élément absent du cloud n'est jamais supprimé ici : seules les suppressions marquées comptent. */
+const PARIS_KEY='prono_tracker_multisport_data', PSNAP='suivi-cloud-paris-snap', PTOMB=90*864e5;
+let parisBusy=false, parisAgain=false, parisLocalH='';
+const parisHash=s=>{ let n=0; for(let i=0;i<s.length;i++) n=(n*31+s.charCodeAt(i))|0; return String(n); };
+const parisRead=()=>{ try{ return JSON.parse(localStorage.getItem(PARIS_KEY))||{}; }catch(e){ return {}; } };
+function parisItems(S){ const o={};
+  [['football','f'],['tennis','t']].forEach(([sp,p])=>{ (Array.isArray(S[sp])?S[sp]:[]).forEach(b=>{ if(b&&b.id!=null) o[p+':'+b.id]=b; });
+    ((S.combos&&Array.isArray(S.combos[sp]))?S.combos[sp]:[]).forEach(c=>{ if(c&&c.id!=null) o['c'+p+':'+c.id]=c; }); });
+  return o; }
+async function parisFind(force){
+  if(cloud.pid&&!force) return cloud.pid; let best=null;
+  for(let page=1;page<=10;page++){ const L=await cloudApi('/gists?per_page=100&page='+page); if(!Array.isArray(L)||!L.length) break;
+    for(const g of L) if(g.description==='Statify - paris'&&(!best||g.updated_at>best.updated_at)) best=g; if(L.length<100) break; }
+  if(best&&best.id!==cloud.pid){ cloud.pid=best.id; cloudSave(); }
+  return cloud.pid; }
+async function parisSync(why){
+  if(!cloud.tok) return false; if(parisBusy){ parisAgain=true; return false; } parisBusy=true;
+  try{
+    await parisFind(why==='manual'||!cloud.pid);
+    let g=null; if(cloud.pid){ try{ g=await cloudApi('/gists/'+cloud.pid); }catch(e){ if(!/introuvable/.test(e.message)) throw e; cloud.pid=''; } }
+    let remote={}; const f=g&&g.files&&g.files['paris.json'];
+    if(f){ let c=f.content; if(f.truncated||c==null){ const r=await fetch(f.raw_url); c=await r.text(); } try{ remote=(JSON.parse(c)||{}).items||{}; }catch(e){ remote={}; } }
+    // ce qui a changé ici depuis la dernière synchro
+    const now=Date.now(), S=parisRead(), items=parisItems(S), snap=loadJ(PSNAP,null), first=!snap, loc={};
+    for(const k in items){ const h=parisHash(JSON.stringify(items[k])), s=snap&&snap[k]; loc[k]=first?{v:items[k],h,t:0}:(s&&!s.d&&s.h===h)?{v:items[k],h,t:s.t}:{v:items[k],h,t:now}; }
+    if(!first) for(const k in snap) if(!(k in items)) loc[k]=snap[k].d?{d:true,t:snap[k].t}:{d:true,t:now};
+    // fusion
+    const res={}; new Set([...Object.keys(remote),...Object.keys(loc)]).forEach(k=>{ const L=loc[k], R=remote[k];
+      if(L&&!R){ if(!L.d) res[k]={v:L.v,t:L.t||now}; else res[k]={d:true,t:L.t}; return; }
+      if(!L&&R){ res[k]=R; return; }
+      res[k]=(L.t>R.t)?(L.d?{d:true,t:L.t}:{v:L.v,t:L.t}):R; });
+    for(const k in res) if(res[k].d&&now-res[k].t>PTOMB) delete res[k];
+    // réécriture locale si le cloud a apporté du nouveau (ordre gardé, nouveaux paris en tête)
+    const live=k=>res[k]&&!res[k].d, put=(arr,p)=>{ const old=(Array.isArray(arr)?arr:[]).filter(x=>x&&x.id!=null);
+        const kept=old.filter(x=>live(p+':'+x.id)).map(x=>res[p+':'+x.id].v), seen=new Set(old.map(x=>p+':'+x.id));
+        const added=Object.keys(res).filter(k=>k.startsWith(p+':')&&live(k)&&!seen.has(k)).map(k=>res[k].v);
+        return [...added,...kept]; };
+    const N=Object.assign({},S); N.football=put(S.football,'f'); N.tennis=put(S.tennis,'t');
+    N.combos=Object.assign({},S.combos||{}); N.combos.football=put((S.combos||{}).football,'cf'); N.combos.tennis=put((S.combos||{}).tennis,'ct');
+    const before=JSON.stringify(S), after=JSON.stringify(N), localChanged=before!==after;
+    if(localChanged){ const cur=localStorage.getItem(PARIS_KEY); if(cur!==null&&cur!==before){ parisAgain=true; return false; }   // modifié pendant la synchro : on recommence
+      try{ localStorage.setItem(PARIS_KEY,after); }catch(e){} }
+    // instantané : ce qui est maintenant synchronisé
+    const ns={}; for(const k in res) ns[k]=res[k].d?{d:true,t:res[k].t}:{h:parisHash(JSON.stringify(res[k].v)),t:res[k].t}; saveJ(PSNAP,ns);
+    // envoi si le cloud n'a pas déjà exactement ce résultat
+    if(JSON.stringify(res)!==JSON.stringify(remote)||!cloud.pid){
+      const files={'paris.json':{content:JSON.stringify({v:1,maj:new Date().toISOString(),items:res})}};
+      if(cloud.pid) await cloudApi('/gists/'+cloud.pid,{method:'PATCH',body:JSON.stringify({files})});
+      else{ const ng=await cloudApi('/gists',{method:'POST',body:JSON.stringify({description:'Statify - paris',public:false,files})}); cloud.pid=ng.id; } }
+    parisLocalH=parisHash(localStorage.getItem(PARIS_KEY)||''); cloud.plast=Date.now(); cloudSave();
+    if(localChanged){ try{ render(); }catch(e){} }
+    return localChanged;
+  } finally { parisBusy=false; if(parisAgain){ parisAgain=false; setTimeout(()=>parisSync('again').catch(()=>{}),1500); } }
+}
+// automatique dès qu'un jeton est enregistré : envoi ~5 s après un pari ajouté/modifié, vérification du cloud toutes les 45 s
+setInterval(()=>{ if(!cloud.tok||navigator.onLine===false||parisBusy) return; const h=parisHash(localStorage.getItem(PARIS_KEY)||''); if(parisLocalH&&h!==parisLocalH) parisSync('local').catch(()=>{}); },5000);
+setInterval(()=>{ if(cloud.tok&&!document.hidden&&navigator.onLine!==false) parisSync('poll').catch(()=>{}); },45000);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&cloud.tok&&navigator.onLine!==false&&Date.now()-(cloud.plast||0)>15e3) parisSync('visible').catch(()=>{}); });
+setTimeout(()=>{ if(cloud.tok&&navigator.onLine!==false) parisSync('start').catch(()=>{}); },3000);
 function notifConfig(){
   const nba=[...new Set(nfav.nba)].filter(t=>TEAMS[t]);
   let T={}; try{ T=footIdx().T; }catch(e){}
@@ -2899,12 +2961,13 @@ function cloudMsg(t,ok){ const m=$('#cloudmsg'); if(m){ m.textContent=t; m.style
 function cloudRender(){
   const b=$('#cloudbody'), when=cloud.last?new Date(cloud.last).toLocaleString('fr-FR'):'jamais';
   b.innerHTML=`<h2 style="margin-top:0">☁️ Cloud : téléphone et ordinateur synchronisés</h2>
-  <p class="mut">Tes favoris, notes, matchs et réglages sont copiés dans un espace <b>privé</b> de ton compte GitHub (un « Gist »). Sur chaque appareil : colle le même jeton.</p>
+  <p class="mut">Tes favoris, notes, matchs, réglages <b>et tes paris</b> sont copiés dans un espace <b>privé</b> de ton compte GitHub (un « Gist »). Sur chaque appareil : colle le même jeton.</p>
   <ol class="mut" style="padding-left:18px;margin:6px 0 10px"><li>Sur github.com : Settings → Developer settings → Personal access tokens → <i>Tokens (classic)</i> → Generate new token.</li><li>Coche seulement la case <b>gist</b>, valide, copie le jeton.</li><li>Colle-le ci-dessous. Sur le 2<sup>e</sup> appareil, colle le même jeton puis « Récupérer ».</li></ol>
   <input id="cloudtok" type="password" placeholder="Jeton GitHub (ghp_…)" value="${esc(cloud.tok)}" autocomplete="off" style="width:100%;box-sizing:border-box">
   <div class="row" style="margin:10px 0"><button id="cloudup">⬆️ Envoyer vers le cloud</button><button class="sec" id="clouddown">⬇️ Récupérer depuis le cloud</button></div>
   <label style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;cursor:pointer"><input type="checkbox" id="cloudauto" style="width:auto;flex:none" ${cloud.auto?'checked':''}><span>Envoi automatique quand mes données changent</span></label>
   <p class="mut" style="margin:8px 0 0">Dernière synchro : ${esc(when)}${cloud.gid?'':' · espace pas encore créé'}</p>
+  <p class="mut" style="margin:2px 0 0">🎯 Paris : synchronisés automatiquement${cloud.plast?' · dernière fois '+esc(new Date(cloud.plast).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})):(cloud.tok?' · première synchro en cours…':' dès que le jeton est collé')}</p>
   <p id="cloudmsg" style="margin:6px 0 0;min-height:1.3em"></p>
   ${(()=>{ const n=notifConfig(), none=!n.cfg.nba.length&&!n.cfg.foot.teams.length&&!n.cfg.foot.matches.length, on=!!cloud.nid, when=cloud.nlast?new Date(cloud.nlast).toLocaleString('fr-FR'):'';
     return `<hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
@@ -2948,8 +3011,8 @@ $('#cloud').addEventListener('click',async e=>{
   if(id==='cloudup'||id==='clouddown'){
     cloud.tok=($('#cloudtok').value||'').trim(); cloudSave();
     try{
-      if(id==='cloudup'){ cloudMsg('Envoi…',true); await cloudPush(true); cloudMsg('✓ Envoyé. Colle le même jeton sur ton autre appareil, puis « Récupérer ».',true); }
-      else{ if(!confirm('Remplacer les données de cet appareil par celles du cloud ?')) return; cloudMsg('Récupération…',true); const n=await cloudPull(); cloudMsg('✓ '+n+' élément(s) récupéré(s). Rechargement…',true); setTimeout(()=>location.reload(),900); }
+      if(id==='cloudup'){ cloudMsg('Envoi…',true); await cloudPush(true); await parisSync('manual'); cloudMsg('✓ Envoyé. Colle le même jeton sur ton autre appareil, puis « Récupérer ».',true); }
+      else{ if(!confirm('Remplacer les données de cet appareil par celles du cloud ?')) return; cloudMsg('Récupération…',true); const n=await cloudPull(); await parisSync('manual').catch(()=>{}); cloudMsg('✓ '+n+' élément(s) récupéré(s). Rechargement…',true); setTimeout(()=>location.reload(),900); }
       if(id==='cloudup') cloudRender(), cloudMsg('✓ Envoyé. Sur ton autre appareil : colle le même jeton, puis « Récupérer ».',true);
     }catch(err){ cloudMsg('⚠️ '+(err.message==='Failed to fetch'?'Pas de réseau':err.message),false); }
   }
