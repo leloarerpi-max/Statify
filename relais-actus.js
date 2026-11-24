@@ -1,6 +1,7 @@
 // Relais Statify : lit une page de basketusa.com à ta place (un navigateur ne peut pas le faire seul).
-// Il n'accepte QUE les pages de basketusa.com, et ne répond qu'à ton site Statify.
-const ALLOWED_HOSTS = ['www.basketusa.com', 'basketusa.com'];
+// Il n'accepte QUE basketusa.com et les données de l'Euroligue, et ne répond qu'à ton site Statify.
+const ALLOWED_HOSTS = ['www.basketusa.com', 'basketusa.com', 'api-live.euroleague.net', 'live.euroleague.net'];
+const LIVE_HOSTS = ['api-live.euroleague.net', 'live.euroleague.net'];   // scores en direct : cache court
 const ALLOWED_ORIGINS = ['https://leloarerpi-max.github.io'];
 
 export default {
@@ -27,15 +28,16 @@ export default {
       const r = await fetch(target.href, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept': LIVE_HOSTS.includes(target.hostname) ? 'application/json' : 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'fr-FR,fr;q=0.9'
         },
         redirect: 'follow',
-        cf: { cacheTtl: 300, cacheEverything: true }
+        cf: { cacheTtl: LIVE_HOSTS.includes(target.hostname) ? 15 : 300, cacheEverything: true }
       });
+      const ttl = LIVE_HOSTS.includes(target.hostname) ? 15 : 300;
       return new Response(await r.text(), {
         status: r.status,
-        headers: { ...cors, 'content-type': r.headers.get('content-type') || 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=300' }
+        headers: { ...cors, 'content-type': r.headers.get('content-type') || 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=' + ttl }
       });
     } catch (e) {
       return new Response('relais : ' + (e && e.message || e), { status: 502, headers: cors });

@@ -89,7 +89,9 @@ function saveBox(){ clearTimeout(boxT); boxT=setTimeout(()=>{ try{ idbSet(K.box,
 
 /* ---------- 4. Chargement ---------- */
 async function jget(u){ const errs=[];
-  for(const x of [u,PROXY(u)]){ const c=new AbortController(), t=setTimeout(()=>c.abort(),15000);
+  // ton relais Cloudflare (le même que pour les actus) passe avant corsproxy.io, devenu payant hors localhost
+  let rl=''; try{ rl=(localStorage.getItem('suivi-news-relay')||'').trim().replace(/\/+$/,''); }catch(e){}
+  for(const x of [u,...(rl?[rl+'/?url='+encodeURIComponent(u)]:[]),PROXY(u)]){ const c=new AbortController(), t=setTimeout(()=>c.abort(),15000);
     try{ const r=await fetch(x,{cache:'no-store',signal:c.signal}); if(!r.ok){ errs.push('HTTP '+r.status); continue; } const tx=await r.text(); if(!tx.trim()) return null; return JSON.parse(tx); }
     catch(e){ errs.push(e.name==='AbortError'?'délai dépassé':(e.message||String(e))); } finally{ clearTimeout(t); } }
   throw new Error(errs.join(' / ')); }
