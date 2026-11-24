@@ -2837,17 +2837,33 @@ async function cloudApi(path,opt={}){
   if(!r.ok){ const t=await r.text().catch(()=>''); throw new Error(r.status===401?'Jeton refusé (vérifie-le)':r.status===404?'Espace cloud introuvable':('Erreur '+r.status+' '+t.slice(0,80))); }
   return r.json();
 }
-async function cloudPush(){
+// Un appareil qui n'a que le jeton ne connaît pas l'espace cloud déjà créé par l'autre appareil :
+// on le retrouve dans le compte GitHub (le plus récent « Statify - sauvegarde ») au lieu d'en créer un second.
+async function cloudFind(force){
+  if(cloud.gid&&!force) return cloud.gid;
+  let best=null;
+  for(let page=1;page<=10;page++){
+    const L=await cloudApi('/gists?per_page=100&page='+page); if(!Array.isArray(L)||!L.length) break;
+    for(const g of L) if(g.description==='Statify - sauvegarde'&&(!best||g.updated_at>best.updated_at)) best=g;
+    if(L.length<100) break;
+  }
+  if(best&&best.id!==cloud.gid){ cloud.gid=best.id; cloudSave(); }
+  return cloud.gid;
+}
+async function cloudPush(manual){
   if(!cloud.tok) throw new Error('Ajoute d\'abord ton jeton GitHub');
+  await cloudFind(!!manual);   // à la main : on vérifie qu'on écrit bien dans l'espace le plus récent
   const files=cloudData(); if(!Object.keys(files).length) throw new Error('Rien à envoyer');
   files['LISEZMOI.txt']={content:'Sauvegarde Statify - ne pas modifier à la main.'};
   let g;
-  if(cloud.gid) g=await cloudApi('/gists/'+cloud.gid,{method:'PATCH',body:JSON.stringify({files})});
-  else g=await cloudApi('/gists',{method:'POST',body:JSON.stringify({description:'Statify - sauvegarde',public:false,files})});
+  if(cloud.gid){ try{ g=await cloudApi('/gists/'+cloud.gid,{method:'PATCH',body:JSON.stringify({files})}); }catch(e){ if(!/introuvable/.test(e.message)) throw e; cloud.gid=''; await cloudFind(); if(cloud.gid) g=await cloudApi('/gists/'+cloud.gid,{method:'PATCH',body:JSON.stringify({files})}); } }
+  if(!g&&cloud.gid) throw new Error('Espace cloud introuvable');
+  if(!g) g=await cloudApi('/gists',{method:'POST',body:JSON.stringify({description:'Statify - sauvegarde',public:false,files})});
   cloud.gid=g.id; cloud.last=Date.now(); cloud.sig=cloudSig(); cloud.remote=g.updated_at; cloudSave(); return g;
 }
 async function cloudPull(){
-  if(!cloud.tok||!cloud.gid) throw new Error('Rien à récupérer : envoie d\'abord depuis l\'autre appareil');
+  if(!cloud.tok) throw new Error('Ajoute d\'abord ton jeton GitHub');
+  if(!(await cloudFind(true))) throw new Error('Rien à récupérer : envoie d\'abord depuis l\'autre appareil');
   const g=await cloudApi('/gists/'+cloud.gid); let n=0;
   for(const [name,f] of Object.entries(g.files||{})){ const k=name.replace(/\.json$/,''); if(!CLOUD_KEYS.includes(k)) continue;
     let c=f.content; if(f.truncated||c==null){ const r=await fetch(f.raw_url); c=await r.text(); }
@@ -2932,7 +2948,7 @@ $('#cloud').addEventListener('click',async e=>{
   if(id==='cloudup'||id==='clouddown'){
     cloud.tok=($('#cloudtok').value||'').trim(); cloudSave();
     try{
-      if(id==='cloudup'){ cloudMsg('Envoi…',true); await cloudPush(); cloudMsg('✓ Envoyé. Colle le même jeton sur ton autre appareil, puis « Récupérer ».',true); }
+      if(id==='cloudup'){ cloudMsg('Envoi…',true); await cloudPush(true); cloudMsg('✓ Envoyé. Colle le même jeton sur ton autre appareil, puis « Récupérer ».',true); }
       else{ if(!confirm('Remplacer les données de cet appareil par celles du cloud ?')) return; cloudMsg('Récupération…',true); const n=await cloudPull(); cloudMsg('✓ '+n+' élément(s) récupéré(s). Rechargement…',true); setTimeout(()=>location.reload(),900); }
       if(id==='cloudup') cloudRender(), cloudMsg('✓ Envoyé. Sur ton autre appareil : colle le même jeton, puis « Récupérer ».',true);
     }catch(err){ cloudMsg('⚠️ '+(err.message==='Failed to fetch'?'Pas de réseau':err.message),false); }
