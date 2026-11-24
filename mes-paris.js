@@ -21,7 +21,10 @@
   const STOP = new Set(['fc', 'sv', 'ac', 'as', 'cf', 'sc', 'afc', 'ssc', 'us', 'estac', 'fsv', 'vfb', 'vfl', 'tsg', 'rc', 'og', 'ca', 'cd', 'ud', 'sd', 'de', 'la', 'le', 'club', 'city']);
   // équivalences de noms (reprises de PronoTracker) : « Man Utd » = « Manchester United », « PSG » = « Paris Saint-Germain »…
   const ALIAS = { psg: ['paris', 'saint', 'germain'], om: ['marseille'], ol: ['lyon'], utd: ['united'], man: ['manchester'], spurs: ['tottenham'], barca: ['barcelona'], atleti: ['atletico'], atm: ['atletico'], praha: ['prague'], prag: ['prague'], hambourg: ['hamburg'], hamburger: ['hamburg'], valence: ['valencia'], olympiakos: ['olympiacos'], bruges: ['brugge'], kiev: ['kyiv'], wien: ['vienna'], koln: ['cologne'], kln: ['cologne'], koeln: ['cologne'], dynamo: ['dinamo'], lisboa: ['lisbon'], gladbach: ['monchengladbach'], mnchen: ['munich'], munchen: ['munich'], muenchen: ['munich'], bayern: ['bayern', 'munich'], bodoglimt: ['bodo', 'glimt'], bvb: ['dortmund'], juve: ['juventus'], wolves: ['wolverhampton'], nottm: ['nottingham'], forest: ['nottingham'], sheff: ['sheffield'], qpr: ['queens', 'park', 'rangers'], 'w': [] };
-  const mots = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).flatMap(w => ALIAS[w] || [w]).filter(w => w.length >= 3 && !STOP.has(w));
+  // perf : les mêmes noms d'équipes reviennent des milliers de fois → on garde le résultat en mémoire
+  const _motsC = new Map();
+  const mots = s => { const k = String(s || ''); let r = _motsC.get(k); if (r) return r; if (_motsC.size > 20000) _motsC.clear(); r = _mots(k); _motsC.set(k, r); return r; };
+  const _mots = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).flatMap(w => ALIAS[w] || [w]).filter(w => w.length >= 3 && !STOP.has(w));
   // quel côté désigne le pronostic : compte les mots en commun (utile pour « Man Utd » / « Man City »)
   const proche = (x, y) => { const a = mots(x), b = mots(y); return a.filter(u => b.some(v => u === v || (u.length >= 4 && v.length >= 4 && (u.startsWith(v) || v.startsWith(u))))).length; };
   const brut = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).flatMap(w => ALIAS[w] || [w]).filter(w => w.length >= 3);
@@ -33,15 +36,31 @@
     try { const ex = {}; extListe().forEach(m => { ex[m.id.slice(1)] = m; }); const ids = new Set(); const base = Object.entries(foot.leagues || {}).flatMap(([lg, L]) => Object.values(L.matches || {}).map(m => { const c = Object.assign({ lg }, m), e = ex[String(m.id)]; ids.add(String(m.id)); if (e) { if (!c.ht) c.ht = e.ht; if (!(c.x && c.x.ev && c.x.ev.length)) c.x = e.x; } return c; })); return base.concat(extListe().filter(m => !ids.has(m.id.slice(1)))); } catch (e) { return []; }
   }
   let cache = null, cacheT = 0;
+  // perf : résultat de la recherche gardé par pari tant que la liste des matchs n'a pas été rechargée
+  // (on garde l'id du match trouvé ; on renvoie toujours l'objet à jour, donc les scores en direct restent frais)
+  let _tmNoms = { gen: null, liste: [] }, _tmC = new Map(), _tmGen = null, _tmSig = '', _tmId = new Map();
   function trouverM(b) {
     if (!cache || Date.now() - cacheT > 3000) { cache = matchs(); cacheT = Date.now(); }
+    if (_tmGen !== cache) {
+      _tmGen = cache; _tmId = new Map(); cache.forEach(m => { const k = String(m.id); if (!_tmId.has(k)) _tmId.set(k, m); });
+      const sig = cache.length + ':' + cache.map(m => m.id + '/' + m.d).join(',');
+      if (sig !== _tmSig) { _tmSig = sig; _tmC = new Map(); }   // nouveaux matchs chargés : on recherche à nouveau
+    }
+    const ck = String(b.match) + '|' + (b.date || '') + '|' + (b.status || '');
+    if (_tmC.has(ck)) { const id = _tmC.get(ck); return id == null ? null : (_tmId.get(id) || null); }
+    const r = _trouverM(b); _tmC.set(ck, r ? String(r.id) : null); return r;
+  }
+  function _trouverM(b) {
     const [h, a] = cotes(b.match); if (!h || !a) return null;
     const j = b.date ? Date.parse(b.date) : 0;
-    const ok = cache.filter(m => (pareil(h, m.hn) && pareil(a, m.an)) || (pareil(h, m.an) && pareil(a, m.hn)));   // domicile/extérieur parfois inversés à la saisie
+    // perf : on compare d'abord aux noms d'équipes distincts (quelques centaines) plutôt qu'à chaque match (plusieurs milliers)
+    if (_tmNoms.gen !== cache) { const n = new Set(); cache.forEach(m => { n.add(m.hn); n.add(m.an); }); _tmNoms = { gen: cache, liste: [...n] }; }
+    const okH = new Set(_tmNoms.liste.filter(n => pareil(h, n))), okA = new Set(_tmNoms.liste.filter(n => pareil(a, n)));
+    const ok = cache.filter(m => (okH.has(m.hn) && okA.has(m.an)) || (okH.has(m.an) && okA.has(m.hn)));   // domicile/extérieur parfois inversés à la saisie
     if (!ok.length) { if (b.status !== 'Won' && b.status !== 'Lost') manque(b); return null; }
-    ok.sort((x, y) => Math.abs(Date.parse(x.d) - j) - Math.abs(Date.parse(y.d) - j));
-    const m = ok[0];
-    return (!j || Math.abs(Date.parse(m.d) - j) < 2.5 * 864e5) ? m : null;
+    let m = ok[0], best = Math.abs(Date.parse(m.d) - j);   // le plus proche de la date du pari (sans trier toute la liste)
+    for (let i = 1; i < ok.length; i++) { const e = Math.abs(Date.parse(ok[i].d) - j); if (e < best) { best = e; m = ok[i]; } }
+    return (!j || best < 2.5 * 864e5) ? m : null;
   }
 
   /* ---------- Score à la mi-temps (d'après les buts datés de Statify) ---------- */
@@ -2351,5 +2370,5 @@
     render = function () { if (window.__pzVue && window.__pzFrame && document.querySelector('#view iframe.pz-if')) return; const r = avant.apply(this, arguments); try { decorer(); } catch (e) {} return r; };
   }
   try { decorer(); } catch (e) {}
-  setInterval(() => { try { decorer(); } catch (e) {} }, 5000);
+  setInterval(() => { if (document.hidden) return; try { decorer(); } catch (e) {} }, 5000);
 })();
