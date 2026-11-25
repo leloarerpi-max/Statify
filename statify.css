@@ -734,3 +734,13 @@ tr.chiprow td{border-top:0!important;padding-top:0!important}tr.chiprow .gt-chip
 .lbar i.mxdot-in{animation:mxdot .5s cubic-bezier(.3,1.6,.5,1) 1.5s both}
 @keyframes mxdot{from{transform:scale(0)}to{transform:scale(1)}}
 @media (prefers-reduced-motion: reduce){.mxflip.anim,.mxflip.anim .o,.mxflip.anim .n,.lbar i.mxdot-in{animation:none}.mxflip.anim .o{visibility:hidden}}
+
+/* barre de temps dans les cartes compactes (les règles d'origine ne visent que .liverow) */
+.mxc{position:relative;overflow:hidden}
+.mxc .lbar{position:relative;height:6px;background:var(--line);border-radius:3px;margin:10px 6px 8px;flex:none}
+.mxc .lm-lg{width:28px;height:28px;flex:none;font-size:10px}
+.mxc .lm-lg img{width:20px;height:20px}
+.mxc-tp{gap:4px}.mxc-tm{gap:5px;font-size:13px}
+.mxl-r .lm-lg{width:18px;height:18px;box-shadow:0 1px 3px #0002;flex:none}
+.mxl-r .lm-lg img{width:14px;height:14px}
+@media(max-width:699px){.mxtab .fbtn{padding:6px 10px;font-size:12.5px;min-height:34px}}
