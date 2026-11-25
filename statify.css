@@ -718,3 +718,19 @@ tr.chiprow td{border-top:0!important;padding-top:0!important}tr.chiprow .gt-chip
 .mxl-i{font-size:11px;color:var(--mut)}.mxl-i b{color:#ff8a78}
 .mxl-s{display:flex;flex-direction:column;gap:2px;font-size:16px;font-weight:900;text-align:right;line-height:1.25}
 .mxl-d{width:9px;height:9px;border-radius:50%}.mxl-d.ok{background:var(--ok)}.mxl-d.wt{background:#e0a010}.mxl-d.ko{background:var(--bad)}
+
+/* ---------- Score qui bascule ---------- */
+.mxflip{display:inline-grid;overflow:hidden;vertical-align:bottom;line-height:1.05}
+.mxflip i{grid-area:1/1;font-style:normal}
+.mxflip.anim .o{animation:mxflo .45s cubic-bezier(.2,.8,.2,1) .25s both}
+.mxflip.anim .n{animation:mxfln .45s cubic-bezier(.2,.8,.2,1) .25s both}
+.mxflip.anim{animation:mxflp .6s ease-out .75s both}
+.mxflip.anim.slow .o{animation-delay:.9s}
+.mxflip.anim.slow .n{animation-delay:.9s}
+.mxflip.anim.slow{animation-delay:1.4s}
+@keyframes mxflo{from{transform:translateY(0);opacity:1}to{transform:translateY(-110%);opacity:0}}
+@keyframes mxfln{from{transform:translateY(110%);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes mxflp{0%{transform:scale(1);color:inherit}40%{transform:scale(1.35);color:var(--ok)}100%{transform:scale(1);color:inherit}}
+.lbar i.mxdot-in{animation:mxdot .5s cubic-bezier(.3,1.6,.5,1) 1.5s both}
+@keyframes mxdot{from{transform:scale(0)}to{transform:scale(1)}}
+@media (prefers-reduced-motion: reduce){.mxflip.anim,.mxflip.anim .o,.mxflip.anim .n,.lbar i.mxdot-in{animation:none}.mxflip.anim .o{visibility:hidden}}

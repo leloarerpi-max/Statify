@@ -3200,6 +3200,20 @@ function liveFootRow(x,mine,rk,go,fl,barHtml,lg,rich){
     ${barHtml}${lastHtml}${rkHtml?`<div class="lm-rks">${rkHtml}</div>`:''}</div>`;
 }
 /* ================= Onglet Multiplex : les cartes « En direct », enrichies ================= */
+/* score qui bascule (panneau de stade) : l'ancien chiffre part vers le haut, le nouveau arrive par le bas puis grossit */
+const mxReduce=()=>{ try{ return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){ return false; } };
+const mxFlipHtml=(o,n,slow)=>`<span class="mxflip anim${slow?' slow':''}"><i class="o">${o}</i><i class="n">${n}</i></span>`;
+function mxScoreHtml(x){ const m=liveMem['f'+x.id], now=Date.now();
+  if(!mxReduce()&&m&&m.sd&&!m.vd&&now-m.chg<5000){ const [oh,oa]=String(m.old||'').split('-').map(Number);
+    const h=!isNaN(oh)&&oh!==x.h.s?mxFlipHtml(oh,x.h.s):x.h.s, a=!isNaN(oa)&&oa!==x.a.s?mxFlipHtml(oa,x.a.s):x.a.s; return h+'<small> – </small>'+a; }
+  return x.h.s+'<small> – </small>'+x.a.s; }
+// sur la carte du but (au premier plan) : on part de l'ancien score, le chiffre bascule après un court instant, puis le point du but apparaît sur la barre
+function mxFlipDom(el,old,x,sd,slow){ if(!el||!old||mxReduce()) return; const [oh,oa]=String(old).split('-').map(Number), sp=el.querySelectorAll(':scope > span');
+  if(sp.length<2) return;
+  if(!isNaN(oh)&&oh!==x.h.s) sp[0].innerHTML=mxFlipHtml(oh,x.h.s,slow);
+  if(!isNaN(oa)&&oa!==x.a.s) sp[1].innerHTML=mxFlipHtml(oa,x.a.s,slow);
+  sp.forEach(z=>z.classList.remove('pop','shk'));
+  const box=el.closest('.liverow'), mk=box&&box.querySelectorAll('.lbar i.'+sd); if(mk&&mk.length) mk[mk.length-1].classList.add('mxdot-in'); }
 /* paris qui basculent pendant un match : « Ton pari repasse ! » / « ne passe plus » */
 function mxBetWatch(){
   if(ui.sport!=='foot') return;
@@ -3252,8 +3266,8 @@ async function mxFeedTick(){
 /* but : le match passe devant 8 s, puis retour au multiplex */
 const mxFQ=[]; let mxFOn=null, mxFT=0;
 const mxFrontPref=()=>{ try{ return localStorage.getItem('suivi-mx-front')!=='0'; }catch(e){ return true; } };
-function mxFrontPush(id,sd){ if(ui.sport!=='foot'||ui.ftab!=='multi'||!mxFrontPref()||document.hidden) return;
-  if((mxFOn&&mxFOn.id===id)||mxFQ.some(q=>q.id===id)) return; if(mxFQ.length>=3) mxFQ.shift(); mxFQ.push({id,sd}); if(!mxFOn) mxFrontNext(); }
+function mxFrontPush(id,sd,old){ if(ui.sport!=='foot'||ui.ftab!=='multi'||!mxFrontPref()||document.hidden) return;
+  if((mxFOn&&mxFOn.id===id)||mxFQ.some(q=>q.id===id)) return; if(mxFQ.length>=3) mxFQ.shift(); mxFQ.push({id,sd,old}); if(!mxFOn) mxFrontNext(); }
 function mxFrontClose(){ clearInterval(mxFT); const o=document.getElementById('mxFront'); if(o) o.remove(); mxFOn=null; setTimeout(mxFrontNext,300); }
 function mxFrontNext(){ const q=mxFQ.shift(); if(!q) return; const x=(liveData.items||[]).find(y=>y.k==='f'&&y.id===q.id); if(!x){ mxFrontNext(); return; }
   mxFOn={id:q.id,end:Date.now()+8000};
@@ -3261,6 +3275,7 @@ function mxFrontNext(){ const q=mxFQ.shift(); if(!q) return; const x=(liveData.i
   const rk=liveRank(x.lg), body=liveFootRow(x,ffav.includes(x.h.id)||ffav.includes(x.a.id),rk,'','',liveBarHtml(x),footLgName(x.lg),true);
   o.innerHTML=`<div class="mxf-bg" data-act="mxfclose"></div><div class="mxf-box" role="dialog" aria-label="But"><div class="mxf-top"><b>BUT !${tm?' '+esc(tm):''}</b><span><span id="mxfCd">retour au multiplex dans 8 s</span><button data-act="mxfclose">Revenir au multiplex</button></span></div><div class="mxbig">${body}</div></div>`;
   document.body.appendChild(o);
+  try{ mxFlipDom(o.querySelector('.lm-s'),q.old,x,q.sd,true); }catch(e){}
   mxFT=setInterval(()=>{ const left=Math.ceil((mxFOn.end-Date.now())/1000), c=document.getElementById('mxfCd'); if(left<=0) mxFrontClose(); else if(c) c.textContent='retour au multiplex dans '+left+' s'; },250); }
 document.addEventListener('click',e=>{ if(e.target.closest('[data-act=mxfclose]')){ e.stopPropagation(); mxFrontClose(); } },true);
 document.addEventListener('change',e=>{ if(e.target.matches&&e.target.matches('[data-act=mxfront]')){ try{ localStorage.setItem('suivi-mx-front',e.target.checked?'1':'0'); }catch(x){} } });
@@ -3347,7 +3362,7 @@ function mxCompact(x,go,fl){
   const st=!pre&&(ph!=null||S(x.h,'totalShots')!=null)?`<div class="mxc-st">${ph!=null?`<span>Poss. <b>${Math.round(+ph)}-${Math.round(+S(x.a,'possessionPct')||0)}</b></span>`:''}<span>Tirs <b>${S(x.h,'totalShots')??0} (${S(x.h,'shotsOnTarget')??0}) · ${S(x.a,'totalShots')??0} (${S(x.a,'shotsOnTarget')??0})</b></span><span>Corners <b>${S(x.h,'wonCorners')??0}-${S(x.a,'wonCorners')??0}</b></span></div>`:'';
   const sh=mxScorers(x,'h'), sa=mxScorers(x,'a');
   return `<div class="mxc${fl}${occ?' occ':''}" style="${tcStyle(x.h.c)}"${go}>
-    <div class="mxc-tp"><span class="mxc-tm">${lo(x.h)}<b>${esc(x.h.n)}</b></span><span class="mxc-sc"><b>${pre?'–':x.h.s+'<small> – </small>'+x.a.s}</b>${mxPill(x)}</span><span class="mxc-tm r"><b>${esc(x.a.n)}</b>${lo(x.a)}</span></div>
+    <div class="mxc-tp"><span class="mxc-tm">${lo(x.h)}<b>${esc(x.h.n)}</b></span><span class="mxc-sc"><b>${pre?'–':mxScoreHtml(x)}</b>${mxPill(x)}</span><span class="mxc-tm r"><b>${esc(x.a.n)}</b>${lo(x.a)}</span></div>
     ${pre?'':liveBarHtml(x)}${sh||sa?`<div class="mxc-ev"><span>${sh?'⚽ '+sh:''}</span><span class="r">${sa?sa+' ⚽':''}</span></div>`:''}${st}${mxInfo(x)}${mxBetLines(x)}</div>`; }
 function mxListRow(x,go,fl){
   const lo=s=>`<span class="lm-lg">${footLogo(s.l,16)||''}</span>`, pre=x.st==='pre', oc=mxOcc[x.id], occ=oc&&Date.now()-oc.t<12000;
@@ -3461,7 +3476,7 @@ async function liveFetch(manual,only){
         // up = équipe qui vient de marquer ; vd = un score a baissé (but annulé) ; old = ancien score (utilisés par la carte live)
         const [oh,oa]=o?String(o.sc).split('-').map(Number):[0,0], up=it.h.s>oh?'h':it.a.s>oa?'a':'', vd=!!o&&(it.h.s<oh||it.a.s<oa);
         liveMem[key]={sc,chg:o?Date.now():0,sd:up,vd,old:o?o.sc:''};
-        if(o&&it.k==='f'&&up&&!vd) mxFrontPush(it.id,up);   // onglet Multiplex : le match du but passe devant 8 s
+        if(o&&it.k==='f'&&up&&!vd){ const id=it.id, old=o.sc; setTimeout(()=>mxFrontPush(id,up,old),0); }   // onglet Multiplex : le match du but passe devant 8 s
         if(o){ changed=true; if(it.k==='f'&&ui.sport==='foot'&&liveAlertOk(it)){ const sd=up, gl=(it.ev||[]).filter(e=>e.g&&e.s===sd), lg=(sd&&gl.length===(sd==='h'?it.h.s:it.a.s))?gl[gl.length-1]:null, tm=sd==='h'?it.h.n:sd==='a'?it.a.n:''; if(sd&&goalSoundOk(it)){ playGoal(); goalBanner(it,sd,lg); } if(vd&&!sd&&goalSoundOk(it)) goalBanner(it,it.h.s<oh?'h':'a',null,'var'); say(sd?`⚽ <b>BUT de ${esc(tm)} !</b> ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}${lg&&lg.p?' · '+esc(lg.p)+' '+esc(lg.m)+(lg.og?' (csc)':lg.pg?' (pen.)':''):''}`:`📝 <b>Score modifié</b> (VAR ?) : ${esc(it.h.n)} ${it.h.s} - ${it.a.s} ${esc(it.a.n)}`,sd?'ok':'warn'); } } } }
     const ended=[...liveSeen].filter(k=>!cur.has(k)); liveSeen=cur;
     liveData.items=items;
