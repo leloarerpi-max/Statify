@@ -182,6 +182,30 @@
   const libEtat = (e, m) => e === 'rep' ? (m ? libRep(m) : 'reporté') : e === 'won' && m && !(m.done || m.st === 'post') ? 'déjà passé' : LIB[e];
 
   /* ---------- Données ---------- */
+  // « Ce qu'il te faut » : ce qui manque au pari avec le score actuel (vide si rien à dire)
+  function besoin(b, m) {
+    try {
+      if (!m || estMT(b)) return '';
+      const p = String(b.prono || '').toLowerCase(), h = +m.hs || 0, a = +m.as || 0, t = h + a, n = (k, w) => k + ' ' + w + (k > 1 ? 's' : '');
+      let y;
+      if (/deux|btts|both/.test(p)) { const z = []; if (!h) z.push('1 but de ' + m.hn); if (!a) z.push('1 but de ' + m.an); return z.join(' et '); }
+      if ((y = p.match(/(?:plus de|over|\+)\s*(\d+(?:[.,]\d+)?)/))) { const k = Math.floor(parseFloat(y[1].replace(',', '.'))) + 1 - t; return k > 0 ? 'encore ' + n(k, 'but') : ''; }
+      if ((y = p.match(/(?:moins de|under)\s*(\d+(?:[.,]\d+)?)/))) { const k = Math.ceil(parseFloat(y[1].replace(',', '.'))) - 1 - t; return k < 0 ? '' : k === 0 ? 'plus aucun but' : n(k, 'but') + ' de plus au maximum'; }
+      const [dom, ext] = cote2(p, m.hn, m.an);
+      if (/nul|draw/.test(p) && !dom && !ext) { const d = Math.abs(h - a); return d ? n(d, 'but') + ' de ' + (h < a ? m.hn : m.an) : ''; }
+      if (dom) { const d = a - h + 1; return d > 0 ? n(d, 'but') + ' de ' + m.hn : ''; }
+      if (ext) { const d = h - a + 1; return d > 0 ? n(d, 'but') + ' de ' + m.an : ''; }
+      return '';
+    } catch (e) { return ''; }
+  }
+  // pour l'onglet Multiplex de Statify : les paris en cours sur un match (id ESPN) et leur état
+  let _pzM = { t: 0, d: null };
+  window.pzParisMatch = id => {
+    try {
+      if (!_pzM.d || Date.now() - _pzM.t > 3000) { _pzM = { t: Date.now(), d: donnees() }; }
+      return (_pzM.d.parMatch.get(String(id)) || []).map(({ l, combo }) => ({ id: l.b.id, prono: l.b.prono || '', odds: +l.b.odds || null, stake: +l.b.stake || 0, e: l.e, combo: !!combo, need: besoin(l.b, l.m) }));
+    } catch (e) { return []; }
+  };
   function donnees(sport) {
     sport = sport || 'football';
     const TN = sport === 'tennis', trouver = b => TN ? null : trouverM(b), etat = (b, m) => TN ? (b.status === 'Won' ? 'won' : b.status === 'Lost' ? 'lost' : 'pre') : etatM(b, m);
