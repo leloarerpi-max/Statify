@@ -3323,7 +3323,7 @@ function mxRichRow(x,mine,rk,go,fl,barHtml,lg,lastHtml){
   let rks='';
   if(rk){ rks=[x.h,x.a].filter(t=>rk[t.id]).map(t=>{ const r=rk[t.id], mv=r.rank-r.nr; return `<span class="lm-rk ${mv>0?'up':mv<0?'dn':''}">${esc(t.n)} ${mv?`${ordFr(r.rank)} → <b>${ordFr(r.nr)}</b>`:ordFr(r.nr)}</span>`; }).join(''); if(rks) rks=`<div class="lm-rks">${rks}</div>`; }
   // mes paris sur ce match
-  const bets=mxBets(x.id).map(b=>{ const z=MXB[b.e]||['wt','en attente']; return `<div class="mx-bet ${z[0]}"><div class="mx-b1"><i></i><span><b>${esc(b.prono||'Pari')}</b>${b.odds?' · '+String(b.odds).replace('.',','):''}${b.combo?' · combiné':''}</span><span class="mx-be">${z[1]}</span></div>${b.need&&z[0]!=='ok'&&z[0]!=='ko'?`<div class="mx-need">Ce qu'il te faut : <b>${esc(b.need)}</b></div>`:''}</div>`; }).join('');
+  const bets=mxBets(x.id).map(b=>{ const z=MXB[b.e]||['wt','en attente']; return `<div class="mx-bet ${z[0]}"><div class="mx-b1"><i></i><span><b>${esc(b.prono||'Pari')}</b>${b.odds?' · '+String(b.odds).replace('.',','):''}${b.combo?' · combiné':''}</span><span class="mx-be">${z[1]}</span></div>${b.need&&z[0]!=='ok'&&z[0]!=='ko'?`<div class="mx-need">→ <b>${esc(b.need)}</b></div>`:''}</div>`; }).join('');
   const push=!pre&&x.st==='in'?mxPush(x):'';
   // grosse occasion : tir cadré relevé depuis le dernier passage (affiché 12 s)
   const oc=mxOcc[x.id], occ=oc&&Date.now()-oc.t<12000?`<div class="mx-occ">Tir cadré ${(oc.s==='h'?x.h.n:x.a.n).match(/^[aeiouyéèêh]/i)?'d\'':'de '}${esc(oc.s==='h'?x.h.n:x.a.n)} !</div>`:'';
@@ -3354,7 +3354,7 @@ function mxInfo(x){ const now=Date.now(), oc=mxOcc[x.id];
   const fd=mxFeed[x.id]; if(fd&&fd.items&&fd.items.length){ const z=fd.items[0]; return `<div class="mxc-in fil"><b>LIVE</b><span>${esc(z.m)} ${esc(z.t)}</span></div>`; }
   const pu=mxPush(x); return pu?`<div class="mxc-in">${pu}</div>`:''; }
 function mxBetLines(x){ return mxBets(x.id).map(b=>{ const z=MXB[b.e]||['wt','en attente'];
-  return `<div class="mxc-bet ${z[0]}"><i></i><span class="t"><b>${esc(b.prono||'Pari')}</b>${b.odds?' · '+String(b.odds).replace('.',','):''}${b.combo?' · combiné':''}${b.need&&z[0]==='wt'?' · il faut <b>'+esc(b.need)+'</b>':''}</span><b class="e">${z[1]}</b></div>`; }).join(''); }
+  return `<div class="mxc-bet ${z[0]}"><i></i><span class="t"><b>${esc(b.prono||'Pari')}</b>${b.odds?' · '+String(b.odds).replace('.',','):''}${b.combo?' · combiné':''}${b.need&&z[0]==='wt'?' · <b>'+esc(b.need)+'</b>':''}</span><b class="e">${z[1]}</b></div>`; }).join(''); }
 function mxScorers(x,sd){ return (x.ev||[]).filter(e=>e.s===sd).map(e=>e.rc?`<i class="mxrc"></i> ${esc(e.p||'')}`:`${esc(e.p||'?')} ${esc(e.m)}${e.og?' (csc)':e.pg?' (pen.)':''}`).join(' · '); }
 function mxCompact(x,go,fl){
   const lo=s=>`<span class="lm-lg">${footLogo(s.l,22)||esc(String(s.n||'?').slice(0,2).toUpperCase())}</span>`, pre=x.st==='pre', oc=mxOcc[x.id], occ=oc&&Date.now()-oc.t<12000;

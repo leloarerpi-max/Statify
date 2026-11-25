@@ -1377,7 +1377,7 @@
 
         // 2. Extraction de la cote à la fin de la ligne
         let odds = 1.50;
-        const oddsMatch = str.match(/(\d+[\.,]\d{1,2})\s*$/);
+        const oddsMatch = str.match(/(\d+[\.,]\d{1,2})\s*(?:net)?\s*$/i);   // « net » : ligne copiée depuis l'Analyseur de Statify (cote déjà réduite)
         if (oddsMatch) {
           odds = parseFloat(oddsMatch[1].replace(',', '.'));
           str = str.substring(0, str.lastIndexOf(oddsMatch[1])).trim();

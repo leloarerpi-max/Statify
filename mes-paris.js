@@ -182,22 +182,6 @@
   const libEtat = (e, m) => e === 'rep' ? (m ? libRep(m) : 'reporté') : e === 'won' && m && !(m.done || m.st === 'post') ? 'déjà passé' : LIB[e];
 
   /* ---------- Données ---------- */
-  // « Ce qu'il te faut » : ce qui manque au pari avec le score actuel (vide si rien à dire)
-  function besoin(b, m) {
-    try {
-      if (!m || estMT(b)) return '';
-      const p = String(b.prono || '').toLowerCase(), h = +m.hs || 0, a = +m.as || 0, t = h + a, n = (k, w) => k + ' ' + w + (k > 1 ? 's' : '');
-      let y;
-      if (/deux|btts|both/.test(p)) { const z = []; if (!h) z.push('1 but de ' + m.hn); if (!a) z.push('1 but de ' + m.an); return z.join(' et '); }
-      if ((y = p.match(/(?:plus de|over|\+)\s*(\d+(?:[.,]\d+)?)/))) { const k = Math.floor(parseFloat(y[1].replace(',', '.'))) + 1 - t; return k > 0 ? 'encore ' + n(k, 'but') : ''; }
-      if ((y = p.match(/(?:moins de|under)\s*(\d+(?:[.,]\d+)?)/))) { const k = Math.ceil(parseFloat(y[1].replace(',', '.'))) - 1 - t; return k < 0 ? '' : k === 0 ? 'plus aucun but' : n(k, 'but') + ' de plus au maximum'; }
-      const [dom, ext] = cote2(p, m.hn, m.an);
-      if (/nul|draw/.test(p) && !dom && !ext) { const d = Math.abs(h - a); return d ? n(d, 'but') + ' de ' + (h < a ? m.hn : m.an) : ''; }
-      if (dom) { const d = a - h + 1; return d > 0 ? n(d, 'but') + ' de ' + m.hn : ''; }
-      if (ext) { const d = h - a + 1; return d > 0 ? n(d, 'but') + ' de ' + m.an : ''; }
-      return '';
-    } catch (e) { return ''; }
-  }
   // pour l'onglet Multiplex de Statify : les paris en cours sur un match (id ESPN) et leur état
   let _pzM = { t: 0, d: null };
   window.pzParisMatch = id => {
@@ -425,6 +409,7 @@
   let COL = null;   // lignes analysées en attente de validation
   function marcheTexte(t, fb) { const P = [[/BTTS|(les\s+)?(deux|2)\s+équipes?\s+marquent/i, 'BTTS'], [/Over\/?Under/i, 'Over/Under'], [/Buteur/i, 'Buteur'], [/Mi[\s-]?Temps/i, 'Mi-Temps'], [/1N2|Résultat|Vainqueur/i, '1N2']]; if (!t) return fb; for (const [p, l] of P) if (p.test(t)) return l; return fb; }
   const recoller = s => s.replace(/(\.)([A-ZÀ-Ö])/g, '$1 $2').replace(/([a-zà-öø-ÿ])([A-ZÀ-Ö])/g, '$1 $2').replace(/([A-Za-zÀ-ÖØ-öø-ÿ])(\d)/g, '$1 $2').replace(/(\d-\d)(\d)/g, '$1 $2').replace(/\s{2,}/g, ' ').trim();
+  const RED_COLLE = 4.88;   // même réduction que les cotes de l'Analyseur (cote réellement obtenue)
   function analyserCollage(raw, mise, existants) {
     const nm = s => String(s || '').toLowerCase().replace(/vs|-|_/g, ' ').replace(/\s+/g, ' ').trim();
     const dbl = b => existants.some(x => x.date === b.date && nm(x.match) === nm(b.match) && x.market === b.market && String(x.prono || '').toLowerCase().trim() === String(b.prono || '').toLowerCase().trim());
@@ -434,7 +419,8 @@
     lignes.forEach((line, i) => {
       let s = line.trim().replace(/^\|+\s*/, '').replace(/\s*\|+$/, '').replace(/(\d-\d)(\d)/g, '$1 $2'); if (!s) return;
       let date = jour(); const dm = s.match(/^(\d{2}[\/.-]\d{2}[\/.-]\d{4})/); if (dm) { const p = dm[1].split(/[\/.-]/); date = p[2] + '-' + p[1] + '-' + p[0]; s = s.replace(dm[0], '').trim(); }
-      let odds = 1.5; const om = s.match(/(\d+[.,]\d{1,2})\s*$/); if (om) { odds = parseFloat(om[1].replace(',', '.')); s = s.substring(0, s.lastIndexOf(om[1])).trim(); }
+      // cote : réduite de 4,88 % comme dans l'Analyseur ; « net » à la fin = cote déjà réduite (lignes copiées depuis l'Analyseur)
+      let odds = 1.5, odds0 = null; const om = s.match(/(\d+[.,]\d{1,2})\s*(net)?\s*$/i); if (om) { const v = parseFloat(om[1].replace(',', '.')); if (om[2]) odds = v; else { odds0 = v; odds = Math.round(v * (1 - RED_COLLE / 100) * 100) / 100; } s = s.substring(0, s.lastIndexOf(om[0])).trim(); }
       let b = null;
       if (s.includes('|')) {
         const p = s.split('|').map(x => x.trim()).filter(Boolean);
@@ -456,14 +442,14 @@
         let r = rx(s); if (!r.ok) { const r2 = rx(recoller(s)); if (r2.ok) r = r2; }
         b = { date, match: r.match, comp: r.comp, market: r.market, prono: r.prono, odds, stake: mise, unres: !r.ok };
       }
-      b.id = Date.now() + i; b.type = 'Single'; b.status = 'Pending';
+      b.id = Date.now() + i; b.type = 'Single'; b.status = 'Pending'; if (odds0) b.odds0 = odds0;
       if (dbl(b)) { dup++; return; }
       out.push(b);
     });
     return { out, dup };
   }
   function vueColler(texte, msg) {
-    ov(`<div class="pz-fm pz-col"><h3>📋 Coller plusieurs paris</h3><p class="mut" style="margin:0 0 6px">Une ligne par pari. Format : <b>Date | Match | Compétition | Marché | Pronostic | [Mise] | Cote</b>. Exemple : <i>06/08/2026 | Lens - Lyon | Ligue 1 | 1N2 | Lens | 1.67</i></p>
+    ov(`<div class="pz-fm pz-col"><h3>📋 Coller plusieurs paris</h3><p class="mut" style="margin:0 0 6px">Une ligne par pari. Format : <b>Date | Match | Compétition | Marché | Pronostic | [Mise] | Cote</b>. La cote collée est réduite de 4,88 % (cote réellement obtenue). Exemple : <i>06/08/2026 | Lens - Lyon | Ligue 1 | 1N2 | Lens | 1.67</i></p>
       <textarea id="pz-col-t" rows="7" placeholder="06/08/2026 | Équipe A - Équipe B | Compétition | Marché | Pronostic | 1.67">${esc(texte || '')}</textarea><p class="pz-err">${esc(msg || '')}</p>
       <div class="pz-fa"><span style="flex:1"></span><button class="sec" data-pz="cancel">Annuler</button><button data-pz="colan">Analyser</button></div></div>`);
   }
@@ -471,7 +457,7 @@
     const mk = marches();
     ov(`<div class="pz-fm pz-col"><h3>📋 Vérifie avant d'ajouter</h3><p class="mut" style="margin:0">${COL.length} pari(s) analysé(s). Corrige si besoin, décoche ceux à ignorer.${dup ? ` <b>${dup} doublon(s) déjà présent(s) ont été ignorés.</b>` : ''}</p>
       <div class="pz-tbw"><table class="pz-tb pz-colt"><thead><tr><th></th><th class="l">Date</th><th class="l">Match</th><th class="l">Compétition</th><th class="l">Marché</th><th class="l">Pronostic</th><th>Cote</th><th>Mise</th></tr></thead><tbody>
-      ${COL.map((b, i) => `<tr class="${b.unres ? 'pz-warn' : ''}"><td><input type="checkbox" data-pz="colinc" data-i="${i}"${b.on !== false ? ' checked' : ''}></td><td><input data-col="${i}" data-f="date" type="date" value="${esc(b.date)}"></td><td><input data-col="${i}" data-f="match" value="${esc(b.match)}"></td><td><input data-col="${i}" data-f="comp" value="${esc(b.comp)}"></td><td><select data-col="${i}" data-f="market">${(mk.includes(b.market) ? mk : mk.concat(b.market)).map(m => `<option${m === b.market ? ' selected' : ''}>${esc(m)}</option>`).join('')}</select></td><td><input data-col="${i}" data-f="prono" value="${esc(b.prono)}"></td><td><input data-col="${i}" data-f="odds" type="number" step="0.01" value="${esc(b.odds)}" style="width:70px"></td><td><input data-col="${i}" data-f="stake" type="number" step="0.5" value="${esc(b.stake)}" style="width:60px"></td></tr>`).join('')}
+      ${COL.map((b, i) => `<tr class="${b.unres ? 'pz-warn' : ''}"><td><input type="checkbox" data-pz="colinc" data-i="${i}"${b.on !== false ? ' checked' : ''}></td><td><input data-col="${i}" data-f="date" type="date" value="${esc(b.date)}"></td><td><input data-col="${i}" data-f="match" value="${esc(b.match)}"></td><td><input data-col="${i}" data-f="comp" value="${esc(b.comp)}"></td><td><select data-col="${i}" data-f="market">${(mk.includes(b.market) ? mk : mk.concat(b.market)).map(m => `<option${m === b.market ? ' selected' : ''}>${esc(m)}</option>`).join('')}</select></td><td><input data-col="${i}" data-f="prono" value="${esc(b.prono)}"></td><td><input data-col="${i}" data-f="odds" type="number" step="0.01" value="${esc(b.odds)}" style="width:70px">${b.odds0 ? `<div class="mut" style="font-size:11px;white-space:nowrap">${String(b.odds0.toFixed(2)).replace('.', ',')} − 4,88 %</div>` : ''}</td><td><input data-col="${i}" data-f="stake" type="number" step="0.5" value="${esc(b.stake)}" style="width:60px"></td></tr>`).join('')}
       </tbody></table></div><p class="mut pz-hint">Les lignes en orange : marché non reconnu, à vérifier.</p>
       <div class="pz-fa"><button class="sec" data-pz="colback">← Modifier le texte</button><span style="flex:1"></span><button class="sec" data-pz="cancel">Annuler</button><button data-pz="colok">Valider et ajouter (<span id="pz-col-n">${COL.filter(b => b.on !== false).length}</span>)</button></div></div>`);
   }
@@ -483,7 +469,7 @@
     vueApercu(r.dup);
   }
   function collerValider() {
-    const add = COL.filter(b => b.on !== false).map(b => { const x = Object.assign({}, b); delete x.on; delete x.unres; x.odds = parseFloat(String(x.odds).replace(',', '.')) || 1; x.stake = parseFloat(String(x.stake).replace(',', '.')) || 1; return x; });
+    const add = COL.filter(b => b.on !== false).map(b => { const x = Object.assign({}, b); delete x.on; delete x.unres; delete x.odds0; x.odds = parseFloat(String(x.odds).replace(',', '.')) || 1; x.stake = parseFloat(String(x.stake).replace(',', '.')) || 1; return x; });
     if (!add.length) return;
     fermer(); COL = null;
     muter(S => { add.slice().reverse().forEach(b => S[SP()].unshift(b)); }, add.length + ' pari(s) ajouté(s)');
@@ -1065,7 +1051,7 @@
             lignes.push("Date | Match | Compétition | Marché | Pronostic | [Mise] | Cote");
             candidats.slice(0, 3).forEach(c => {
                 const { marche, pronostic } = separerMarchePronostic(c.label, home, away);
-                lignes.push(`${matchDate} | ${nomMatch} | ${nomCompetition} | ${marche} | ${pronostic} | 1 | ${fmtCote(coteAjustee(c.cote))}`);
+                lignes.push(`${matchDate} | ${nomMatch} | ${nomCompetition} | ${marche} | ${pronostic} | 1 | ${fmtCote(coteAjustee(c.cote))} net`);
             });
         }
         lignes.push("");
