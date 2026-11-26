@@ -538,9 +538,8 @@
   /* ---------- Combinés : créer / modifier la mise / défaire / supprimer ---------- */
   function creerCombine() {
     const D = donnees(SP()), legs = [...sel].map(i => D.ouvertsS.find(s => String(s.b.id) === i)).filter(Boolean);
-    if (legs.length < 2) return;
-    const ks = legs.map(l => norm(l.b.match));
-    if (ks.some((k, i) => k && ks.indexOf(k) !== i)) { toast('Deux sélections portent sur le même match : retire-en une.'); return; }
+    if (legs.length < sel.size) { toast((sel.size - legs.length) + ' pari(s) coché(s) ne sont plus en cours (déjà réglés ou déjà dans un combiné).'); }
+    const why = pourquoiPasManuel(legs); if (why) { toast(why); return; }
     const stake = parseFloat((document.getElementById('pz-ms') || {}).value || miseCombo);
     if (!(stake > 0)) { toast('Indique une mise valide pour le combiné.'); return; }
     const ids = legs.map(l => l.b.id), cid = Date.now();
@@ -1213,12 +1212,19 @@
   const FRAMES = { atp: ['🎾 ATP & cotes', 'prono.html?embed=1&sport=tennis'], sync: ['☁️ Synchro PronoTracker', 'prono.html?embed=1&page=reglages'] };
   const TABS = [['cours', 'En cours'], ['hist', 'Historique'], ['analyse', '🔍 Analyseur'], ['combos', '🔀 Combinés'], ['stats', '📊 Stats'], ['reglages', '⚙️ Réglages']];
   const ongletsHtml = D => { const act = filtre === 'atp' ? 'tennis' : filtre === 'sync' ? 'reglages' : filtre; return TABS.filter(([k]) => !(k === 'analyse' && window.innerWidth >= 1100)).map(([k, l]) => `<button class="${act === k ? '' : 'sec'}" data-pz="f" data-k="${k}">${l}${k === 'cours' && D ? ' · ' + D.nbAttente : ''}</button>`).join(''); };
+  // raison pour laquelle les paris cochés ne peuvent pas faire un combiné ('' si c'est possible)
+  function pourquoiPasManuel(legs) {
+    if (legs.length < 2) return 'Coche au moins 2 paris simples pour faire un combiné.';
+    const ks = legs.map(l => norm(l.b.match)); const i = ks.findIndex((k, n) => k && ks.indexOf(k) !== n);
+    if (i >= 0) return 'Deux sélections portent sur le même match (' + legs[i].b.match + ') : décoche-en une.';
+    return '';
+  }
   function barreCombine(D) {
     sel = new Set([...sel].filter(i => D.ouvertsS.some(s => String(s.b.id) === i)));
     if (!sel.size) return '';
     const legs = [...sel].map(i => D.ouvertsS.find(s => String(s.b.id) === i)), odds = legs.reduce((p, l) => p * (+l.b.odds || 1), 1);
     if (miseCombo == null) { const dern = ((D.S.combos || {})[SP()] || []).slice(-1)[0]; miseCombo = dern ? +dern.stake : 1; }
-    return `<div class="pz-bar"><b>${legs.length} sélection${legs.length > 1 ? 's' : ''} · cote ${cote(odds)}</b><label>Mise <input id="pz-ms" type="number" step="0.5" min="0.1" inputmode="decimal" value="${esc(miseCombo)}"> €</label><span class="mut" id="pz-gain" data-odds="${odds}">gain possible ${eur(miseCombo * odds).replace('+', '')}</span><span style="flex:1"></span><button class="sec" data-pz="selclear">Vider</button><button data-pz="mkcombo"${legs.length < 2 ? ' disabled title="Coche au moins 2 paris"' : ''}>Créer le combiné</button></div>`;
+    return `<div class="pz-bar"><b>${legs.length} sélection${legs.length > 1 ? 's' : ''} · cote ${cote(odds)}</b><label>Mise <input id="pz-ms" type="number" step="0.5" min="0.1" inputmode="decimal" value="${esc(miseCombo)}"> €</label><span class="mut" id="pz-gain" data-odds="${odds}">gain possible ${eur(miseCombo * odds).replace('+', '')}</span>${pourquoiPasManuel(legs) ? `<span class="pz-why">⚠️ ${esc(pourquoiPasManuel(legs))}</span>` : ''}<span style="flex:1"></span><button class="sec" data-pz="selclear">Vider</button><button data-pz="mkcombo">Créer le combiné</button></div>`;
   }
   function carteSolo(s) {
     const pend = s.b.status === 'Pending' || !s.b.status;
@@ -1332,7 +1338,7 @@
     const barre = filtre === 'cours' ? barreCombine(D) : '';
     const ligne = `<div class="row pz-tabs pz-tabrow">${ongletsHtml(D)}${filtre === 'cours' || filtre === 'hist' ? `<button class="sec pz-ib" data-pz="paste" title="Coller plusieurs paris d'un coup">📋 Coller</button><button class="pz-new" data-pz="new" title="Ajouter un pari"><span>＋</span> Nouveau pari</button>` : ''}</div>`;
     let haut = '', corps = '';
-    if (filtre === 'cours') { haut = bilan(D, true); corps = impactEtResume(D) + (autoInfo && SP() === 'football' ? `<div class="pz-ban" id="pz-autoinfo"><span>${esc(autoInfo)}</span><button data-pz="autonow">Combiner maintenant</button></div>` : '') + corpsCours(D); }
+    if (filtre === 'cours') { haut = bilan(D, true); corps = impactEtResume(D) + (autoInfo && SP() === 'football' ? `<div class="pz-ban" id="pz-autoinfo"><span>${esc(autoInfo)}</span>${autoInfo.startsWith('⏳') ? '<button data-pz="autonow">Combiner maintenant</button>' : ''}</div>` : '') + corpsCours(D); }
     else if (filtre === 'hist') { haut = bilan(D, true); corps = corpsHist(D); }
     else if (filtre === 'tennis') { haut = bilan(T, true); corps = vueTennisPage(T); }
     else if (filtre === 'analyse') corps = vueAnalyse();
@@ -1679,20 +1685,34 @@
   }
   // combinés automatiques avec délai : on attend la fin de ta saisie (le délai repart à zéro dès que la liste change)
   let autoInfo = '';
+  // pourquoi rien ne se combine : désactivé, ou aucune paire entre 2,00 et 3,00 (on donne la meilleure trouvée)
+  function autoPourquoi() {
+    const auj = jour(), S = lireN(), dans = new Set(), refus = refusSet(); (S.combos.football || []).forEach(c => (c.legIds || []).forEach(id => dans.add(String(id))));
+    const T = (S.football || []).filter(b => b.date === auj && b.status === 'Pending' && !b.comboId && !dans.has(String(b.id)) && !refus.has(String(b.id)) && +b.odds > 1);
+    if (T.length < 2) return '';
+    if (!autoCmbOn()) return `ℹ️ ${T.length} paris simples aujourd'hui : coche « Créer les combinés tout seuls » (Réglages) pour qu'ils se combinent automatiquement.`;
+    const exc = stGenExclus(), X = T.filter(b => exc.has((b.comp || '').trim())), L = T.filter(b => !exc.has((b.comp || '').trim()));
+    const cl = [...new Set(X.map(b => (b.comp || '').trim()))], comps = cl.length > 1 ? cl.slice(0, -1).join(', ') + ' et ' + cl[cl.length - 1] : (cl[0] || '');
+    const txtX = X.length ? `${X.length} pari${X.length > 1 ? 's' : ''} en ${comps} : pas de combiné automatique pour ${cl.length > 1 ? 'ces compétitions' : 'cette compétition'}` : '';
+    if (L.length < 2) return `ℹ️ Aucun combiné automatique : ${txtX}${L.length === 1 ? ` (il ne reste qu'un pari ailleurs : « ${L[0].match} »)` : ''}.`;
+    let best = 0; for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) if (norm(L[i].match) !== norm(L[j].match)) { const c = L[i].odds * L[j].odds; if (c <= 3 && c > best) best = c; }
+    return `ℹ️ Aucun combiné automatique possible : il faut deux paris dont la cote ensemble fait entre 2,00 et 3,00${best ? ` (meilleure paire aujourd'hui : ${cote(Math.round(best * 100) / 100)})` : ''}${txtX ? ` · ${txtX}` : ''}.`;
+  }
+  function autoExclusTxt() { try { const auj = jour(), exc = stGenExclus(), n = (lireN().football || []).filter(b => b.date === auj && b.status === 'Pending' && !b.comboId && exc.has((b.comp || '').trim())).length; return n ? ` · ${n} pari${n > 1 ? 's' : ''} en Ligue 2 / Europa / Conférence laissé${n > 1 ? 's' : ''} de côté` : ''; } catch (e) { return ''; } }
   function autoCombos(force) {
     autoInfo = '';
-    if (!autoCmbOn()) return;
+    if (!autoCmbOn()) { autoInfo = autoPourquoi(); return; }
     const pr = pairesAVenir('football');
-    if (!pr.length) { try { localStorage.removeItem(RG_SIG); } catch (e) {} return; }
+    if (!pr.length) { try { localStorage.removeItem(RG_SIG); } catch (e) {} autoInfo = autoPourquoi(); return; }
     const sig = pr.flat().map(b => b.id).join(',');
     let st = null; try { st = JSON.parse(lsGet(RG_SIG) || 'null'); } catch (e) {}
     if (!st || st.sig !== sig) { st = { sig, t: Date.now() }; try { localStorage.setItem(RG_SIG, JSON.stringify(st)); } catch (e) {} }
     const reste = delaiMin() * 60000 - (Date.now() - st.t);
-    if (!force && reste > 0) { const mm = Math.floor(reste / 60000), ss = String(Math.floor(reste / 1000) % 60).padStart(2, '0'); autoInfo = `⏳ ${pr.length} combiné${pr.length > 1 ? 's' : ''} automatique${pr.length > 1 ? 's' : ''} dans ${mm}:${ss} (le temps que tu finisses de saisir)`; return; }
+    if (!force && reste > 0) { const mm = Math.floor(reste / 60000), ss = String(Math.floor(reste / 1000) % 60).padStart(2, '0'); autoInfo = `⏳ ${pr.length} combiné${pr.length > 1 ? 's' : ''} automatique${pr.length > 1 ? 's' : ''} dans ${mm}:${ss} (le temps que tu finisses de saisir)${autoExclusTxt()}`; return; }
     try { localStorage.removeItem(RG_SIG); } catch (e) {}
     creerPaires('football', pr, pr.length + ' combiné(s) créé(s) automatiquement');
   }
-  setInterval(() => { try { if (autoCmbOn() && typeof ui !== 'undefined' && ui.sport === 'foot' && !document.getElementById('pzOv') && !document.hidden) { const avant = autoInfo; autoCombos(false); const el = document.getElementById('pz-autoinfo'); if (el && autoInfo) el.firstChild.textContent = autoInfo; else if (window.__pzVue && filtre === 'cours' && !!autoInfo !== !!el) decorer(); } } catch (e) {} }, 1000);
+  setInterval(() => { try { if (typeof ui !== 'undefined' && ui.sport === 'foot' && !document.getElementById('pzOv') && !document.hidden) { const avant = autoInfo; autoCombos(false); const el = document.getElementById('pz-autoinfo'); if (el && autoInfo) el.firstChild.textContent = autoInfo; else if (window.__pzVue && filtre === 'cours' && !!autoInfo !== !!el) decorer(); } } catch (e) {} }, 1000);
 
   /* --- Générateur de combinés (choix du jour et des paires) --- */
   let GEN = null;
@@ -2177,6 +2197,7 @@
   .pz-ck{display:flex;align-items:center;gap:8px;cursor:pointer}.pz-ck input{width:18px;height:18px;accent-color:#7c3aed}.pz-hint{text-transform:none;letter-spacing:0;font-weight:600}
   .pz-new{margin-left:auto}.pz-auto{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mut);cursor:pointer}.pz-auto input[type=checkbox]{width:16px;height:16px;accent-color:var(--acc)}
   .pz-ban{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between;padding:10px 14px;border-radius:14px;background:color-mix(in srgb,var(--ok) 14%,transparent);font-weight:700;font-size:13.5px}
+  .pz-why{flex-basis:100%;order:9;color:#b97f00;font-size:12.5px;font-weight:600}
   .pz-bar{position:fixed;left:12px;right:12px;bottom:84px;z-index:40;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;border-radius:16px;background:var(--card);border:2px solid #7c3aed;box-shadow:0 8px 30px rgba(0,0,0,.25)}
   .pz-bar input{width:70px;font:inherit;font-weight:700;color:var(--txt);background:var(--field);border:1px solid var(--line);border-radius:10px;padding:5px 8px}.pz-bar label{display:flex;align-items:center;gap:6px;font-weight:700}
   #pzOv{position:fixed;inset:0;z-index:9600;background:rgba(0,0,0,.6);display:flex;align-items:flex-start;justify-content:center;padding:5vh 12px;overflow:auto}
@@ -2218,7 +2239,7 @@
       if (k === 'sel') { if (z.checked) sel.add(String(id)); else sel.delete(String(id)); decorer(); return; }
       if (k === 'anon') { if (AN && AN.rows[+z.dataset.i]) AN.rows[+z.dataset.i].on = z.checked; const v = document.getElementById('view'); if (v) v.__pzH = null; decorer(); return; }
       if (k === 'genon') { if (GEN) GEN.on[+z.dataset.i] = z.checked; return; }
-      if (k === 'autocmb') { try { localStorage.setItem(RG_AUTO_CMB, z.checked ? '1' : '0'); localStorage.removeItem(RG_SIG); } catch (x) {} autoCombos(false); decorer(); return; }
+      if (k === 'autocmb') { try { localStorage.setItem(RG_AUTO_CMB, z.checked ? '1' : '0'); localStorage.removeItem(RG_SIG); } catch (x) {} autoCombos(false); decorer(); if (z.checked) toast(autoInfo.startsWith('⏳') ? autoInfo.replace('⏳ ', '') : (autoPourquoi() || 'Combinés automatiques activés : ils se créeront dès que deux paris du jour iront ensemble.')); return; }
       if (k === 'colinc') { if (COL && COL[+z.dataset.i]) COL[+z.dataset.i].on = z.checked; const n = document.getElementById('pz-col-n'); if (n) n.textContent = COL.filter(b => b.on !== false).length; return; }
       if (k === 'tnauto') { try { localStorage.setItem(TN_AUTO, z.checked ? '1' : '0'); } catch (x) {} if (z.checked) tnCombos(tnIso(TN.off), false); tnMaj(); return; }
       if (k === 'auto') { try { localStorage.setItem(AUTO, z.checked ? '1' : '0'); } catch (x) {} const v = document.getElementById('view'); if (v) v.__pzH = null; decorer(); return; }
@@ -2267,7 +2288,7 @@
       else if (k === 'ogen') vueGenerateur();
       else if (k === 'genjour') vueGenerateur(z.dataset.k);
       else if (k === 'genok') { const pr = GEN.paires.filter((p, i) => GEN.on[i]); fermer(); creerPaires(GEN.sp, pr, pr.length + ' combiné(s) créé(s)'); }
-      else if (k === 'autonow') autoCombos(true);
+      else if (k === 'autonow') { const n0 = (lireN().combos.football || []).length; autoCombos(true); if ((lireN().combos.football || []).length === n0) toast(autoPourquoi() || 'Aucun combiné automatique à créer pour l\'instant.'); }
       else if (k === 'overif') { VR.res = null; VR.msg = ''; vueVerif(); }
       else if (k === 'vrper') { VR.per = z.dataset.k; VR.res = null; vueVerif(); }
       else if (k === 'vrgo') vrLancer();
