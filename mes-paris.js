@@ -1472,11 +1472,16 @@
       const [pc, pt] = PILL[e] || PILL.pre;
       return `<div class="pz-tr" data-pz="mpsp" data-k="${k}" title="Ouvrir ${esc(lab.toLowerCase())}"><span>${badge(k, emo, lab)}</span><span class="mut pz-trd">${heure}</span><b class="pz-trm">${titre}</b><span class="pz-trp">${esc(pAff(b))}${need}</span><b class="pz-tro">${cote(b.odds)}</b><span class="mut pz-trs">${(+b.stake || 0).toString().replace('.', ',')} €</span><span class="pz-etc"><i class="pz-pl pz-pl-${pc}">${pt}</i></span><span class="pz-gp2"><button type="button" class="pz-gw${b.status === 'Won' ? ' on' : ''}" data-pz="twon" data-sp="${k}" data-id="${esc(b.id)}" title="Marquer gagné">G</button><button type="button" class="pz-gx${b.status === 'Lost' ? ' on' : ''}" data-pz="tlost" data-sp="${k}" data-id="${esc(b.id)}" title="Marquer perdu">P</button><button type="button" class="pz-ed" data-pz="edit" data-sp="${k}" data-id="${esc(b.id)}" title="Modifier ou supprimer ce pari">✎</button></span><span class="pz-trt">${cb ? `<i class="pz-cbt">Combiné ${cb}</i>` : '<small class="mut">simple</small>'}</span></div>`;
     };
-    const tete = '<div class="pz-tr pz-trh"><span>SPORT</span><span>HEURE / ÉTAT</span><span>MATCH</span><span>PARI</span><span>COTE</span><span>MISE</span><span>ÉTAT</span><span>G / P</span><span>TYPE</span></div>';
+    // tri : clic sur un titre de colonne (1er clic ↑, 2e ↓, 3e retour à l'ordre normal) — mémorisé
+    const COLS = [['sport', 'SPORT'], ['heure', 'HEURE / ÉTAT'], ['match', 'MATCH'], ['pari', 'PARI'], ['cote', 'COTE'], ['mise', 'MISE'], ['etat', 'ÉTAT'], [null, 'G / P'], ['type', 'TYPE']];
+    let ts = {}; try { ts = JSON.parse(localStorage.getItem('pz_tsort') || '{}') || {}; } catch (er) {}
+    const cle = (x, k) => { const b = x.it.b, m = x.it.m; return k === 'sport' ? x.k : k === 'heure' ? Date.parse((m && m.d) || b.date || '') || 0 : k === 'match' ? String(b.match || '').toLowerCase() : k === 'pari' ? pAff(b).toLowerCase() : k === 'cote' ? +b.odds || 0 : k === 'mise' ? +b.stake || 0 : k === 'etat' ? (b.status === 'Won' ? 'won' : b.status === 'Lost' ? 'lost' : (x.it.e || 'pre')) : (x.cb || 'zz'); };
+    const trierPar = L => { if (!ts.k) return L; const d = ts.d === 'desc' ? -1 : 1; return L.slice().sort((a, b) => { const u = cle(a, ts.k), v = cle(b, ts.k); return (typeof u === 'number' ? u - v : String(u).localeCompare(String(v), 'fr')) * d; }); };
+    const tete = '<div class="pz-tr pz-trh">' + COLS.map(([k, l]) => k ? `<span class="pz-th" data-pz="tsort" data-k="${k}" title="Trier par ${l.toLowerCase()}">${l}${ts.k === k ? (ts.d === 'desc' ? ' ▼' : ' ▲') : ''}</span>` : `<span>${l}</span>`).join('') + '</div>';
     const tri = (a, b) => ((b.it.m && b.it.m.st === 'in') - (a.it.m && a.it.m.st === 'in')) || String((a.it.m && a.it.m.d) || a.it.b.date || '').localeCompare(String((b.it.m && b.it.m.d) || b.it.b.date || ''));
     let corps = '';
     if (page === 'cours') {
-      const L = entrees.filter(x => !reglee(x.it.b) || x.it.b.date === auj).sort((a, b) => (reglee(a.it.b) - reglee(b.it.b)) || tri(a, b));
+      const L = trierPar(entrees.filter(x => !reglee(x.it.b) || x.it.b.date === auj).sort((a, b) => (reglee(a.it.b) - reglee(b.it.b)) || tri(a, b)));
       // colonne de droite : combinés par sport + réussite 30 jours
       const cards = Ds.map(({ k, emo, lab, nom, D }) => {
         const ouv = D.C.filter(x => !x.regle);
@@ -1489,7 +1494,7 @@
         <aside class="pz-side"><div class="card"><h2>Combinés automatiques <span class="mut pz-hint">· par sport</span></h2>${cards || '<p class="mut">Aucun pari à combiner.</p>'}<p class="mut pz-hint">Un combiné ne mélange jamais deux sports. Foot : Ligue Europa, Conférence et Ligue 2 restent exclues.</p></div>
         <div class="card"><h2>Réussite par sport <span class="mut pz-hint">· 30 jours</span></h2>${bars}</div></aside></div>`;
     } else if (page === 'hist') {
-      const L = entrees.filter(x => reglee(x.it.b)).sort((a, b) => String(b.it.b.date || '').localeCompare(String(a.it.b.date || '')) || (b.it.b.id - a.it.b.id));
+      const L = trierPar(entrees.filter(x => reglee(x.it.b)).sort((a, b) => String(b.it.b.date || '').localeCompare(String(a.it.b.date || '')) || (b.it.b.id - a.it.b.id)));
       corps = `<section class="pz-tbl">${tete}${L.slice(0, 80).map(ligne).join('') || '<p class="mut" style="padding:14px">Aucun pari réglé.</p>'}${L.length > 80 ? `<p class="mut pz-hint" style="padding:8px 14px">${L.length - 80} paris plus anciens : ouvre un sport pour tout voir.</p>` : ''}</section>`;
     } else if (page === 'stats') {
       const rowS = t => `<tr><td class="l">${t.x.emo} ${t.x.nom}</td><td>${t.n}</td><td>${t.g}</td><td>${t.n ? Math.round(100 * t.g / t.n) + ' %' : '–'}</td><td>${t.mise.toFixed(2).replace('.', ',')} €</td><td class="${t.net < 0 ? 'pz-neg' : 'pz-pos'}">${eur(t.net)}</td><td>${t.mise ? t.roi.toFixed(1).replace('.', ',') + ' %' : '–'}</td></tr>`;
@@ -2352,7 +2357,7 @@
   @media (max-width:700px){.pz-big{grid-template-columns:1fr 1fr}.pz-big .pz-sit{grid-column:1/-1;flex-direction:row!important;align-items:center;justify-content:space-between}.pz-big .pz-k b{font-size:17px}.pz-big .pz-main b{font-size:32px}.pz-big .pz-k{padding:9px 10px}.pz-big .pz-k span{font-size:9.5px}.pz-big .pz-main{grid-column:1/-1}.pz-note{display:none}.pz-grid{grid-template-columns:1fr}}`;
   const st = document.createElement('style'); st.textContent = css + `
   .pz-tr{display:grid;grid-template-columns:70px 104px minmax(120px,1.4fr) minmax(90px,1.2fr) 46px 48px 88px 90px 72px;gap:8px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);cursor:pointer;font-size:13px}
-  .pz-tr:hover{background:color-mix(in srgb,var(--ok) 6%,transparent)}.pz-trh{cursor:default;font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--mut);background:var(--field);border-top:0}.pz-trh:hover{background:var(--field)}
+  .pz-tr:hover{background:color-mix(in srgb,var(--ok) 6%,transparent)}.pz-th{cursor:pointer;user-select:none;white-space:nowrap}.pz-th:hover{color:var(--txt,#111)}.pz-trh{cursor:default;font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--mut);background:var(--field);border-top:0}.pz-trh:hover{background:var(--field)}
   .pz-trc{grid-template-columns:90px 1fr auto}.pz-trm,.pz-trp{min-width:0;overflow:hidden;text-overflow:ellipsis}.pz-tro{text-align:right}.pz-trs{text-align:right}
   .pz-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#d03a2a;margin-right:6px}.pz-ned{color:#9a6400;font-size:12px}
   .pz-pl{font-style:normal;font-size:11.5px;font-weight:800;padding:3px 9px;border-radius:999px;white-space:nowrap;background:var(--field);color:var(--mut)}
@@ -2432,6 +2437,7 @@
       else if (k === 'cancel') fermer();
       else if (k === 'save') enregistrer(z.dataset.id);
       else if (k === 'del') supprimerPari(id);
+      else if (k === 'tsort') { let t = {}; try { t = JSON.parse(localStorage.getItem('pz_tsort') || '{}') || {}; } catch (x) {} const kk = z.dataset.k; t = t.k !== kk ? { k: kk, d: 'asc' } : t.d === 'asc' ? { k: kk, d: 'desc' } : {}; try { localStorage.setItem('pz_tsort', JSON.stringify(t)); } catch (x) {} const v = document.getElementById('view'); if (v) v.__pzH = null; decorer(); }
       else if (k === 'twon') regler(id, 'Won', z.dataset.sp);
       else if (k === 'tlost') regler(id, 'Lost', z.dataset.sp);
       else if (k === 'won') regler(id, 'Won');
