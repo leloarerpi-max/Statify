@@ -66,7 +66,8 @@
   /* ---------- Score à la mi-temps (d'après les buts datés de Statify) ---------- */
   const estMT = b => /mi-temps|1[eè]re mt|\bmt\b|half/i.test(String(b.prono || '')) || /^mi-temps$/i.test(String(b.market || ''));
   // libellé d'affichage : ajoute « (MT) » aux paris de mi-temps dont le texte ne le dit pas encore
-  const pAff = b => { const t = String(b.prono || ''); return estMT(b) && !/\(mt\)|\bmt\b|mi-temps|1[eè]re/i.test(t) ? t + ' (MT)' : t; };
+  const pAff = b => { let t = String(b.prono || '');
+    if ((/btts/i.test(t) || /^btts$/i.test(String(b.market || ''))) && t.length < 45) { if (/\b(non|no)\b/i.test(t)) t = 'Une équipe ne marque pas'; else if (/\b(oui|yes)\b/i.test(t)) t = 'Les deux équipes marquent'; } return estMT(b) && !/\(mt\)|\bmt\b|mi-temps|1[eè]re/i.test(t) ? t + ' (MT)' : t; };
   const _dl = new Set();
   function scoreMT(m) {
     if (!m || m.st === 'pre' || reporte(m)) return null;
