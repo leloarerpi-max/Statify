@@ -20,7 +20,7 @@
   /* ---------- Correspondance pari ↔ match Statify ---------- */
   const STOP = new Set(['fc', 'sv', 'ac', 'as', 'cf', 'sc', 'afc', 'ssc', 'us', 'estac', 'fsv', 'vfb', 'vfl', 'tsg', 'rc', 'og', 'ca', 'cd', 'ud', 'sd', 'de', 'la', 'le', 'club', 'city']);
   // équivalences de noms (reprises de PronoTracker) : « Man Utd » = « Manchester United », « PSG » = « Paris Saint-Germain »…
-  const ALIAS = { psg: ['paris', 'saint', 'germain'], om: ['marseille'], ol: ['lyon'], utd: ['united'], man: ['manchester'], spurs: ['tottenham'], barca: ['barcelona'], atleti: ['atletico'], atm: ['atletico'], praha: ['prague'], prag: ['prague'], hambourg: ['hamburg'], hamburger: ['hamburg'], valence: ['valencia'], olympiakos: ['olympiacos'], bruges: ['brugge'], kiev: ['kyiv'], wien: ['vienna'], koln: ['cologne'], kln: ['cologne'], koeln: ['cologne'], dynamo: ['dinamo'], lisboa: ['lisbon'], gladbach: ['monchengladbach'], mnchen: ['munich'], munchen: ['munich'], muenchen: ['munich'], bayern: ['bayern', 'munich'], bodoglimt: ['bodo', 'glimt'], bvb: ['dortmund'], juve: ['juventus'], wolves: ['wolverhampton'], nottm: ['nottingham'], forest: ['nottingham'], sheff: ['sheffield'], qpr: ['queens', 'park', 'rangers'], 'w': [] };
+  const ALIAS = { psg: ['paris', 'saint', 'germain'], om: ['marseille'], ol: ['lyon'], utd: ['united'], man: ['manchester'], spurs: ['tottenham'], barca: ['barcelona'], atleti: ['atletico'], atm: ['atletico'], praha: ['prague'], prag: ['prague'], hambourg: ['hamburg'], hamburger: ['hamburg'], valence: ['valencia'], olympiakos: ['olympiacos'], bruges: ['brugge'], kiev: ['kyiv'], wien: ['vienna'], koln: ['cologne'], kln: ['cologne'], koeln: ['cologne'], dynamo: ['dinamo'], lisboa: ['lisbon'], gladbach: ['monchengladbach'], mnchen: ['munich'], munchen: ['munich'], muenchen: ['munich'], bayern: ['bayern', 'munich'], bodoglimt: ['bodo', 'glimt'], bvb: ['dortmund'], juve: ['juventus'], wolves: ['wolverhampton'], nottm: ['nottingham'], forest: ['nottingham'], sheff: ['sheffield'], qpr: ['queens', 'park', 'rangers'], venise: ['venezia'], bologne: ['bologna'], francfort: ['frankfurt'], naples: ['napoli'], florence: ['fiorentina'], genes: ['genoa'], seville: ['sevilla'], majorque: ['mallorca'], anvers: ['antwerp'], lisbonne: ['lisbon'], copenhague: ['copenhagen'], athenes: ['athens'], moscou: ['moscow'], vienne: ['vienna'], bale: ['basel'], varsovie: ['warsaw'], bucarest: ['bucharest'], salonique: ['thessaloniki'], rome: ['roma'], milan: ['milan'], turin: ['torino'], bergame: ['atalanta'], saragosse: ['zaragoza'], cadix: ['cadiz'], la_corogne: ['deportivo'], 'w': [] };
   // perf : les mêmes noms d'équipes reviennent des milliers de fois → on garde le résultat en mémoire
   const _motsC = new Map();
   const mots = s => { const k = String(s || ''); let r = _motsC.get(k); if (r) return r; if (_motsC.size > 20000) _motsC.clear(); r = _mots(k); _motsC.set(k, r); return r; };
@@ -93,6 +93,11 @@
     if (/europa|^c3$/.test(c)) return 'uefa.europa';
     if (/^ligue 1\b/.test(c)) return 'fra.1';
     if (/^ligue 2\b/.test(c)) return 'fra.2';
+    if (/^(serie b|italie 2)\b/.test(c) && !/bresil|brazil/.test(c)) return 'ita.2';
+    if (/^(championship|efl championship|premier league 2)\b/.test(c)) return 'eng.2';
+    if (/^league one\b/.test(c)) return 'eng.3';
+    if (/^(2\.? ?bundesliga|bundesliga 2)\b/.test(c)) return 'ger.2';
+    if (/^(segunda|la ?liga 2|liga 2|laliga 2|espagne 2)\b/.test(c)) return 'esp.2';
     if (/^premier league\b/.test(c) && !/ecosse|scot|russ|ukrain|egypt|kazakh|maroc|ghana|nigeria|singap|armen|malt|bosn|hongr|hungar|irland|ireland/.test(c)) return 'eng.1';
     if (/^(la ?liga|liga espagnole|liga espagne|primera division)\b/.test(c) || c === 'liga' || c === 'espagne') return 'esp.1';
     if (/^serie a\b/.test(c) && !/bresil|brazil|equateur/.test(c)) return 'ita.1';
